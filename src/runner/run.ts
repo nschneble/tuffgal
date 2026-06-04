@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 import type { ResolvedConfig } from '../config.ts';
@@ -29,7 +29,7 @@ export interface RunCliOptions {
   coverage?: boolean;
 }
 
-const HEARTBEAT_FILE = '.dev-test-heartbeat';
+const HEARTBEAT_FILE = '.heartbeat';
 
 /**
  * Loads every action and story from the configured paths, resets the
@@ -155,8 +155,9 @@ function resolveWorkerCount(
 
 async function touchHeartbeat(config: ResolvedConfig): Promise<void> {
   try {
+    await mkdir(config.paths.report, { recursive: true });
     await writeFile(
-      join(config.rootDir, HEARTBEAT_FILE),
+      join(config.paths.report, HEARTBEAT_FILE),
       new Date().toISOString(),
       'utf8',
     );
