@@ -1,0 +1,44 @@
+{
+  "name": "tuffgal",
+  "version": "0.0.0",
+  "description": "JSON-driven visual regression for web apps.",
+  "license": "MIT",
+  "author": "Nick Schneble",
+  "homepage": "https://github.com/nschneble/tuffgal",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nschneble/tuffgal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nschneble/tuffgal/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "bin": {
+    "tuffgal": "./bin/tuffgal.ts"
+  },
+  "scripts": {
+    "lint": "eslint \"src/**/*.ts\" \"bin/**/*.ts\" --max-warnings=0",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "test": "echo \"no tests yet\" && exit 0",
+    "build": "echo \"no build step until v0.1.0-alpha.0\" && exit 0"
+  },
+  "keywords": [
+    "visual-regression",
+    "testing",
+    "playwright",
+    "ui-testing",
+    "ssim",
+    "screenshots",
+    "snapshot-testing"
+  ],
+  "files": [
+    "bin/",
+    "src/",
+    "schema/",
+    "LICENSE",
+    "README.md"
+  ]
+}
