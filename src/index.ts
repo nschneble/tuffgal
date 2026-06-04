@@ -14,6 +14,8 @@ export {
 
 export { runAll, type RunCliOptions } from './runner/run.ts';
 export { approveAll, type ApproveOptions } from './runner/approve.ts';
+export { supervise, type SuperviseOptions } from './commands/supervise.ts';
+export { init, type InitOptions } from './commands/init.ts';
 
 export type { Action, Step, Hint } from './schema/action.ts';
 export type { Story } from './schema/story.ts';

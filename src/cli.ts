@@ -1,15 +1,21 @@
 #!/usr/bin/env node
+import { init } from './commands/init.ts';
+import { supervise } from './commands/supervise.ts';
 import { loadConfig } from './config.ts';
 import { approveAll } from './runner/approve.ts';
 import { runAll } from './runner/run.ts';
 
 interface ParsedArguments {
-  command: 'run' | 'approve' | 'init' | 'help';
+  command: 'run' | 'approve' | 'init' | 'supervise' | 'help';
   storyFilter?: string;
   headed: boolean;
   workers?: number;
   manageServers: boolean;
   coverage: boolean;
+  healthcheckIntervalMs?: number;
+  idleLimitMs?: number;
+  maxRuntimeMs?: number;
+  maxRespawns?: number;
 }
 
 function parseArguments(argv: string[]): ParsedArguments {
@@ -19,6 +25,7 @@ function parseArguments(argv: string[]): ParsedArguments {
       command === 'run' ||
       command === 'approve' ||
       command === 'init' ||
+      command === 'supervise' ||
       command === 'help'
         ? command
         : 'help',
@@ -45,6 +52,28 @@ function parseArguments(argv: string[]): ParsedArguments {
       parsed.manageServers = true;
     } else if (arg === '--coverage') {
       parsed.coverage = true;
+    } else if (arg === '--healthcheck-interval') {
+      parsed.healthcheckIntervalMs = Number(rest[index + 1]);
+      index += 1;
+    } else if (arg.startsWith('--healthcheck-interval=')) {
+      parsed.healthcheckIntervalMs = Number(
+        arg.slice('--healthcheck-interval='.length),
+      );
+    } else if (arg === '--idle-limit') {
+      parsed.idleLimitMs = Number(rest[index + 1]);
+      index += 1;
+    } else if (arg.startsWith('--idle-limit=')) {
+      parsed.idleLimitMs = Number(arg.slice('--idle-limit='.length));
+    } else if (arg === '--max-runtime') {
+      parsed.maxRuntimeMs = Number(rest[index + 1]);
+      index += 1;
+    } else if (arg.startsWith('--max-runtime=')) {
+      parsed.maxRuntimeMs = Number(arg.slice('--max-runtime='.length));
+    } else if (arg === '--max-respawns') {
+      parsed.maxRespawns = Number(rest[index + 1]);
+      index += 1;
+    } else if (arg.startsWith('--max-respawns=')) {
+      parsed.maxRespawns = Number(arg.slice('--max-respawns='.length));
     }
   }
   return parsed;
@@ -59,14 +88,22 @@ function printHelp(): void {
       '  run                 Run every story under the configured stories directory.',
       '  approve             Promote every "changed" actual to its baseline.',
       '  init                Scaffold a tuffgal.config.ts in the current directory.',
+      '  supervise           Long-running wrapper around devServers.command with',
+      '                      healthcheck restart, idle auto-term, and wall-clock cap.',
       '  help                Show this message.',
       '',
       'Options:',
-      '  --story <name>      Filter to a single story (filename or story text).',
-      '  --headed            Show the browser while running.',
-      '  --workers N         Override the worker pool size (default min(cpus/2, 4)).',
-      '  --manage-servers    Spawn the configured devServers.command, wait for it, run, then kill it.',
-      '  --coverage          Capture V8 JS + CSS coverage and emit a monocart report.',
+      '  --story <name>             Filter to a single story (filename or story text).',
+      '  --headed                   Show the browser while running.',
+      '  --workers N                Override the worker pool size (default min(cpus/2, 4)).',
+      '  --manage-servers           Spawn devServers.command, wait, run, then kill it.',
+      '  --coverage                 Capture V8 JS + CSS coverage and emit a monocart report.',
+      '',
+      'Supervise options:',
+      '  --healthcheck-interval N   Probe interval in ms (default 30_000).',
+      '  --idle-limit N             Ms with no `tuffgal run` heartbeat before exit (default 600_000).',
+      '  --max-runtime N            Wall-clock cap in ms (default 3_600_000).',
+      '  --max-respawns N           Respawn budget after unhealthy/exit (default 3).',
     ].join('\n') + '\n',
   );
 }
@@ -78,10 +115,7 @@ async function main(): Promise<void> {
     return;
   }
   if (args.command === 'init') {
-    process.stdout.write(
-      '`tuffgal init` scaffolder lands in a follow-up commit. For now copy ' +
-        'the example tuffgal.config.ts from the documentation.\n',
-    );
+    await init({ cwd: process.cwd() });
     return;
   }
   const config = await loadConfig(process.cwd());
@@ -105,6 +139,14 @@ async function main(): Promise<void> {
     process.stdout.write(
       `\nApproved ${summary.approved} baselines; skipped ${summary.skipped} actions.\n`,
     );
+  }
+  if (args.command === 'supervise') {
+    await supervise(config, {
+      healthcheckIntervalMs: args.healthcheckIntervalMs,
+      idleLimitMs: args.idleLimitMs,
+      maxRuntimeMs: args.maxRuntimeMs,
+      maxRespawns: args.maxRespawns,
+    });
   }
 }
 
