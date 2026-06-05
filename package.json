@@ -1,6 +1,6 @@
 {
   "name": "tuffgal",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "JSON-driven visual regression for web apps.",
   "license": "MIT",
   "author": "Nick Schneble",
@@ -10,16 +10,16 @@
     "url": "git+https://github.com/nschneble/tuffgal.git"
   },
   "scripts": {
-    "build": "echo \"no build step until v0.1.0-alpha\" && exit 0",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "install:browsers": "playwright install chromium",
-    "lint": "eslint \"src/**/*.ts\" \"bin/**/*.mjs\" --max-warnings=0",
-    "prepublishOnly": "npm run lint && npm run typecheck",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run build",
     "test": "echo \"no tests yet\" && exit 0",
     "typecheck": "tsc --noEmit"
   },
   "bin": {
-    "tuffgal": "./bin/tuffgal.mjs"
+    "tuffgal": "./dist/cli.js"
   },
   "bugs": {
     "url": "https://github.com/nschneble/tuffgal/issues"
@@ -28,13 +28,15 @@
     "node": ">=22.0.0"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "files": [
-    "bin/",
+    "dist/",
     "LICENSE",
-    "README.md",
-    "src/"
+    "README.md"
   ],
   "keywords": [
     "playwright",
@@ -45,9 +47,9 @@
     "ui-testing",
     "visual-regression"
   ],
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "type": "module",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "dependencies": {
     "monocart-coverage-reports": "^2.12.0",
     "pixelmatch": "^7.1.0",
