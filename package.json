@@ -9,44 +9,44 @@
     "type": "git",
     "url": "git+https://github.com/nschneble/tuffgal.git"
   },
-  "bugs": {
-    "url": "https://github.com/nschneble/tuffgal/issues"
-  },
-  "type": "module",
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "exports": {
-    ".": "./src/index.ts"
+  "scripts": {
+    "build": "echo \"no build step until v0.1.0-alpha\" && exit 0",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "install:browsers": "playwright install chromium",
+    "lint": "eslint \"src/**/*.ts\" \"bin/**/*.ts\" --max-warnings=0",
+    "test": "echo \"no tests yet\" && exit 0",
+    "typecheck": "tsc --noEmit"
   },
   "bin": {
     "tuffgal": "./bin/tuffgal.ts"
   },
-  "scripts": {
-    "lint": "eslint \"src/**/*.ts\" \"bin/**/*.ts\" --max-warnings=0",
-    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
-    "typecheck": "tsc --noEmit",
-    "test": "echo \"no tests yet\" && exit 0",
-    "build": "echo \"no build step until v0.1.0-alpha.0\" && exit 0",
-    "install:browsers": "playwright install chromium"
+  "bugs": {
+    "url": "https://github.com/nschneble/tuffgal/issues"
   },
-  "keywords": [
-    "visual-regression",
-    "testing",
-    "playwright",
-    "ui-testing",
-    "ssim",
-    "screenshots",
-    "snapshot-testing"
-  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "files": [
     "bin/",
-    "src/",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "src/"
   ],
+  "keywords": [
+    "playwright",
+    "screenshots",
+    "snapshot-testing",
+    "ssim",
+    "testing",
+    "ui-testing",
+    "visual-regression"
+  ],
+  "main": "./src/index.ts",
+  "type": "module",
+  "types": "./src/index.ts",
   "dependencies": {
     "monocart-coverage-reports": "^2.12.0",
     "pixelmatch": "^7.1.0",

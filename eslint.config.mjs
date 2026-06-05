@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'node_modules', 'report', 'baselines'],
+    ignores: ['baselines', 'dist', 'node_modules', 'report'],
   },
 
   js.configs.recommended,
@@ -12,13 +12,13 @@ export default tseslint.config(
   prettier,
 
   {
-    files: ['src/**/*.ts', 'bin/**/*.ts'],
+    files: ['bin/**/*.ts', 'src/**/*.ts'],
     languageOptions: {
       ecmaVersion: 2024,
       globals: {
+        console: 'readonly',
         process: 'readonly',
         __dirname: 'readonly',
-        console: 'readonly',
       },
       parser: tseslint.parser,
       sourceType: 'module',

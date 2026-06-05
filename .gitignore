@@ -14,3 +14,5 @@ report/
 # Editor
 .vscode/
 .idea/
+
+local/
