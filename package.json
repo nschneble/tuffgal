@@ -13,13 +13,13 @@
     "build": "echo \"no build step until v0.1.0-alpha\" && exit 0",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "install:browsers": "playwright install chromium",
-    "lint": "eslint \"src/**/*.ts\" \"bin/**/*.ts\" --max-warnings=0",
+    "lint": "eslint \"src/**/*.ts\" \"bin/**/*.mjs\" --max-warnings=0",
     "prepublishOnly": "npm run lint && npm run typecheck",
     "test": "echo \"no tests yet\" && exit 0",
     "typecheck": "tsc --noEmit"
   },
   "bin": {
-    "tuffgal": "./bin/tuffgal.ts"
+    "tuffgal": "./bin/tuffgal.mjs"
   },
   "bugs": {
     "url": "https://github.com/nschneble/tuffgal/issues"
