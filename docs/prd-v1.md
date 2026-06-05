@@ -1,6 +1,6 @@
 # Tuffgal product requirements (v1)
 
-> Status: **Approved · P1–P4 complete · P5–P6 in progress** · Last updated 2026-06-04
+> Status: **Approved · P1–P6 complete · v1.0.0 stabilization in progress** · Last updated 2026-06-05
 
 This document captures the design intent and scope decisions behind
 Tuffgal v1. It is the source-of-record for what the product _is_ and what
@@ -219,17 +219,18 @@ npx tuffgal run --workers <n>         # parallelism
 npx tuffgal supervise                 # long-running devServers wrapper
 ```
 
-### GitHub Action (planned)
+### GitHub Action
 
 ```yaml
-- uses: tuffgal/tuffgal-action@v1
+- uses: nschneble/tuffgal-action@v0
   with:
-    config: tuffgal.config.ts
-    manage-servers: true
-    upload-on: change-or-fail # change | fail | change-or-fail
+    setup-script: test:ui:setup # optional, for DB bootstrap
 ```
 
-Sibling repo `tuffgal/tuffgal-action`. Ships in P5.
+Sibling repo [`nschneble/tuffgal-action`](https://github.com/nschneble/tuffgal-action).
+Composite action wrapping `tuffgal run --manage-servers` with
+`results.json` parsing and conditional artifact uploads for the report and
+updated baselines. See its README for the full inputs and outputs.
 
 ### Homebrew (planned, post-v1)
 
@@ -335,8 +336,8 @@ becomes a no-op for cookie apps.
 | **P2: Core extraction**      | Move framework-agnostic code, wire up config interface                  | ✅ Complete    |
 | **P3: Docs + scaffolder**    | Docs, `init`, `supervise`, `examples/postgres-prisma`                   | ✅ Complete    |
 | **P4: Pilot migration**      | First consumer fully on Tuffgal, verify parity                          | ✅ Complete    |
-| **P5: GitHub Action**        | Sibling repo + composite action wrapping `tuffgal run --manage-servers` | 🔄 In progress |
-| **P6: v0.1.0-alpha release** | npm publish with provenance, smoke from public install                  | 🔄 In progress |
+| **P5: GitHub Action**        | Sibling repo + composite action wrapping `tuffgal run --manage-servers` | ✅ Complete    |
+| **P6: v0.1.0-alpha release** | npm publish with provenance, smoke from public install                  | ✅ Complete    |
 | **P7: v1.0.0**               | README polish, additional examples directory, public announce           | Planned        |
 | **P8: v1.1.0 (AI)**          | LLM fallback in resolver, BYOLLM via `AI_PROVIDER` env                  | Deferred       |
 

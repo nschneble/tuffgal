@@ -1,13 +1,14 @@
 # Tuffgal
 
-![GitHub License](https://img.shields.io/github/license/nschneble/tuffgal)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 JSON-driven visual regression testing for web apps.
 
 <img src="tuffgal.png" alt="Tuffgal" />
 
-**Status:** Pre-release. `v0.1.0-alpha` in active extraction from the
-`apps/testing-ui` workspace in [Linklater](https://github.com/nschneble/linklater).
+**Status:** Pre-1.0. Published on npm as `tuffgal@0.1.0-alpha.2` with
+provenance. [Linklater](https://github.com/nschneble/linklater) is the
+pilot consumer.
 
 Public API is unstable until `v1.0.0`.
 
@@ -44,13 +45,17 @@ When a screenshot changes, a human reviews the diff and decides what to do.
 - WebDriver / Puppeteer substrate
 - Supporting browsers other than Chromium
 
-## Quick start (when alpha releases)
+## Quick start
 
 ```bash
-npm install -D tuffgal
+npm install -D tuffgal@alpha
 npx tuffgal init  # scaffolds tuffgal.config.ts
 npx tuffgal run   # runs all stories
 ```
+
+For CI on GitHub Actions, use the companion
+[`nschneble/tuffgal-action`](https://github.com/nschneble/tuffgal-action)
+composite action.
 
 ## Documentation
 
@@ -75,8 +80,8 @@ MIT. See [LICENSE](LICENSE).
 | Core extraction            | ✅       |
 | Bridges                    | ✅       |
 | Linklater migration        | ✅       |
-| GitHub Action              | 🚧       |
-| `v0.1.0-alpha` npm publish | 🚧       |
+| GitHub Action              | ✅       |
+| `v0.1.0-alpha` npm publish | ✅       |
 | `v1.0.0` public launch     | ⏳       |
 | `v1.1.0` AI fuzzy matching | Deferred |
 
