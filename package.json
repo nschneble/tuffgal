@@ -1,6 +1,6 @@
 {
   "name": "tuffgal",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "JSON-driven visual regression for web apps.",
   "license": "MIT",
   "author": "Nick Schneble",
@@ -10,7 +10,7 @@
     "url": "git+https://github.com/nschneble/tuffgal.git"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/reporter/assets && cp src/reporter/assets/report.css src/reporter/assets/report.js dist/reporter/assets/",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "install:browsers": "playwright install chromium",
     "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
