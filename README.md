@@ -2,8 +2,7 @@
 
 ![GitHub License](https://img.shields.io/github/license/nschneble/tuffgal)
 
-> JSON-driven visual regression for web apps. Authoring stays declarative,
-> screenshots become a committable build artifact.
+JSON-driven visual regression testing for web apps.
 
 <img src="tuffgal.png" alt="Tuffgal" />
 
