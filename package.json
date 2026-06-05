@@ -1,6 +1,6 @@
 {
   "name": "tuffgal",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "JSON-driven visual regression for web apps.",
   "license": "MIT",
   "author": "Nick Schneble",
@@ -14,6 +14,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "install:browsers": "playwright install chromium",
     "lint": "eslint \"src/**/*.ts\" \"bin/**/*.ts\" --max-warnings=0",
+    "prepublishOnly": "npm run lint && npm run typecheck",
     "test": "echo \"no tests yet\" && exit 0",
     "typecheck": "tsc --noEmit"
   },
