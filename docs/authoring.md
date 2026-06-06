@@ -51,7 +51,9 @@ disambiguate.
 | `input`     | Type `value` into the element matching `hint`          |
 | `intercept` | Install a route handler for the rest of the story      |
 | `navigate`  | Visit a path relative to `baseUrl`                     |
+| `read`      | Assert `hint` resolves to an attached element          |
 | `scroll`    | Scroll the page by `pixels` or to `selector`           |
+| `type`      | Press a key/combo on the page (e.g. `Esc`, `Ctrl+K`)   |
 | `wait`      | Block for `ms` milliseconds (use sparingly; see below) |
 | `waitFor`   | Block until `hint` resolves (no interaction)           |
 
@@ -62,6 +64,26 @@ typically something like a staggered enter-animation tier (e.g. cards
 fading in 100ms apart). See the
 [mask + wait toolkit](#mask--wait-toolkit-for-staggered-enter-animations)
 below for more guidance.
+
+`read` is `waitFor` without the poll. Use it as a mid-flow checkpoint right
+after a `click` or `input` that synchronously updates the DOM. It fails
+immediately if the element isn't already attached, which surfaces a broken
+hint faster than `waitFor`'s timeout. If the change could be asynchronous,
+such as a network call, use `waitFor` or `expect.anyOf` instead.
+
+```json
+{ "kind": "read", "hint": { "role": "status", "text": "Saved" } }
+```
+
+`type` dispatches keyboard input on the page, outside of any focused input
+field. Use it for hotkeys (`Ctrl+K` to open a command palette), modal
+dismissal (`Esc`), or focus cycling (`Tab`). Individual keys (`"A"`), named
+keys (`"Esc"`, `"Return"`), and key combos (`"Shift+A"`) all work.
+
+```json
+{ "kind": "type", "value": "Escape" }
+{ "kind": "type", "value": "Control+K" }
+```
 
 ## When to use which feature
 
@@ -288,6 +310,8 @@ For every new action:
 - [ ] Are hint values stable against refactors? Prefer role-based
 - [ ] Are parameters explicit in `parameters: [...]`?
 - [ ] Does the screen stagger its children's enter animation? Add a `wait` after the success step
+- [ ] Does a step synchronously update the DOM in a way you want to assert before moving on? Add a `read` checkpoint
+- [ ] Does the flow depend on a keyboard shortcut, such as `Escape`, or `Tab`? Use `type`, not `input`
 
 For every new story:
 
