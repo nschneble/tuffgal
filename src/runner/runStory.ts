@@ -59,6 +59,7 @@ async function runStoryWithBrowser(
     viewport: config.viewport,
     storageState: storageStatePath,
     ignoreHTTPSErrors: true,
+    permissions: ['clipboard-read', 'clipboard-write'],
   });
   context.setDefaultTimeout(config.defaultTimeoutMs);
   await context.tracing.start({
