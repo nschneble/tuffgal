@@ -12,7 +12,7 @@ output is tied to `<paths.report>/dev-servers.log`. The process group means
 SIGTERM hits every child, not just the shell wrapper.
 
 **Periodically probes every `devServers.healthCheck` url.** Uses TCP
-`connect`, not HTTPm so self-signed certs and 404s don't trip the probe.
+`connect`, not HTTP, so self-signed certs and 404s don't trip the probe.
 
 **Respawns the tree when a probe fails or the wrapper exits unexpectedly.**
 Up to `--max-respawns` times. Stops cleanly once the budget is exhausted.

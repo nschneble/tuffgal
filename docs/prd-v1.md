@@ -62,9 +62,9 @@ scheduler, and runner. App-specific logic (e.g. fixtures, dev servers, and
 the test-mode contract) lives in the consumer project in a config file.
 
 **Zero new step primitives at extraction time.** The existing primitives
-(`click`, `input`, `intercept`, `navigate`, `scroll`, `wait`, `waitFor`)
-are sufficient. New primitives must clear a high bar: a real user-facing
-scenario the existing set cannot express.
+(`click`, `input`, `intercept`, `navigate`, `read`, `scroll`, `type`,
+`wait`, `waitFor`) are sufficient. New primitives must clear a high bar:
+a real user-facing scenario the existing set cannot express.
 
 **First-class CI story.** GitHub Action for `uses:` with conditional
 artifact upload for the report and updated baselines.
@@ -145,7 +145,7 @@ bridges declared in `tuffgal.config.ts`.
 - Schema: `action.ts`, `story.ts`, `result.ts`; zod-validated JSON
 - Scheduler: DAG topo-sort + cycle detection + parallel workers
 - Runner: action dispatch, step retry, `expect.anyOf`, masking
-- Step primitives: `click`, `input`, `intercept`, `navigate`, `scroll`, `wait`, `waitFor`
+- Step primitives: `click`, `input`, `intercept`, `navigate`, `read`, `scroll`, `type`, `wait`, `waitFor`
 - Locator resolver: role+text → role → selector → text precedence (`position` reserved for AI)
 - Screenshot capture + SSIM + pixelmatch + a11y tree snapshot
 - Baseline store + approve flow
@@ -375,7 +375,7 @@ Anthropic, and local via Ollama. Out of scope for v1.
 - **Hosted:** OSS only at launch
 - **License:** MIT
 - **Name:** Tuffgal
-- **Node:** 22+ (`--experimental-strip-types` mode; no build step)
+- **Node:** 22+; compiled `dist/` shipped to npm with provenance
 - **Packaging:** npm + CLI + GitHub Action; Homebrew formula (post-v1)
 - **Repo strategy:** Standalone open-source product, MIT licensed
 - **Substrate:** Playwright library mode

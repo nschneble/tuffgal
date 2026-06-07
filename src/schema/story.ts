@@ -24,13 +24,14 @@ export const storySchema = z.object({
   needs: z.array(z.string().min(1)).optional(),
   produces: z.array(z.string().min(1)).optional(),
   /**
-   * Named fixtures (see `runner/fixtures/`) applied to the test database
-   * BEFORE the story's browser context launches. Useful for stories that
-   * need preloaded state — e.g. a "mark all as read" flow needs links to
-   * exist first. Fixtures apply sequentially in declaration order. Note
-   * that the test DB is shared across parallel stories, so two stories
-   * applying conflicting fixtures should be serialised via `needs`/
-   * `produces` labels.
+   * Named fixtures (declared on the consumer's `tuffgal.config.ts` under
+   * `database.fixtures`) applied to the test database BEFORE the story's
+   * browser context launches. Useful for stories that need preloaded
+   * state — e.g. a "mark all as read" flow needs links to exist first.
+   * Fixtures apply sequentially in declaration order. Note that the test
+   * DB is shared across parallel stories, so two stories applying
+   * conflicting fixtures should be serialised via `needs`/`produces`
+   * labels.
    */
   fixtures: z.array(z.string().min(1)).optional(),
   /**

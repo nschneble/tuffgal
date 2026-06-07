@@ -34,7 +34,7 @@ When a screenshot changes, a human reviews the diff and decides what to do.
 - Storage-state persistence across stories
 - Static HTML reporter
 - V8 coverage (optional via `monocart-coverage-reports`)
-- Per-story DB reset + fixture hooks (consumer-supplied via config)
+- Per-run DB reset + per-story fixture hooks (consumer-supplied via config)
 - Process supervisor for dev-server hot-reload rot (it happens)
 
 ## What's explicitly out of scope (v1)

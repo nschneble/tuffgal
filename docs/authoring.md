@@ -52,7 +52,7 @@ disambiguate.
 | `intercept` | Install a route handler for the rest of the story      |
 | `navigate`  | Visit a path relative to `baseUrl`                     |
 | `read`      | Assert `hint` resolves to an attached element          |
-| `scroll`    | Scroll the page by `pixels` or to `selector`           |
+| `scroll`    | Scroll the page up or down by a pixel `amount`         |
 | `type`      | Press a key/combo on the page (e.g. `Esc`, `Ctrl+K`)   |
 | `wait`      | Block for `ms` milliseconds (use sparingly; see below) |
 | `waitFor`   | Block until `hint` resolves (no interaction)           |
@@ -218,16 +218,29 @@ actions to assert the error UI.
 ### `diff` thresholds (per-action tolerance)
 
 Use when a screen has unavoidable minor drift (e.g. anti-aliased icons,
-random gradient noise, sub-pixel layout shifts). You can bump
-`maxDiffRatio` to accept more pixel drift before flagging `changed`.
+random gradient noise, sub-pixel layout shifts). Loosen `ssimThreshold` to
+accept more perceptual drift before flagging `changed`.
 
 ```json
-"diff": { "maxDiffRatio": 0.02, "pixelThreshold": 0.1 }
+"diff": { "ssimThreshold": 0.985, "pixelThreshold": 0.1 }
 ```
 
-Defaults: `pixelThreshold: 0.1` (perceptual similarity per pixel),
-`maxDiffRatio: 0.005` (0.5% of pixels may drift). Tighten or loosen
-deliberately and don't sprinkle it into every action.
+Fields and defaults:
+
+- `ssimThreshold` defaults to `0.99`. This is the perceptual gate and the
+  primary control. Action passes when the mean SSIM is at least this high
+  - `1.0` is identical
+  - `0.99` ≈ "no perceptible change"
+  - `0.95` is noticeable
+  - Under `0.9` is obvious
+- `pixelThreshold` defaults to `0.1`. This is the pixelmatch per-pixel
+  similarity used to render the diff image. It does not gate pass/changed
+  on its own. Tightens or loosens anti-aliasing tolerance in the overlay
+- `maxDiffRatio` has no default. It's a legacy pixelmatch-ratio gate
+  retained for actions authored before SSIM. When set, _both_ SSIM and
+  ratio gates must pass. Leave unset on new actions
+
+Tighten or loosen deliberately and don't sprinkle it into every action.
 
 ## Fixtures (preloaded DB state)
 
