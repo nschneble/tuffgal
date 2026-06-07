@@ -1,10 +1,9 @@
 # Contributing to Tuffgal
 
 Tuffgal is pre-1.0 and not yet accepting external contributions. The
-harness was extracted from
-[Linklater](https://github.com/nschneble/linklater)'s in-tree visual
-testing workspace in mid-2026; Linklater remains the pilot consumer while
-the public API stabilizes.
+harness was extracted from [Linklater](https://github.com/nschneble/linklater)'s
+in-tree visual testing workspace in mid-2026; Linklater remains the pilot
+consumer while the public API stabilizes.
 
 When `v1.0.0` lands, this file will document:
 
