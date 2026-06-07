@@ -37,6 +37,14 @@ export interface ActionResult {
    * itself; pixel/SSIM still drives the status.
    */
   a11yChanged?: boolean;
+  /**
+   * Path to the committed accessibility-tree baseline (`a11y.yaml`) for
+   * this action. Populated alongside `baselinePath` so `tuffgal approve`
+   * can promote the new tree at the same time as the screenshot.
+   */
+  a11yBaselinePath?: string;
+  /** Path to the accessibility-tree snapshot captured during this run. */
+  a11yActualPath?: string;
 }
 
 export type StoryStatus = 'pass' | 'changed' | 'failed';

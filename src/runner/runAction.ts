@@ -237,6 +237,8 @@ async function captureAndCompare(
       status: 'new',
       baselinePath: paths.baseline,
       actualPath: paths.actual,
+      a11yBaselinePath: paths.a11yBaseline,
+      a11yActualPath: paths.a11yActual,
     });
   }
 
@@ -261,6 +263,8 @@ async function captureAndCompare(
         diffRatio: outcome.diffRatio,
         ssimScore: outcome.ssimScore,
         a11yChanged: a11yChanged || undefined,
+        a11yBaselinePath: paths.a11yBaseline,
+        a11yActualPath: paths.a11yActual,
       });
     }
     await writePng(paths.diff, outcome.diffPng);
@@ -273,6 +277,8 @@ async function captureAndCompare(
       diffRatio: outcome.diffRatio,
       ssimScore: outcome.ssimScore,
       a11yChanged: a11yChanged || undefined,
+      a11yBaselinePath: paths.a11yBaseline,
+      a11yActualPath: paths.a11yActual,
     });
   } catch (error) {
     if (error instanceof ScreenshotSizeMismatchError) {
@@ -281,6 +287,8 @@ async function captureAndCompare(
         baselinePath: paths.baseline,
         actualPath: paths.actual,
         failureMessage: error.message,
+        a11yBaselinePath: paths.a11yBaseline,
+        a11yActualPath: paths.a11yActual,
       });
     }
     throw error;

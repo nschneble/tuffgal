@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ResolvedConfig } from '../config.ts';
 import { copyToBaseline } from '../screenshots/baselineStore.ts';
@@ -15,7 +15,9 @@ export interface ApproveSummary {
 
 /**
  * Reads `<report>/results.json` from the previous run and promotes every
- * `changed` or `new` action's actual screenshot to its baseline. Optional
+ * `changed` or `new` action's actual screenshot to its baseline. The
+ * accessibility-tree snapshot (`a11y.yaml`) is promoted alongside the PNG
+ * so the a11y baseline stays in lock-step with the visual one. Optional
  * `storyFilter` limits the approval to one story file.
  */
 export async function approveAll(
@@ -45,6 +47,13 @@ export async function approveAll(
         continue;
       }
       await copyToBaseline(action.actualPath, action.baselinePath);
+      if (
+        action.a11yActualPath &&
+        action.a11yBaselinePath &&
+        (await pathExists(action.a11yActualPath))
+      ) {
+        await copyToBaseline(action.a11yActualPath, action.a11yBaselinePath);
+      }
       approved += 1;
       process.stdout.write(`  approved ${action.action}\n`);
     }
@@ -62,4 +71,13 @@ function isApprovable(action: ActionResult): action is ApprovableAction {
     return false;
   }
   return Boolean(action.actualPath && action.baselinePath);
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
