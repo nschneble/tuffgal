@@ -61,6 +61,7 @@ composite action.
 
 - [App contract](docs/app-contract.md)
 - [Authoring guide](docs/authoring.md)
+- [Changelog](CHANGELOG.md)
 - [CI integration](docs/ci.md)
 - [Config reference](docs/config.md)
 - [Migrating from Cypress](docs/migration-cypress.md)

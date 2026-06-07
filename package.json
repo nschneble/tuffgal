@@ -35,6 +35,7 @@
   },
   "files": [
     "dist/",
+    "CHANGELOG.md",
     "LICENSE",
     "README.md"
   ],
