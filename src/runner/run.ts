@@ -20,6 +20,7 @@ import {
   drainSchedule,
   type ScheduledStory,
 } from './scheduler.ts';
+import { storyMatchesFilter } from './storyFilter.ts';
 
 export interface RunCliOptions {
   storyFilter?: string;
@@ -132,10 +133,9 @@ function runScheduledStory(
 }
 
 function matchesFilter(item: ScheduledStory, filter: string): boolean {
-  return (
-    item.file === filter ||
-    item.file === `${filter}.json` ||
-    item.story.story === filter
+  return storyMatchesFilter(
+    { file: item.file, storyName: item.story.story },
+    filter,
   );
 }
 

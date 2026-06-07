@@ -71,7 +71,7 @@ export async function runAction(
 
   if (action.expect) {
     try {
-      await waitForExpectation(page, action.expect, parameters, config);
+      await waitForExpectation(page, action.expect, parameters);
     } catch (error) {
       return failedResult(
         action,
@@ -173,7 +173,6 @@ async function waitForExpectation(
   page: Page,
   expectation: NonNullable<Action['expect']>,
   parameters: Record<string, string>,
-  config: ResolvedConfig,
 ): Promise<void> {
   const timeoutMs = expectation.timeoutMs ?? DEFAULT_EXPECT_TIMEOUT_MS;
   const resolvedCandidates = expectation.anyOf.map((hint) =>
@@ -197,8 +196,6 @@ async function waitForExpectation(
         : error;
     throw new ExpectationTimedOutError(expectation, inner, timeoutMs);
   }
-  // Suppress unused-variable warning for config — kept for future tuning.
-  void config;
 }
 
 interface CaptureOptions {
@@ -247,13 +244,9 @@ async function captureAndCompare(
   try {
     const pixelThreshold = action.diff?.pixelThreshold ?? 0.1;
     const ssimThreshold = action.diff?.ssimThreshold ?? 0.99;
-    const legacyMaxDiffRatio = action.diff?.maxDiffRatio;
     const outcome = diffPngs(baselinePng, actualPng, pixelThreshold);
     const passesSsim = outcome.ssimScore >= ssimThreshold;
-    const passesLegacy =
-      legacyMaxDiffRatio === undefined ||
-      outcome.diffRatio <= legacyMaxDiffRatio;
-    if (passesSsim && passesLegacy) {
+    if (passesSsim) {
       await deleteIfExists(paths.diff);
       return finishResult(baseResult, {
         status: 'pass',

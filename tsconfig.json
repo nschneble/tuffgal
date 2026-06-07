@@ -18,5 +18,5 @@
     "verbatimModuleSyntax": true
   },
   "exclude": ["dist", "examples", "node_modules"],
-  "include": ["bin/**/*", "schema/**/*", "src/**/*"]
+  "include": ["src/**/*"]
 }

@@ -39,12 +39,24 @@ export interface StoryFile {
 export async function loadStories(storiesDir: string): Promise<StoryFile[]> {
   const files = await readJsonFiles(storiesDir);
   const stories: StoryFile[] = [];
+  const seenBasenames = new Map<string, string>();
   for (const { path, contents } of files) {
     const parsed = storySchema.safeParse(contents);
     if (!parsed.success) {
       throw new LoadError(path, parsed.error.message);
     }
-    stories.push({ file: basename(path), story: parsed.data });
+    const file = basename(path);
+    const previousPath = seenBasenames.get(file);
+    if (previousPath !== undefined) {
+      throw new LoadError(
+        path,
+        `duplicate story filename "${file}" — already loaded from ${previousPath}. ` +
+          `Story files are addressed by basename, so two files with the same name in ` +
+          `different subdirectories collide. Rename one.`,
+      );
+    }
+    seenBasenames.set(file, path);
+    stories.push({ file, story: parsed.data });
   }
   return stories;
 }

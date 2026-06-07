@@ -12,7 +12,7 @@ export default tseslint.config(
   prettier,
 
   {
-    files: ['bin/**/*.ts', 'src/**/*.ts'],
+    files: ['src/**/*.ts'],
     languageOptions: {
       ecmaVersion: 2024,
       globals: {

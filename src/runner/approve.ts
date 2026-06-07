@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { ResolvedConfig } from '../config.ts';
 import { copyToBaseline } from '../screenshots/baselineStore.ts';
 import type { ActionResult, RunResult } from '../schema/result.ts';
+import { storyMatchesFilter } from './storyFilter.ts';
 
 export interface ApproveOptions {
   storyFilter?: string;
@@ -36,8 +37,10 @@ export async function approveAll(
   for (const story of result.stories) {
     if (
       options.storyFilter &&
-      story.file !== options.storyFilter &&
-      story.file !== `${options.storyFilter}.json`
+      !storyMatchesFilter(
+        { file: story.file, storyName: story.story },
+        options.storyFilter,
+      )
     ) {
       continue;
     }

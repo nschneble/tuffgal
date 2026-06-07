@@ -236,9 +236,6 @@ Fields and defaults:
 - `pixelThreshold` defaults to `0.1`. This is the pixelmatch per-pixel
   similarity used to render the diff image. It does not gate pass/changed
   on its own. Tightens or loosens anti-aliasing tolerance in the overlay
-- `maxDiffRatio` has no default. It's a legacy pixelmatch-ratio gate
-  retained for actions authored before SSIM. When set, _both_ SSIM and
-  ratio gates must pass. Leave unset on new actions
 
 Tighten or loosen deliberately and don't sprinkle it into every action.
 
@@ -319,7 +316,7 @@ For every new action:
 
 - [ ] Does the final step kick off async work? Add `expect.anyOf`
 - [ ] Does the screen render anything random or time-based? Add `mask`
-- [ ] Does the screen genuinely drift between runs? Tune `diff.maxDiffRatio`
+- [ ] Does the screen genuinely drift between runs? Tune `diff.ssimThreshold`
 - [ ] Are hint values stable against refactors? Prefer role-based
 - [ ] Are parameters explicit in `parameters: [...]`?
 - [ ] Does the screen stagger its children's enter animation? Add a `wait` after the success step
@@ -336,7 +333,7 @@ For every new story:
 
 1. Open `paths.report/index.html`. Read the failure section at the bottom.
 2. Open the trace zip listed under the failure: `npx playwright show-trace paths.report/traces/<story>.zip`. Walk the timeline, inspect DOM snapshots, and watch network calls.
-3. Compare baseline / actual / diff images in the report's screenshot panel. The diff engine flagged something, so check whether it's a real regression or new drift to absorb with `mask` or `maxDiffRatio`.
+3. Compare baseline / actual / diff images in the report's screenshot panel. The diff engine flagged something, so check whether it's a real regression or new drift to absorb with `mask` or `ssimThreshold`.
 4. If the locator missed, re-read the hint precedence list above and tighten it.
 
 ## Things Tuffgal will not do

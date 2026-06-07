@@ -160,15 +160,10 @@ export const actionSchema = z.object({
       pixelThreshold: z.number().min(0).max(1).default(0.1),
       /**
        * Mean SSIM score threshold. Action passes when the score is at
-       * least this high. 1.0 = identical; 0.99 = the new default and
-       * roughly corresponds to "no perceptible change."
+       * least this high. 1.0 = identical; 0.99 = the default and roughly
+       * corresponds to "no perceptible change."
        */
       ssimThreshold: z.number().min(0).max(1).default(0.99),
-      /**
-       * Legacy pixelmatch-ratio gate. Retained for backward compat with
-       * actions that pre-date SSIM. If set, both gates must pass.
-       */
-      maxDiffRatio: z.number().min(0).max(1).optional(),
     })
     .optional(),
 });

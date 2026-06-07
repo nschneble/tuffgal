@@ -42,6 +42,11 @@ file's location.
 | `stories`   | `string`  | _required_ | Directory of story JSON files. Recurses into subdirectories                          |
 | `report`    | `string`  | _required_ | Generated HTML report and traces. (**add to .gitignore**)                            |
 
+> `tuffgal init` scaffolds `authState: 'tuffgal/.auth'` so the cache stays
+> inside the `tuffgal/` content directory next to actions, stories, and
+> baselines. The lone `.auth` default applies only when you write the
+> config by hand and omit the field.
+
 ### `baseUrl: string`
 
 Base URL of the running app. Every `navigate` step path is resolved against

@@ -12,5 +12,5 @@
     "rewriteRelativeImportExtensions": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "examples", "node_modules", "bin", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["dist", "examples", "node_modules", "**/*.test.ts", "**/*.spec.ts"]
 }
