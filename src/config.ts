@@ -62,17 +62,6 @@ export interface PathsConfig {
 }
 
 /**
- * CI-friendly result emitters. Optional. The default reporter (HTML at
- * `paths.report/index.html`) always runs.
- */
-export interface CiConfig {
-  /** Path to write SARIF results.json for GitHub code scanning. */
-  sarif?: string;
-  /** Paths to advertise as `actions/upload-artifact` candidates. */
-  artifactPaths?: string[];
-}
-
-/**
  * Root config shape passed to `defineConfig()`.
  */
 export interface TuffgalConfig {
@@ -117,8 +106,6 @@ export interface TuffgalConfig {
    * `customCoverage.flows` in the report.
    */
   flowInventory?: string;
-  /** CI integration knobs. */
-  ci?: CiConfig;
 }
 
 /**
@@ -140,7 +127,6 @@ export interface ResolvedConfig {
   database: DatabaseBridge | undefined;
   devServers: DevServerBridge | undefined;
   flowInventory: string | undefined;
-  ci: CiConfig | undefined;
 }
 
 const DEFAULTS = {
@@ -217,6 +203,5 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     flowInventory: input.flowInventory
       ? resolve(rootDir, input.flowInventory)
       : undefined,
-    ci: input.ci,
   };
 }

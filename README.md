@@ -32,7 +32,7 @@ When a screenshot changes, a human reviews the diff and decides what to do.
 - Trace zip on failure (Playwright trace viewer)
 - Clock freeze (`page.clock.install`)
 - Storage-state persistence across stories
-- Static HTML reporter + optional SARIF for GitHub code scanning
+- Static HTML reporter
 - V8 coverage (optional via `monocart-coverage-reports`)
 - Per-story DB reset + fixture hooks (consumer-supplied via config)
 - Process supervisor for dev-server hot-reload rot (it happens)

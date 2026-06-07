@@ -1,28 +1,29 @@
-// Public API surface. Consumer projects import only what is re-exported here.
-// Anything not re-exported is internal and may break between minor releases.
+// Public API. Consumer projects only import what's exported here. Anything
+// else comes with a giant "DON'T DO IT" sticker and may change, break, or
+// straight up disappear between releases.
 
 export {
   defineConfig,
   loadConfig,
-  type TuffgalConfig,
-  type ResolvedConfig,
   type DatabaseBridge,
   type DevServerBridge,
   type PathsConfig,
-  type CiConfig,
+  type ResolvedConfig,
+  type TuffgalConfig,
 } from './config.ts';
 
-export { runAll, type RunCliOptions } from './runner/run.ts';
-export { approveAll, type ApproveOptions } from './runner/approve.ts';
-export { supervise, type SuperviseOptions } from './commands/supervise.ts';
 export { init, type InitOptions } from './commands/init.ts';
+export { supervise, type SuperviseOptions } from './commands/supervise.ts';
 
-export type { Action, Step, Hint } from './schema/action.ts';
+export { approveAll, type ApproveOptions } from './runner/approve.ts';
+export { runAll, type RunCliOptions } from './runner/run.ts';
+
+export type { Action, Hint, Step } from './schema/action.ts';
 export type { Story } from './schema/story.ts';
 export type {
-  RunResult,
-  StoryResult,
   ActionResult,
   ActionStatus,
+  RunResult,
+  StoryResult,
   StoryStatus,
 } from './schema/result.ts';

@@ -10,12 +10,13 @@ This page documents the recipe for GitHub Actions. The same shape works for
 GitLab CI, CircleCI, Buildkite, and Jenkins. Just adjust the artifact
 upload and service container syntax to match.
 
-## A future `tuffgal-action` GitHub Action
+## The `tuffgal-action` GitHub Action
 
-A wrapping GitHub Action lives on the roadmap as a sibling repo
-(`tuffgal/tuffgal-action`) so the recipe below collapses to a single
-composite step. Until that ships, copy the YAML below verbatim and adapt
-the marked TODO lines to your project.
+The companion composite action [`nschneble/tuffgal-action`](https://github.com/nschneble/tuffgal-action)
+collapses the recipe below to a single step. See its README for inputs and
+outputs. The raw YAML below stays useful when you want fine-grained control
+over the surrounding steps, e.g. custom DB bootstrap, conditional uploads,
+and/or custom comment formats.
 
 ## Example: GitHub Actions + Postgres + Prisma
 

@@ -66,8 +66,8 @@ the test-mode contract) lives in the consumer project in a config file.
 are sufficient. New primitives must clear a high bar: a real user-facing
 scenario the existing set cannot express.
 
-**First-class CI story.** GitHub Action for `uses:`, conditional artifact
-upload, and SARIF-compatible output for code-scanning integrations.
+**First-class CI story.** GitHub Action for `uses:` with conditional
+artifact upload for the report and updated baselines.
 
 **Example directory.** Should contain at least one runnable recipe per
 supported tech stack.
@@ -149,7 +149,7 @@ bridges declared in `tuffgal.config.ts`.
 - Locator resolver: role+text → role → selector → text precedence (`position` reserved for AI)
 - Screenshot capture + SSIM + pixelmatch + a11y tree snapshot
 - Baseline store + approve flow
-- Reporter: HTML + traces + SARIF output
+- Reporter: HTML + traces
 - Coverage collector: V8 (monocart) wrapped (optional)
 - Clock freeze + storage state persistence + DAG-based label sharing
 

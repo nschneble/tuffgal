@@ -145,17 +145,6 @@ exposes the ratio as `customCoverage.flows` in the report.
 
 Useful for tracking "have we written stories for every flow in our PRD?"
 
-### `ci?: CiConfig`
-
-CI integration knobs. The HTML reporter at `paths.report/index.html` always runs.
-
-| Field           | Type        | Meaning                                                     |
-| --------------- | ----------- | ----------------------------------------------------------- |
-| `sarif`         | `string?`   | Path to write SARIF `results.json` for GitHub code scanning |
-| `artifactPaths` | `string[]?` | Paths to advertise as `actions/upload-artifact` candidates  |
-
-See [ci.md](ci.md) for the recipe.
-
 ## Loading order
 
 1. `loadConfig(cwd)` searches `cwd` for `tuffgal.config.ts`, then `tuffgal.config.js`
@@ -196,7 +185,6 @@ import {
   type ActionResult,
   type ActionStatus,
   type ApproveOptions,
-  type CiConfig,
   type DatabaseBridge,
   type DevServerBridge,
   type Hint,
