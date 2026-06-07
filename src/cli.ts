@@ -1,38 +1,37 @@
 #!/usr/bin/env node
-import { init } from './commands/init.ts';
-import { supervise } from './commands/supervise.ts';
-import { loadConfig } from './config.ts';
 import { approveAll } from './runner/approve.ts';
+import { init } from './commands/init.ts';
+import { loadConfig } from './config.ts';
 import { runAll } from './runner/run.ts';
+import { supervise } from './commands/supervise.ts';
+
+const COMMANDS = ['approve', 'help', 'init', 'run', 'supervise'] as const;
+type Command = (typeof COMMANDS)[number];
 
 interface ParsedArguments {
-  command: 'run' | 'approve' | 'init' | 'supervise' | 'help';
-  storyFilter?: string;
-  headed: boolean;
-  workers?: number;
-  manageServers: boolean;
+  command: Command;
   coverage: boolean;
+  headed: boolean;
+  manageServers: boolean;
   healthcheckIntervalMs?: number;
   idleLimitMs?: number;
-  maxRuntimeMs?: number;
   maxRespawns?: number;
+  maxRuntimeMs?: number;
+  storyFilter?: string;
+  workers?: number;
 }
 
 function parseArguments(argv: string[]): ParsedArguments {
   const [command, ...rest] = argv;
   const parsed: ParsedArguments = {
-    command:
-      command === 'run' ||
-      command === 'approve' ||
-      command === 'init' ||
-      command === 'supervise' ||
-      command === 'help'
-        ? command
-        : 'help',
+    command: COMMANDS.includes(command as Command)
+      ? (command as Command)
+      : 'help',
     headed: false,
     manageServers: false,
     coverage: false,
   };
+
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index];
     if (arg === undefined) continue;
