@@ -104,7 +104,7 @@ export async function drainSchedule(
             context.results.set(next.file, result);
             ordered.push(next);
             if (result.status === 'failed') {
-              skipDependents(next, scheduled, context);
+              skipDependents(next, scheduled, context, ordered);
             } else {
               for (const label of next.produces) {
                 context.satisfied.add(label);
@@ -147,6 +147,7 @@ function skipDependents(
   failed: ScheduledStory,
   scheduled: ScheduledStory[],
   context: RunContext,
+  ordered: ScheduledStory[],
 ): void {
   const failedLabels = new Set(failed.produces);
   for (const item of scheduled) {
@@ -174,10 +175,14 @@ function skipDependents(
         ],
       });
       context.completed.add(item.file);
+      // Surface the synthetic skip in the same ordered list that the
+      // run loop populates, so downstream consumers (report, totals,
+      // exit code) see the chain of effects instead of a silent absence.
+      ordered.push(item);
       // Propagate skip transitively — the now-skipped item's "produces"
       // labels stay unsatisfied, so other consumers of the same label
       // will be caught by the next loop iteration.
-      skipDependents(item, scheduled, context);
+      skipDependents(item, scheduled, context, ordered);
     }
   }
 }
