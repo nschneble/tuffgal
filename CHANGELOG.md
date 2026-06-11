@@ -6,7 +6,12 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Changed
+
+- Release workflow now skips `npm publish` and the GitHub release step when
+  `package.json` version is already on npm, instead of failing noisily. Lets
+  a `v*` tag be re-pushed (or pushed without a version bump) without breaking
+  the workflow.
 
 ## [0.1.0-alpha.5] — 2026-06-11
 
