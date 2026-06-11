@@ -116,8 +116,8 @@ function renderStories(result: RunResult, reportDir: string): string {
       ${storyFilterRadio('failed', false)}
     </fieldset>
     <div class="story-bulk-toggle">
-      <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="expand">expand all</button>
-      <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="collapse">collapse all</button>
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">expand all</button>
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">collapse all</button>
     </div>
     <!--
       The .story-filter-status region is the single polite live region for the
@@ -134,19 +134,19 @@ function renderStories(result: RunResult, reportDir: string): string {
 </section>`;
 }
 
-function storyFilterRadio(name: string, checked: boolean): string {
-  const inputId = `story-filter-${name}`;
-  const value = name === 'passed' ? 'pass' : name;
-  return `<label for="${inputId}" class="story-filter-label">
+function storyFilterRadio(status: string, checked: boolean): string {
+  const inputId = `story-filter-${status}`;
+  const value = status === 'passed' ? 'pass' : status;
+  return `<label for="${inputId}" class="chip chip--toggle story-filter-label">
     <input
       type="radio"
       name="story-filter"
       id="${inputId}"
       value="${value}"
-      data-filter-name="${name}"
+      data-filter-name="${status}"
       ${checked ? 'checked' : ''}
     />
-    ${name}
+    ${status}
   </label>`;
 }
 
@@ -262,7 +262,7 @@ function renderScreenshots(
 
 function shotRadio(actionId: string, name: string, disabled: boolean): string {
   const inputId = `${actionId}-radio-${name}`;
-  return `<label for="${inputId}" class="shot-radio-label">
+  return `<label for="${inputId}" class="chip chip--toggle shot-radio-label">
     <input
       type="radio"
       name="${actionId}-shot"

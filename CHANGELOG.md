@@ -19,6 +19,10 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
   `changed`, or `failed` to hide non-matching rows; `all` restores them.
   Screen-reader users get a debounced polite-region announcement of the
   resulting count.
+- HTML report toolbar has `expand all` / `collapse all` buttons that toggle
+  every visible story's screenshot details panel at once. Respects the active
+  status filter — hidden rows stay collapsed. Announcements reuse the existing
+  status-filter live region.
 
 ### Changed
 

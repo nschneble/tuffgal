@@ -198,6 +198,31 @@ h2 {
   color: var(--text-subtle);
 }
 
+/* Chip: shared inline-flex pill used by toolbar buttons and radio-driven
+   labels. The `--toggle` modifier adds the radio-checked / focus-visible
+   accent treatment that buttons don't want. */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border-bright);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.chip--toggle:has(input:checked) {
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.chip--toggle:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Stories toolbar (status filter) */
 
 .stories-toolbar {
@@ -226,27 +251,6 @@ h2 {
   text-transform: uppercase;
 }
 
-.story-filter-label {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.2rem 0.6rem;
-  border: 1px solid var(--border-bright);
-  cursor: pointer;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-}
-
-.story-filter-label:has(input:checked) {
-  background: var(--bg-elevated);
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.story-filter-label:has(input:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
 .story-filter-label input {
   position: absolute;
   opacity: 0;
@@ -260,15 +264,11 @@ h2 {
 }
 
 .story-bulk-toggle-button {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.2rem 0.6rem;
   background: transparent;
-  border: 1px solid var(--border-bright);
-  cursor: pointer;
+  /* `font: inherit` resets font-size, so re-assert the chip's 0.8125rem
+     here after the shorthand to keep the visual size consistent. */
   font: inherit;
   font-size: 0.8125rem;
-  color: var(--text-muted);
 }
 
 .story-bulk-toggle-button:hover {
@@ -485,25 +485,7 @@ h2 {
 }
 
 .shot-radio-label {
-  display: inline-flex;
-  align-items: center;
   gap: 0.35rem;
-  padding: 0.2rem 0.6rem;
-  border: 1px solid var(--border-bright);
-  cursor: pointer;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-}
-
-.shot-radio-label:has(input:checked) {
-  background: var(--bg-elevated);
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.shot-radio-label:has(input:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
 }
 
 .shot-radio-label:has(input:disabled) {
