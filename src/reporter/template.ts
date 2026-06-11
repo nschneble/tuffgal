@@ -103,13 +103,41 @@ function renderStories(result: RunResult, reportDir: string): string {
   const items = result.stories
     .map((story, index) => renderStory(story, index, reportDir))
     .join('\n');
+  const total = result.stories.length;
   return `
 <section aria-labelledby="stories-heading">
   <h2 id="stories-heading">stories</h2>
+  <div class="stories-toolbar">
+    <fieldset class="story-filter">
+      <legend>filter</legend>
+      ${storyFilterRadio('all', true)}
+      ${storyFilterRadio('passed', false)}
+      ${storyFilterRadio('changed', false)}
+      ${storyFilterRadio('failed', false)}
+    </fieldset>
+    <p class="story-filter-status" role="status" aria-live="polite">Showing all ${total} stories.</p>
+  </div>
   <ol class="stories" aria-label="Stories executed in dependency order">
     ${items}
   </ol>
+  <p class="stories-empty" hidden>no stories match</p>
 </section>`;
+}
+
+function storyFilterRadio(name: string, checked: boolean): string {
+  const inputId = `story-filter-${name}`;
+  const value = name === 'passed' ? 'pass' : name;
+  return `<label for="${inputId}" class="story-filter-label">
+    <input
+      type="radio"
+      name="story-filter"
+      id="${inputId}"
+      value="${value}"
+      data-filter-name="${name}"
+      ${checked ? 'checked' : ''}
+    />
+    ${name}
+  </label>`;
 }
 
 function renderStory(

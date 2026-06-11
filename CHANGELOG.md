@@ -15,6 +15,10 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 - `tuffgal approve --new-only` promotes only actions whose status is `new`,
   leaving existing baselines untouched. Lets you baseline newly-introduced
   stories without accepting drift on the rest of the suite.
+- HTML report has a status filter above the stories list. Pick `passed`,
+  `changed`, or `failed` to hide non-matching rows; `all` restores them.
+  Screen-reader users get a debounced polite-region announcement of the
+  resulting count.
 
 ### Changed
 
