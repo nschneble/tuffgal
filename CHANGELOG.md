@@ -22,6 +22,11 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
   `package.json` version is already on npm, instead of failing noisily. Lets
   a `v*` tag be re-pushed (or pushed without a version bump) without breaking
   the workflow.
+- `tuffgal run` stdout now groups changed + failed stories under labeled
+  `Changed:` / `Failed:` sections at the tail of the run (after the streaming
+  progress), so you don't have to scroll up through every passing story to
+  find what needs review. The `Report:` line is now a `file://` URL that
+  terminals like iTerm2, Warp, and VS Code render as a clickable link.
 
 ## [0.1.0-alpha.5] — 2026-06-11
 

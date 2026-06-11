@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { ResolvedConfig } from '../config.ts';
 import type { Action } from '../schema/action.ts';
 import type { RunResult, StoryResult } from '../schema/result.ts';
@@ -78,7 +79,8 @@ export async function runAll(
     const results = await drainSchedule(
       subset,
       workerCount,
-      (item) => runScheduledStory(item, actions, config, options.headed, coverage),
+      (item) =>
+        runScheduledStory(item, actions, config, options.headed, coverage),
       (item) => process.stdout.write(`▶ ${item.file}\n`),
       (item, result) =>
         process.stdout.write(
@@ -100,7 +102,7 @@ export async function runAll(
       stories: results,
     };
     const reportPath = await writeReport(config.paths.report, runResult);
-    process.stdout.write(`\nReport: ${reportPath}\n`);
+    writeRunSummary(results, runResult.totals, reportPath);
     if (coverage) {
       const coveragePath = await coverage.generate();
       process.stdout.write(`Coverage: ${coveragePath}\n`);
@@ -174,4 +176,46 @@ function summarise(results: StoryResult[]): RunResult['totals'] {
     changed: results.filter((result) => result.status === 'changed').length,
     failed: results.filter((result) => result.status === 'failed').length,
   };
+}
+
+/**
+ * Emits the end-of-run tail. The streaming `▶`/`PASS|CHANGED|FAILED` lines
+ * already cover the heartbeat; this groups the noteworthy stories
+ * (changed + failed) in finish order so a user scanning the terminal lands
+ * on the actionable list directly above the totals. The `Report:` line is
+ * a `file://` URL so terminals that recognise file URIs (iTerm2, Warp, VS
+ * Code) render it as a clickable link.
+ */
+function writeRunSummary(
+  results: StoryResult[],
+  totals: RunResult['totals'],
+  reportPath: string,
+): void {
+  const changed = results.filter((result) => result.status === 'changed');
+  const failed = results.filter((result) => result.status === 'failed');
+
+  if (changed.length > 0 || failed.length > 0) {
+    process.stdout.write('\n');
+    if (changed.length > 0) {
+      process.stdout.write('Changed:\n');
+      for (const result of changed) {
+        process.stdout.write(`  ${formatSummaryLine(result)}\n`);
+      }
+    }
+    if (failed.length > 0) {
+      process.stdout.write('Failed:\n');
+      for (const result of failed) {
+        process.stdout.write(`  ${formatSummaryLine(result)}\n`);
+      }
+    }
+  }
+
+  process.stdout.write(
+    `\nTotals: ${totals.passed} pass · ${totals.changed} changed · ${totals.failed} failed\n`,
+  );
+  process.stdout.write(`Report: ${pathToFileURL(reportPath).href}\n`);
+}
+
+function formatSummaryLine(result: StoryResult): string {
+  return `${result.status.toUpperCase()} ${result.file} — ${result.story} (${result.actions.length} actions, ${result.durationMs} ms)`;
 }

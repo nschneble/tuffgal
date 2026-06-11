@@ -131,9 +131,6 @@ async function main(): Promise<void> {
       manageServers: args.manageServers,
       coverage: args.coverage,
     });
-    process.stdout.write(
-      `\nTotals: ${result.totals.passed} pass · ${result.totals.changed} changed · ${result.totals.failed} failed\n`,
-    );
     process.exit(result.totals.failed > 0 ? 1 : 0);
   }
   if (args.command === 'approve') {
