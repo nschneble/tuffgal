@@ -28,6 +28,12 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
   find what needs review. The `Report:` line is now a `file://` URL that
   terminals like iTerm2, Warp, and VS Code render as a clickable link.
 
+### Fixed
+
+- `tuffgal run`, `tuffgal supervise`, and `tuffgal init` now error out
+  when `--new-only` is passed instead of silently ignoring it. The flag
+  is only meaningful for `tuffgal approve`.
+
 ## [0.1.0-alpha.5] — 2026-06-11
 
 ### Added

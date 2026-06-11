@@ -101,7 +101,9 @@ function printHelp(): void {
       '  --workers N                Override the worker pool size (default min(cpus/2, 4)).',
       '  --manage-servers           Spawn devServers.command, wait, run, then kill it.',
       '  --coverage                 Capture V8 JS + CSS coverage and emit a monocart report.',
-      '  --new-only                 (approve) Only promote new baselines; skip changed.',
+      '',
+      'Approve options:',
+      '  --new-only                 Only promote new baselines; skip changed.',
       '',
       'Supervise options:',
       '  --healthcheck-interval N   Probe interval in ms (default 30_000).',
@@ -114,6 +116,17 @@ function printHelp(): void {
 
 async function main(): Promise<void> {
   const args = parseArguments(process.argv.slice(2));
+  if (
+    args.newOnly &&
+    (args.command === 'run' ||
+      args.command === 'supervise' ||
+      args.command === 'init')
+  ) {
+    process.stderr.write(
+      'tuffgal error: --new-only is only valid with the `approve` subcommand\n',
+    );
+    process.exit(1);
+  }
   if (args.command === 'help') {
     printHelp();
     return;
