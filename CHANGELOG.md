@@ -41,6 +41,10 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 - `tuffgal run`, `tuffgal supervise`, and `tuffgal init` now error out
   when `--new-only` is passed instead of silently ignoring it. The flag
   is only meaningful for `tuffgal approve`.
+- HTML report's filter and bulk-toggle (`expand all` / `collapse all`)
+  now share a single live-region writer, so a bulk-toggle clicked within
+  150ms of a filter change cancels the filter's pending announcement and
+  the screen reader hears only the most-recent action.
 
 ## [0.1.0-alpha.5] — 2026-06-11
 
