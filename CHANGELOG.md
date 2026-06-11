@@ -12,6 +12,9 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
   height must be positive integers; stories without an override inherit
   the config default. The override does not cascade onto consumers that
   inherit storage state via `needs`/`produces`.
+- `tuffgal approve --new-only` promotes only actions whose status is `new`,
+  leaving existing baselines untouched. Lets you baseline newly-introduced
+  stories without accepting drift on the rest of the suite.
 
 ### Changed
 

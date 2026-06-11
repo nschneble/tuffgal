@@ -7,6 +7,13 @@ import { storyMatchesFilter } from './storyFilter.ts';
 
 export interface ApproveOptions {
   storyFilter?: string;
+  /**
+   * When `true`, only promote actions whose status is `new` (i.e. baselines
+   * that don't exist yet). Actions with status `changed` are counted as
+   * skipped. Lets users baseline newly-introduced stories without accepting
+   * drift on existing baselines.
+   */
+  newOnly?: boolean;
 }
 
 export interface ApproveSummary {
@@ -19,7 +26,8 @@ export interface ApproveSummary {
  * `changed` or `new` action's actual screenshot to its baseline. The
  * accessibility-tree snapshot (`a11y.yaml`) is promoted alongside the PNG
  * so the a11y baseline stays in lock-step with the visual one. Optional
- * `storyFilter` limits the approval to one story file.
+ * `storyFilter` limits the approval to one story file. Optional `newOnly`
+ * limits promotion to `new` actions, leaving `changed` baselines untouched.
  */
 export async function approveAll(
   config: ResolvedConfig,
@@ -45,7 +53,7 @@ export async function approveAll(
       continue;
     }
     for (const action of story.actions) {
-      if (!isApprovable(action)) {
+      if (!isApprovable(action, options.newOnly === true)) {
         skipped += 1;
         continue;
       }
@@ -69,8 +77,14 @@ type ApprovableAction = ActionResult & {
   baselinePath: string;
 };
 
-function isApprovable(action: ActionResult): action is ApprovableAction {
+function isApprovable(
+  action: ActionResult,
+  newOnly: boolean,
+): action is ApprovableAction {
   if (action.status !== 'changed' && action.status !== 'new') {
+    return false;
+  }
+  if (newOnly && action.status === 'changed') {
     return false;
   }
   return Boolean(action.actualPath && action.baselinePath);

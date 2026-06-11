@@ -209,6 +209,7 @@ export default defineConfig({
 
 ```bash
 npx tuffgal approve [--story <name>]  # accept changed baselines
+npx tuffgal approve --new-only        # accept only new baselines, skip changed
 npx tuffgal init                      # scaffold tuffgal.config.ts
 npx tuffgal run                       # run all stories
 npx tuffgal run --coverage            # V8 coverage

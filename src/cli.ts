@@ -17,6 +17,7 @@ interface ParsedArguments {
   idleLimitMs?: number;
   maxRespawns?: number;
   maxRuntimeMs?: number;
+  newOnly: boolean;
   storyFilter?: string;
   workers?: number;
 }
@@ -30,6 +31,7 @@ function parseArguments(argv: string[]): ParsedArguments {
     headed: false,
     manageServers: false,
     coverage: false,
+    newOnly: false,
   };
 
   for (let index = 0; index < rest.length; index += 1) {
@@ -51,6 +53,8 @@ function parseArguments(argv: string[]): ParsedArguments {
       parsed.manageServers = true;
     } else if (arg === '--coverage') {
       parsed.coverage = true;
+    } else if (arg === '--new-only') {
+      parsed.newOnly = true;
     } else if (arg === '--healthcheck-interval') {
       parsed.healthcheckIntervalMs = Number(rest[index + 1]);
       index += 1;
@@ -97,6 +101,7 @@ function printHelp(): void {
       '  --workers N                Override the worker pool size (default min(cpus/2, 4)).',
       '  --manage-servers           Spawn devServers.command, wait, run, then kill it.',
       '  --coverage                 Capture V8 JS + CSS coverage and emit a monocart report.',
+      '  --new-only                 (approve) Only promote new baselines; skip changed.',
       '',
       'Supervise options:',
       '  --healthcheck-interval N   Probe interval in ms (default 30_000).',
@@ -134,6 +139,7 @@ async function main(): Promise<void> {
   if (args.command === 'approve') {
     const summary = await approveAll(config, {
       storyFilter: args.storyFilter,
+      newOnly: args.newOnly,
     });
     process.stdout.write(
       `\nApproved ${summary.approved} baselines; skipped ${summary.skipped} actions.\n`,
