@@ -253,6 +253,34 @@ h2 {
   pointer-events: none;
 }
 
+.story-bulk-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.story-bulk-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.story-bulk-toggle-button:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.story-bulk-toggle-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .story-filter-status {
   margin: 0;
   color: var(--text-subtle);

@@ -103,3 +103,61 @@
     });
   });
 })();
+
+// Bulk-toggle (expand all / collapse all) for the screenshot <details> panels.
+// Acts on the moment: only visible rows (.story:not([hidden])) are affected,
+// so the filter scope wins. Each <details> retains its own open state per
+// native HTML semantics — newly-revealed stories after a later filter change
+// stay closed by default (their default state). A future maintainer might be
+// tempted to "fix" this by tracking a global expanded mode; don't — the lack
+// of persistence is the agreed accessibility-lead decision (act-on-the-moment).
+//
+// We use `details.open = true/false` rather than `details.click()` so the
+// browser does not dispatch a `toggle` event cascade for every panel.
+//
+// No debounce: bulk-toggle fires once per click (not on every arrow keypress
+// like the filter does), so the live region is not at risk of being flooded.
+// The filter's 150ms debounce exists because radios announce on every arrow
+// move; here a single click → single message is fine.
+//
+// Known minor race: clicking a bulk-toggle button within 150ms of a filter
+// radio change can be overwritten by the filter's pending debounce timer. We
+// accept this — the timing window is tight (user must release radio AND click
+// a button in <150ms) and the screen reader is still hearing a valid status
+// announcement, just the filter one instead of the toggle one.
+(function () {
+  var buttons = Array.prototype.slice.call(
+    document.querySelectorAll('[data-bulk-toggle]'),
+  );
+  if (buttons.length === 0) return;
+  var status = document.querySelector('.story-filter-status');
+  if (!status) return;
+
+  function apply(mode) {
+    var shouldOpen = mode === 'expand';
+    var visibleStories = Array.prototype.slice.call(
+      document.querySelectorAll('.story:not([hidden])'),
+    );
+    visibleStories.forEach(function (story) {
+      var panels = Array.prototype.slice.call(
+        story.querySelectorAll('details.shots'),
+      );
+      panels.forEach(function (panel) {
+        panel.open = shouldOpen;
+      });
+    });
+    // Announcement count uses visible stories rather than stories-with-details.
+    // A visible row with zero details is a no-op for the toggle, but the
+    // announcement reads the same to a screen reader either way, and this
+    // keeps the logic simple.
+    var count = visibleStories.length;
+    var verb = shouldOpen ? 'Expanded' : 'Collapsed';
+    status.textContent = verb + ' screenshots in ' + count + ' stories.';
+  }
+
+  buttons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      apply(button.getAttribute('data-bulk-toggle'));
+    });
+  });
+})();

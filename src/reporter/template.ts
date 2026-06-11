@@ -115,6 +115,16 @@ function renderStories(result: RunResult, reportDir: string): string {
       ${storyFilterRadio('changed', false)}
       ${storyFilterRadio('failed', false)}
     </fieldset>
+    <div class="story-bulk-toggle">
+      <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="expand">expand all</button>
+      <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="collapse">collapse all</button>
+    </div>
+    <!--
+      The .story-filter-status region is the single polite live region for the
+      stories toolbar — it carries both filter announcements and bulk-toggle
+      (expand/collapse all) announcements. Adding a second polite region here
+      would race against this one; reuse is intentional.
+    -->
     <p class="story-filter-status" role="status" aria-live="polite">Showing all ${total} stories.</p>
   </div>
   <ol class="stories" aria-label="Stories executed in dependency order">
