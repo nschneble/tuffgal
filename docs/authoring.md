@@ -310,6 +310,25 @@ Common patterns:
 - Stories that don't care about auth pass over `needs`
 - Don't create cycles (Don't produce the same label from two stories)
 
+## Per-story viewport override
+
+Most stories should screenshot at the config-level `viewport`. Stories that
+exercise a different breakpoint (a mobile menu, an ultra-wide dashboard)
+can override it for their own browser context:
+
+```json
+{
+  "story": "Mobile user opens the nav drawer",
+  "viewport": { "width": 390, "height": 844 },
+  "actions": [{ "action": "open-nav-drawer" }]
+}
+```
+
+`width` and `height` must be positive integers. The override applies only
+to this story's browser context — consumer stories that inherit storage
+state via `needs` still resolve their own viewport from their own override
+or the config default. Storage state and viewport are independent.
+
 ## Authoring checklist
 
 For every new action:

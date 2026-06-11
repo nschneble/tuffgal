@@ -6,6 +6,13 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
+### Added
+
+- Stories can override the config-level `viewport` per story. Width and
+  height must be positive integers; stories without an override inherit
+  the config default. The override does not cascade onto consumers that
+  inherit storage state via `needs`/`produces`.
+
 ### Changed
 
 - Release workflow now skips `npm publish` and the GitHub release step when

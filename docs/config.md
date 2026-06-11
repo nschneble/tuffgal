@@ -76,7 +76,9 @@ are common candidates.
 
 Browser viewport. Defaults to `{ width: 1280, height: 800 }`. Choose
 dimensions that match the breakpoint most of your stories should screenshot
-at. Per-story overrides are not yet supported.
+at. Individual stories can override this for their own browser context via
+the story-level `viewport` field — see
+[authoring.md](authoring.md#per-story-viewport-override).
 
 ### `defaultTimeoutMs?: number`
 

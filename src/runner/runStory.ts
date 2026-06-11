@@ -56,7 +56,7 @@ async function runStoryWithBrowser(
   const storageStatePath = await resolveStorageStateForNeeds(config, needs);
   const context = await browser.newContext({
     baseURL: config.baseUrl,
-    viewport: config.viewport,
+    viewport: story.viewport ?? config.viewport,
     storageState: storageStatePath,
     ignoreHTTPSErrors: true,
     permissions: ['clipboard-read', 'clipboard-write'],
