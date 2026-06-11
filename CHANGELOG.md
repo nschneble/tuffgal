@@ -12,12 +12,11 @@ _Nothing just yet_
 
 ### Added
 
-- `navigate` step accepts an optional `waitUntil` field
-  (`'load' | 'domcontentloaded' | 'networkidle' | 'commit'`) that
-  overrides Playwright's `page.goto` ready signal on a per-step basis.
-  Defaults to `'networkidle'` (unchanged). Use `'domcontentloaded'` for
-  dev-mode pages with long-tail external fetches that prevent
-  `networkidle` from settling.
+`navigate` step accepts an optional `waitUntil` field (`'load' |
+'domcontentloaded' | 'networkidle' | 'commit'`) that overrides Playwright's
+`page.goto` ready signal on a per-step basis. Defaults to `'networkidle'`.
+Use `'domcontentloaded'` for dev-mode pages with long-tail external fetches
+that prevent `networkidle` from settling.
 
 ## [0.1.0-alpha.4] — 2026-06-06
 
@@ -70,7 +69,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.4...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.5...HEAD
+[0.1.0-alpha.5]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.2
