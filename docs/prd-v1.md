@@ -331,16 +331,16 @@ becomes a no-op for cookie apps.
 
 ## Release plan
 
-| Phase                        | Output                                                                  | Status         |
-| ---------------------------- | ----------------------------------------------------------------------- | -------------- |
-| **P1: Repo bootstrap**       | New repo, license, README, package.json, CI skeleton                    | ✅ Complete    |
-| **P2: Core extraction**      | Move framework-agnostic code, wire up config interface                  | ✅ Complete    |
-| **P3: Docs + scaffolder**    | Docs, `init`, `supervise`, `examples/postgres-prisma`                   | ✅ Complete    |
-| **P4: Pilot migration**      | First consumer fully on Tuffgal, verify parity                          | ✅ Complete    |
-| **P5: GitHub Action**        | Sibling repo + composite action wrapping `tuffgal run --manage-servers` | ✅ Complete    |
-| **P6: v0.1.0-alpha release** | npm publish with provenance, smoke from public install                  | ✅ Complete    |
-| **P7: v1.0.0**               | README polish, additional examples directory, public announce           | Planned        |
-| **P8: v1.1.0 (AI)**          | LLM fallback in resolver, BYOLLM via `AI_PROVIDER` env                  | Deferred       |
+| Phase                        | Output                                                                  | Status      |
+| ---------------------------- | ----------------------------------------------------------------------- | ----------- |
+| **P1: Repo bootstrap**       | New repo, license, README, package.json, CI skeleton                    | ✅ Complete |
+| **P2: Core extraction**      | Move framework-agnostic code, wire up config interface                  | ✅ Complete |
+| **P3: Docs + scaffolder**    | Docs, `init`, `supervise`, `examples/postgres-prisma`                   | ✅ Complete |
+| **P4: Pilot migration**      | First consumer fully on Tuffgal, verify parity                          | ✅ Complete |
+| **P5: GitHub Action**        | Sibling repo + composite action wrapping `tuffgal run --manage-servers` | ✅ Complete |
+| **P6: v0.1.0-alpha release** | npm publish with provenance, smoke from public install                  | ✅ Complete |
+| **P7: v1.0.0**               | README polish, additional examples directory, public announce           | Planned     |
+| **P8: v1.1.0 (AI)**          | LLM fallback in resolver, BYOLLM via `AI_PROVIDER` env                  | Deferred    |
 
 ## Open questions / risks
 

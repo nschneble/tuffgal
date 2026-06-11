@@ -99,7 +99,9 @@ export async function init(options: InitOptions): Promise<void> {
 
   const configPath = join(cwd, 'tuffgal.config.ts');
   await writeFile(configPath, CONFIG_TEMPLATE, 'utf8');
-  process.stdout.write(`Wrote ${relative(cwd, configPath) || 'tuffgal.config.ts'}\n`);
+  process.stdout.write(
+    `Wrote ${relative(cwd, configPath) || 'tuffgal.config.ts'}\n`,
+  );
 
   for (const subdirectory of GITKEEP_SUBDIRECTORIES) {
     const absolute = join(cwd, subdirectory);

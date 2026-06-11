@@ -45,17 +45,17 @@ disambiguate.
 
 ## Step primitives
 
-| Kind        | Purpose                                                |
-| ----------- | ------------------------------------------------------ |
-| `click`     | Click the element matching `hint`                      |
-| `input`     | Type `value` into the element matching `hint`          |
-| `intercept` | Install a route handler for the rest of the story      |
+| Kind        | Purpose                                                   |
+| ----------- | --------------------------------------------------------- |
+| `click`     | Click the element matching `hint`                         |
+| `input`     | Type `value` into the element matching `hint`             |
+| `intercept` | Install a route handler for the rest of the story         |
 | `navigate`  | Visit a path relative to `baseUrl` (optional `waitUntil`) |
-| `read`      | Assert `hint` resolves to an attached element          |
-| `scroll`    | Scroll the page up or down by a pixel `amount`         |
-| `type`      | Press a key/combo on the page (e.g. `Esc`, `Ctrl+K`)   |
-| `wait`      | Block for `ms` milliseconds (use sparingly; see below) |
-| `waitFor`   | Block until `hint` resolves (no interaction)           |
+| `read`      | Assert `hint` resolves to an attached element             |
+| `scroll`    | Scroll the page up or down by a pixel `amount`            |
+| `type`      | Press a key/combo on the page (e.g. `Esc`, `Ctrl+K`)      |
+| `wait`      | Block for `ms` milliseconds (use sparingly; see below)    |
+| `waitFor`   | Block until `hint` resolves (no interaction)              |
 
 Avoid `wait` whenever `waitFor` would do. A locator-aware wait survives
 layout speedups, but a wall-clock wait does not. The legitimate use for
