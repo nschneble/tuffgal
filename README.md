@@ -6,7 +6,7 @@ JSON-driven visual regression testing for web apps.
 
 <img src="tuffgal.png" alt="Tuffgal" />
 
-**Status:** Pre-1.0. Published on npm as `tuffgal@0.1.0-alpha.3` with
+**Status:** Pre-1.0. Published on npm as `tuffgal@0.1.0-alpha.5` with
 provenance. [Linklater](https://github.com/nschneble/linklater) is the
 pilot consumer.
 
