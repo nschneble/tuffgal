@@ -8,6 +8,17 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.1.0-alpha.5] — 2026-06-11
+
+### Added
+
+- `navigate` step accepts an optional `waitUntil` field
+  (`'load' | 'domcontentloaded' | 'networkidle' | 'commit'`) that
+  overrides Playwright's `page.goto` ready signal on a per-step basis.
+  Defaults to `'networkidle'` (unchanged). Use `'domcontentloaded'` for
+  dev-mode pages with long-tail external fetches that prevent
+  `networkidle` from settling.
+
 ## [0.1.0-alpha.4] — 2026-06-06
 
 ### Added

@@ -48,6 +48,17 @@ export const stepSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('navigate'),
     path: z.string().startsWith('/'),
+    /**
+     * Override Playwright's `page.goto` ready signal. Defaults to
+     * `'networkidle'`, which suits production builds but can starve on
+     * dev servers with long-tail external fetches (CDN font, gravatar,
+     * placeholder images). Drop to `'domcontentloaded'` or `'load'` for
+     * pages where the visual baseline is stable well before networkidle
+     * settles. See Playwright docs for full semantics.
+     */
+    waitUntil: z
+      .enum(['load', 'domcontentloaded', 'networkidle', 'commit'])
+      .optional(),
   }),
   z.object({
     kind: z.literal('click'),

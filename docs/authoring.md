@@ -50,7 +50,7 @@ disambiguate.
 | `click`     | Click the element matching `hint`                      |
 | `input`     | Type `value` into the element matching `hint`          |
 | `intercept` | Install a route handler for the rest of the story      |
-| `navigate`  | Visit a path relative to `baseUrl`                     |
+| `navigate`  | Visit a path relative to `baseUrl` (optional `waitUntil`) |
 | `read`      | Assert `hint` resolves to an attached element          |
 | `scroll`    | Scroll the page up or down by a pixel `amount`         |
 | `type`      | Press a key/combo on the page (e.g. `Esc`, `Ctrl+K`)   |

@@ -129,7 +129,12 @@ async function dispatch(
 ): Promise<void> {
   switch (step.kind) {
     case 'navigate':
-      return runNavigate(page, interpolate(step.path, parameters), config);
+      return runNavigate(
+        page,
+        interpolate(step.path, parameters),
+        config,
+        step.waitUntil,
+      );
     case 'click':
       return runClick(
         page,
