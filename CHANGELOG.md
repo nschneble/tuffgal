@@ -23,6 +23,11 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
   every visible story's screenshot details panel at once. Respects the active
   status filter — hidden rows stay collapsed. Announcements reuse the existing
   status-filter live region.
+- `npm test` now runs real tests using Node's built-in `node --test` runner
+  (with `tsx` for TS source loading). Initial coverage asserts landmarks in
+  the HTML report rendered by `renderReport()`: filter radios, bulk-toggle
+  buttons, live region, empty-state, per-story `data-status`, summary totals,
+  and the escaped failure message.
 
 ### Changed
 
