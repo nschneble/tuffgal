@@ -1,5 +1,5 @@
 import { defineConfig } from 'tuffgal';
-import { resetTestDatabase, exampleFixture } from './tuffgal/database.ts';
+import { exampleFixture, resetTestDatabase } from './tuffgal/database.ts';
 
 /**
  * Example Tuffgal config for a Postgres + Prisma stack. Adapt to your

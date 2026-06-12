@@ -16,7 +16,7 @@
     "dist",
     "examples",
     "node_modules",
-    "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "**/*.test.ts"
   ]
 }
