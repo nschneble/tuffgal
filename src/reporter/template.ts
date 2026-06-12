@@ -103,13 +103,51 @@ function renderStories(result: RunResult, reportDir: string): string {
   const items = result.stories
     .map((story, index) => renderStory(story, index, reportDir))
     .join('\n');
+  const total = result.stories.length;
   return `
 <section aria-labelledby="stories-heading">
   <h2 id="stories-heading">stories</h2>
+  <div class="stories-toolbar">
+    <fieldset class="story-filter">
+      <legend>filter</legend>
+      ${storyFilterRadio('all', true)}
+      ${storyFilterRadio('passed', false)}
+      ${storyFilterRadio('changed', false)}
+      ${storyFilterRadio('failed', false)}
+    </fieldset>
+    <div class="story-bulk-toggle">
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">expand all</button>
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">collapse all</button>
+    </div>
+    <!--
+      The .story-filter-status region is the single polite live region for the
+      stories toolbar — it carries both filter announcements and bulk-toggle
+      (expand/collapse all) announcements. Adding a second polite region here
+      would race against this one; reuse is intentional.
+    -->
+    <p class="story-filter-status" role="status" aria-live="polite">Showing all ${total} stories.</p>
+  </div>
   <ol class="stories" aria-label="Stories executed in dependency order">
     ${items}
   </ol>
+  <p class="stories-empty" hidden>no stories match</p>
 </section>`;
+}
+
+function storyFilterRadio(status: string, checked: boolean): string {
+  const inputId = `story-filter-${status}`;
+  const value = status === 'passed' ? 'pass' : status;
+  return `<label for="${inputId}" class="chip chip--toggle story-filter-label">
+    <input
+      type="radio"
+      name="story-filter"
+      id="${inputId}"
+      value="${value}"
+      data-filter-name="${status}"
+      ${checked ? 'checked' : ''}
+    />
+    ${status}
+  </label>`;
 }
 
 function renderStory(
@@ -224,7 +262,7 @@ function renderScreenshots(
 
 function shotRadio(actionId: string, name: string, disabled: boolean): string {
   const inputId = `${actionId}-radio-${name}`;
-  return `<label for="${inputId}" class="shot-radio-label">
+  return `<label for="${inputId}" class="chip chip--toggle shot-radio-label">
     <input
       type="radio"
       name="${actionId}-shot"

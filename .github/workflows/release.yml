@@ -21,7 +21,22 @@ jobs:
       - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
-      - run: npm publish --provenance --access public --tag alpha
-      - uses: softprops/action-gh-release@v2
+      - name: check whether version is already published
+        id: check
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          PUBLISHED=$(npm view tuffgal versions --json 2>/dev/null || echo "[]")
+          # npm view returns a scalar string when only one version is published; normalize to array before index()
+          if echo "$PUBLISHED" | jq -e --arg v "$VERSION" '(if type=="array" then . else [.] end) | index($v)' > /dev/null; then
+            echo "tuffgal@$VERSION already on npm — skipping publish + gh-release"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tuffgal@$VERSION not yet on npm — proceeding"
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.should_publish == 'true'
+        run: npm publish --provenance --access public --tag alpha
+      - if: steps.check.outputs.should_publish == 'true'
+        uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true

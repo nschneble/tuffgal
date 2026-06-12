@@ -17,6 +17,7 @@ interface ParsedArguments {
   idleLimitMs?: number;
   maxRespawns?: number;
   maxRuntimeMs?: number;
+  newOnly: boolean;
   storyFilter?: string;
   workers?: number;
 }
@@ -30,6 +31,7 @@ function parseArguments(argv: string[]): ParsedArguments {
     headed: false,
     manageServers: false,
     coverage: false,
+    newOnly: false,
   };
 
   for (let index = 0; index < rest.length; index += 1) {
@@ -51,6 +53,8 @@ function parseArguments(argv: string[]): ParsedArguments {
       parsed.manageServers = true;
     } else if (arg === '--coverage') {
       parsed.coverage = true;
+    } else if (arg === '--new-only') {
+      parsed.newOnly = true;
     } else if (arg === '--healthcheck-interval') {
       parsed.healthcheckIntervalMs = Number(rest[index + 1]);
       index += 1;
@@ -98,6 +102,9 @@ function printHelp(): void {
       '  --manage-servers           Spawn devServers.command, wait, run, then kill it.',
       '  --coverage                 Capture V8 JS + CSS coverage and emit a monocart report.',
       '',
+      'Approve options:',
+      '  --new-only                 Only promote new baselines; skip changed.',
+      '',
       'Supervise options:',
       '  --healthcheck-interval N   Probe interval in ms (default 30_000).',
       '  --idle-limit N             Ms with no `tuffgal run` heartbeat before exit (default 600_000).',
@@ -109,6 +116,17 @@ function printHelp(): void {
 
 async function main(): Promise<void> {
   const args = parseArguments(process.argv.slice(2));
+  if (
+    args.newOnly &&
+    (args.command === 'run' ||
+      args.command === 'supervise' ||
+      args.command === 'init')
+  ) {
+    process.stderr.write(
+      'tuffgal error: --new-only is only valid with the `approve` subcommand\n',
+    );
+    process.exit(1);
+  }
   if (args.command === 'help') {
     printHelp();
     return;
@@ -126,14 +144,12 @@ async function main(): Promise<void> {
       manageServers: args.manageServers,
       coverage: args.coverage,
     });
-    process.stdout.write(
-      `\nTotals: ${result.totals.passed} pass · ${result.totals.changed} changed · ${result.totals.failed} failed\n`,
-    );
     process.exit(result.totals.failed > 0 ? 1 : 0);
   }
   if (args.command === 'approve') {
     const summary = await approveAll(config, {
       storyFilter: args.storyFilter,
+      newOnly: args.newOnly,
     });
     process.stdout.write(
       `\nApproved ${summary.approved} baselines; skipped ${summary.skipped} actions.\n`,

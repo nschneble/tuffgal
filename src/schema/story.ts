@@ -41,6 +41,19 @@ export const storySchema = z.object({
    * whitespace-insensitive.
    */
   flow: z.string().min(1).optional(),
+  /**
+   * Override the config-level `viewport` for this story's browser
+   * context. Width and height must be positive integers. Stories without
+   * an override inherit the resolved config default. The override does
+   * not cascade onto consumer stories that inherit storage state via
+   * `needs`/`produces` — each story resolves its own viewport.
+   */
+  viewport: z
+    .object({
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+    })
+    .optional(),
   actions: z.array(storyStepSchema).min(1),
 });
 

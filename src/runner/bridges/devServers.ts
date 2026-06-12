@@ -93,7 +93,8 @@ async function stopChild(
   }
   const pid = child.pid;
   const signal = config.devServers?.shutdownSignal ?? 'SIGTERM';
-  const graceMs = config.devServers?.shutdownGraceMs ?? DEFAULT_SHUTDOWN_GRACE_MS;
+  const graceMs =
+    config.devServers?.shutdownGraceMs ?? DEFAULT_SHUTDOWN_GRACE_MS;
   process.stdout.write('Stopping dev servers…\n');
   await new Promise<void>((resolveOuter) => {
     let killed = false;
