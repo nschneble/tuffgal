@@ -15,7 +15,7 @@
     "install:browsers": "playwright install chromium",
     "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
     "prepublishOnly": "npm run lint && npm run typecheck && npm run build",
-    "test": "node --import tsx --test 'src/**/*.test.ts'",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "bin": {

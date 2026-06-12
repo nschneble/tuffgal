@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+
 import type { ActionResult, RunResult, StoryResult } from '../schema/result.ts';
 import { renderReport } from './template.ts';
 
@@ -44,6 +45,7 @@ function makeRunResult(overrides: Partial<RunResult> = {}): RunResult {
   };
 }
 
+/** Count non-overlapping occurrences of needle in haystack. */
 function countOccurrences(haystack: string, needle: string): number {
   let count = 0;
   let index = 0;
@@ -173,6 +175,11 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
         '<li class="summary-item" data-status="failed"><span class="count">1</span>',
       ),
       'failed tier total is 1',
+    );
+    assert.equal(
+      countOccurrences(html, '<li class="summary-item coverage">'),
+      2,
+      'customCoverage renders one summary-item coverage <li> per metric (screens + flows)',
     );
   });
 

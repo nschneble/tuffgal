@@ -9,7 +9,6 @@
   // Contract:
   //   write(msg)             → cancel pending debounce, set textContent now
   //   writeDebounced(msg, ms)→ cancel pending debounce, set textContent after ms
-  //   cancel()               → abort pending debounce without writing
   //
   // Both writers use `textContent` (not `innerHTML`). If the new message
   // equals the current `textContent`, some screen readers will not re-announce
@@ -48,7 +47,6 @@
     return {
       write: write,
       writeDebounced: writeDebounced,
-      cancel: cancel,
     };
   }
 
