@@ -6,50 +6,21 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
+_Nothing just yet_
+
+## [0.1.0-alpha.6] — 2026-06-11
+
 ### Added
 
-- Stories can override the config-level `viewport` per story. Width and
-  height must be positive integers; stories without an override inherit
-  the config default. The override does not cascade onto consumers that
-  inherit storage state via `needs`/`produces`.
-- `tuffgal approve --new-only` promotes only actions whose status is `new`,
-  leaving existing baselines untouched. Lets you baseline newly-introduced
-  stories without accepting drift on the rest of the suite.
-- HTML report has a status filter above the stories list. Pick `passed`,
-  `changed`, or `failed` to hide non-matching rows; `all` restores them.
-  Screen-reader users get a debounced polite-region announcement of the
-  resulting count.
-- HTML report toolbar has `expand all` / `collapse all` buttons that toggle
-  every visible story's screenshot details panel at once. Respects the active
-  status filter — hidden rows stay collapsed. Announcements reuse the existing
-  status-filter live region.
-- `npm test` now runs real tests using Node's built-in `node --test` runner
-  (with `tsx` for TS source loading). Initial coverage asserts landmarks in
-  the HTML report rendered by `renderReport()`: filter radios, bulk-toggle
-  buttons, live region, empty-state, per-story `data-status`, summary totals,
-  and the escaped failure message.
+- Add per-story overrides for browser `viewport` optional config field
+- Add `tuffgal approve --new-only` flag to limit baselines to new stories
+- Allow reports to be filtered by passed, changed, or failed
+- Allow reports to expand/contract all screenshots
 
 ### Changed
 
-- Release workflow now skips `npm publish` and the GitHub release step when
-  `package.json` version is already on npm, instead of failing noisily. Lets
-  a `v*` tag be re-pushed (or pushed without a version bump) without breaking
-  the workflow.
-- `tuffgal run` stdout now groups changed + failed stories under labeled
-  `Changed:` / `Failed:` sections at the tail of the run (after the streaming
-  progress), so you don't have to scroll up through every passing story to
-  find what needs review. The `Report:` line is now a `file://` URL that
-  terminals like iTerm2, Warp, and VS Code render as a clickable link.
-
-### Fixed
-
-- `tuffgal run`, `tuffgal supervise`, and `tuffgal init` now error out
-  when `--new-only` is passed instead of silently ignoring it. The flag
-  is only meaningful for `tuffgal approve`.
-- HTML report's filter and bulk-toggle (`expand all` / `collapse all`)
-  now share a single live-region writer, so a bulk-toggle clicked within
-  150ms of a filter change cancels the filter's pending announcement and
-  the screen reader hears only the most-recent action.
+- Edit `tuffgal run` output to group changed, failed at end w/ report link
+- Skip npm release if no version bump
 
 ## [0.1.0-alpha.5] — 2026-06-11
 
@@ -112,7 +83,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.5...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.6...HEAD
+[0.1.0-alpha.6]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.3
