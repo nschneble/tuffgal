@@ -1,3 +1,6 @@
+// This file is browser-side and runs outside the `node:test` boundary (the
+// project has no DOM harness), so its behavior is covered by manual/visual
+// verification rather than unit tests.
 (function () {
   // Shared writer for the `.story-filter-status` polite live region. Both the
   // filter (debounced) and the bulk-toggle (synchronous) write through this
@@ -72,9 +75,10 @@
       }
 
       var defaultTab = container.getAttribute('data-default-tab');
-      var initialRadio = radios.find(function (radio) {
-        return radio.value === defaultTab && !radio.disabled;
-      }) ||
+      var initialRadio =
+        radios.find(function (radio) {
+          return radio.value === defaultTab && !radio.disabled;
+        }) ||
         radios.find(function (radio) {
           return !radio.disabled;
         });
@@ -91,11 +95,9 @@
       });
     }
 
-    document
-      .querySelectorAll('.shot-radio')
-      .forEach(function (container) {
-        setupShots(container);
-      });
+    document.querySelectorAll('.shot-radio').forEach(function (container) {
+      setupShots(container);
+    });
   })();
 
   // Status filter for the stories list. Toggles `hidden` on each <li.story>
@@ -123,7 +125,9 @@
     // write (the filter announcement already covers the context change, so the
     // statusRegion is intentionally left untouched here).
     var expandButton = document.querySelector('[data-bulk-toggle="expand"]');
-    var collapseButton = document.querySelector('[data-bulk-toggle="collapse"]');
+    var collapseButton = document.querySelector(
+      '[data-bulk-toggle="collapse"]',
+    );
 
     function relabelBulkToggle(name) {
       var scope = name && name !== 'all' ? ' ' + name : '';
@@ -150,6 +154,14 @@
       list.hidden = hasNone;
       empty.hidden = !hasNone;
 
+      // Disable both bulk-toggle buttons when the active filter matches zero
+      // stories — there is nothing to expand/collapse. Runs on EVERY apply()
+      // call (including "all"), so selecting a matching filter re-enables them.
+      // `disabled` on a standalone <button> removes it from the tab order
+      // without trapping focus (focus stays on the radio that triggered apply).
+      if (expandButton) expandButton.disabled = hasNone;
+      if (collapseButton) collapseButton.disabled = hasNone;
+
       var message;
       if (value === 'all') {
         message = 'Showing all ' + total + ' stories.';
@@ -157,7 +169,13 @@
         message = 'Filter: ' + name + '. No stories match.';
       } else {
         message =
-          'Filter: ' + name + '. ' + visible + ' of ' + total + ' stories shown.';
+          'Filter: ' +
+          name +
+          '. ' +
+          visible +
+          ' of ' +
+          total +
+          ' stories shown.';
       }
 
       statusRegion.writeDebounced(message, 150);
@@ -218,7 +236,18 @@
       // keeps the logic simple.
       var count = visibleStories.length;
       var verb = shouldOpen ? 'Expanded' : 'Collapsed';
-      statusRegion.write(verb + ' screenshots in ' + count + ' stories.');
+      // Echo the active filter scope so the announcement matches the
+      // filter-aware button label (e.g. "Expanded failed screenshots in 3
+      // stories."). Read the checked radio at click time; use the same
+      // data-filter-name || value fallback relabelBulkToggle uses. "all" (or no
+      // checked radio) yields an empty scope so we never emit a double space.
+      var checked = document.querySelector('.story-filter input:checked');
+      var name =
+        checked && (checked.getAttribute('data-filter-name') || checked.value);
+      var scope = name && name !== 'all' ? ' ' + name : '';
+      statusRegion.write(
+        verb + scope + ' screenshots in ' + count + ' stories.',
+      );
     }
 
     buttons.forEach(function (button) {

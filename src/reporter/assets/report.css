@@ -417,7 +417,7 @@ h2 {
   color: var(--text-subtle);
 }
 
-/* Status badges: square bracket letter + label, fully sans-serif label */
+/* Status badges: text label only, sans-serif */
 
 .status {
   display: inline-flex;

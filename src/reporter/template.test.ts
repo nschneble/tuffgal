@@ -1,3 +1,8 @@
+// Pin the timezone before any Date is constructed so formatDate's local-time
+// rendering (hour/meridiem) is deterministic on any CI runner. renderReport
+// derives the friendly meta timestamp from finishedAt via formatDate.
+process.env.TZ = 'UTC';
+
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -218,6 +223,86 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     assert.ok(
       !html.includes('<script>boom</script>'),
       'raw unescaped <script> tag must not leak through',
+    );
+  });
+});
+
+describe('formatDate — friendly report-meta timestamp', () => {
+  // formatDate is module-private; assert through renderReport's rendered output
+  // (the friendly text appears in the <title> and the report-meta <time>). TZ is
+  // pinned to UTC at the top of the file so these are stable across runners.
+  function friendlyFor(finishedAt: string): string {
+    return renderReport(makeRunResult({ finishedAt }), REPORT_DIR);
+  }
+
+  it('renders a known ISO as month name, non-leading-zero hour, padded minute, lowercase pm', () => {
+    const html = friendlyFor('2026-06-19T13:58:00.000Z');
+    assert.ok(
+      html.includes('June 19, 1:58pm'),
+      'afternoon timestamp renders as "June 19, 1:58pm"',
+    );
+  });
+
+  it('renders midnight (T00:0x) as 12:0Xam', () => {
+    const html = friendlyFor('2026-06-19T00:05:00.000Z');
+    assert.ok(
+      html.includes('June 19, 12:05am'),
+      'midnight renders the 12-hour clock as "12:05am"',
+    );
+  });
+
+  it('renders noon (T12:00) as 12:00pm', () => {
+    const html = friendlyFor('2026-06-19T12:00:00.000Z');
+    assert.ok(
+      html.includes('June 19, 12:00pm'),
+      'noon renders the 12-hour clock as "12:00pm"',
+    );
+  });
+
+  it('zero-pads a single-digit minute', () => {
+    const html = friendlyFor('2026-06-19T09:03:00.000Z');
+    assert.ok(
+      html.includes('June 19, 9:03am'),
+      'single-digit minute is zero-padded to "9:03am"',
+    );
+  });
+});
+
+describe('renderStory — status marker + sr-only word per tier', () => {
+  const result = makeRunResult({
+    totals: { stories: 3, passed: 1, changed: 1, failed: 1 },
+    stories: [
+      makeStory({ status: 'pass' }),
+      makeStory({ status: 'changed' }),
+      makeStory({ status: 'failed' }),
+    ],
+  });
+  const html = renderReport(result, REPORT_DIR);
+
+  it('emits the ✓ marker + "passed" sr-only word for a pass story', () => {
+    assert.ok(
+      html.includes(
+        '<span class="story-marker" aria-hidden="true">✓</span><span class="sr-only">passed</span>',
+      ),
+      'pass story carries aria-hidden ✓ glyph followed by sr-only "passed"',
+    );
+  });
+
+  it('emits the ~ marker + "changed" sr-only word for a changed story', () => {
+    assert.ok(
+      html.includes(
+        '<span class="story-marker" aria-hidden="true">~</span><span class="sr-only">changed</span>',
+      ),
+      'changed story carries aria-hidden ~ glyph followed by sr-only "changed"',
+    );
+  });
+
+  it('emits the ✕ marker + "failed" sr-only word for a failed story', () => {
+    assert.ok(
+      html.includes(
+        '<span class="story-marker" aria-hidden="true">✕</span><span class="sr-only">failed</span>',
+      ),
+      'failed story carries aria-hidden ✕ glyph followed by sr-only "failed"',
     );
   });
 });

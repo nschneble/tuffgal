@@ -350,8 +350,8 @@ For every new story:
 
 ## Debugging a failed story
 
-1. Open `paths.report/index.html`. Read the failure section at the bottom.
-2. Open the trace zip listed under the failure: `npx playwright show-trace paths.report/traces/<story>.zip`. Walk the timeline, inspect DOM snapshots, and watch network calls.
+1. Open `paths.report/index.html`. Set the status filter to "failed" to isolate the failed stories, then read the inline error message rendered on each failed action row (the `<pre class="action-error">` block under the action).
+2. Find the failed story's `tracePath` in `paths.report/results.json` and open its trace: `npx playwright show-trace <tracePath>`. Walk the timeline, inspect DOM snapshots, and watch network calls. (The trace zip is not linked from the HTML report — its path lives in the JSON.)
 3. Compare baseline / actual / diff images in the report's screenshot panel. The diff engine flagged something, so check whether it's a real regression or new drift to absorb with `mask` or `ssimThreshold`.
 4. If the locator missed, re-read the hint precedence list above and tighten it.
 
