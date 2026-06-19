@@ -380,13 +380,34 @@ h2 {
 }
 
 .actions {
+  position: relative;
   margin: 0.5rem 0 0;
-  padding: 0;
+  padding: 0 0 0 1rem;
   list-style: none;
+}
+
+.actions::before {
+  /* Continuous vertical trunk, decorative. The negative top extends the line
+     up into the story-prose → first-action gap, which IS Change 2's
+     prose→first-action connector (pure CSS, zero DOM nodes). */
+  content: '';
+  position: absolute;
+  left: 0.25rem;
+  top: -0.5rem;
+  bottom: 0;
+  width: 1px;
+  background: var(--text-subtle);
 }
 
 .action {
   padding: 0.15rem 0;
+}
+
+.action:last-child {
+  /* Mask the trunk below the last └─ tee so it stops at the final action
+     rather than running past it. */
+  position: relative;
+  background: var(--bg-elevated);
 }
 
 .action[data-status='failed'] {
@@ -480,33 +501,31 @@ h2 {
 
 /* Screenshot details / radiogroup */
 
-.shots {
-  margin: 0 0 0 2.2rem;
-  margin-top: 0.25rem;
-}
-
-.shots > summary {
-  display: inline-block;
-  color: var(--accent);
-  cursor: pointer;
-  user-select: none;
+/* The whole action row is now the disclosure trigger. The summary spans the
+   full row; only shot-bearing rows get the pointer cursor + focus ring. */
+summary.action-row {
   list-style: none;
-  font-size: 0.8125rem;
+  cursor: pointer;
 }
 
-.shots > summary::-webkit-details-marker {
+summary.action-row::-webkit-details-marker {
   display: none;
 }
 
-.shots > summary:focus-visible {
+summary.action-row:focus-visible {
+  /* outline (not box-shadow/border) so flex-wrap doesn't clip it. --accent
+     clears 3:1 in both themes. */
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
+/* Screenshot body content sits inside the <details>, which no longer carries
+   the old 2.2rem indent. Nudge the body in so it aligns under the row text
+   rather than the branch glyph. */
 .shot-radio {
   display: flex;
   gap: 0.25rem;
-  margin: 0.5rem 0;
+  margin: 0.5rem 0 0.5rem 2.2rem;
   padding: 0;
   border: 0;
 }
@@ -528,6 +547,7 @@ h2 {
 
 .shot-panel {
   margin-top: 0.5rem;
+  margin-left: 2.2rem;
   padding: 0.5rem;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -549,7 +569,7 @@ h2 {
 }
 
 .diff-stats {
-  margin: 0.5rem 0 0;
+  margin: 0.5rem 0 0 2.2rem;
   color: var(--text-muted);
   font-size: 0.8125rem;
 }

@@ -227,6 +227,90 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
   });
 });
 
+describe('renderAction — whole row as screenshot disclosure', () => {
+  it('wraps a shot-bearing action in <details class="shots"> with the full row as <summary class="action-row">', () => {
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0 },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              actualPath: '/fake/report/dir/shots/settings.actual.png',
+              baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+              diffPath: '/fake/report/dir/shots/settings.diff.png',
+              diffPixels: 1234,
+              diffRatio: 0.012,
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes('<details class="shots">'),
+      'shot-bearing action renders a <details class="shots"> disclosure (class preserved for report.js bulk toggle)',
+    );
+    assert.ok(
+      html.includes('<summary class="action-row">'),
+      'the full action row is the <summary class="action-row"> trigger, not a plain <div>',
+    );
+    assert.ok(
+      html.includes('<span class="sr-only"> — toggle screenshots</span>'),
+      'summary carries the sr-only " — toggle screenshots" hint',
+    );
+    // The old tiny "[view]" disclosure is gone entirely.
+    assert.ok(
+      !html.includes('>view<'),
+      'the old "[view]" summary text is removed',
+    );
+
+    // The radiogroup + panels must remain inside the details so report.js
+    // setupShots (container.parentElement.querySelectorAll('.shot-panel'))
+    // and the bulk toggle (details.shots / panel.open) keep resolving.
+    const detailsStart = html.indexOf('<details class="shots">');
+    const detailsEnd = html.indexOf('</details>', detailsStart);
+    assert.ok(
+      detailsStart !== -1 && detailsEnd !== -1,
+      'details open/close tags present',
+    );
+    const detailsInner = html.slice(detailsStart, detailsEnd);
+    assert.ok(
+      detailsInner.includes('class="shot-radio"'),
+      '.shot-radio fieldset renders inside the <details class="shots">',
+    );
+    assert.ok(
+      detailsInner.includes('class="shot-panel"'),
+      '.shot-panel divs render inside the <details class="shots">',
+    );
+  });
+
+  it('renders a screenshot-less action as a plain <div class="action-row"> with no <details>', () => {
+    // The default makeAction fixture has no actualPath/baselinePath.
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      stories: [makeStory({ status: 'pass', actions: [makeAction()] })],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes('<div class="action-row">'),
+      'shot-less action renders a plain <div class="action-row">',
+    );
+    assert.ok(
+      !html.includes('<details class="shots">'),
+      'shot-less action does not emit a <details> disclosure',
+    );
+    assert.ok(
+      !html.includes('<summary class="action-row">'),
+      'shot-less action does not emit a <summary>',
+    );
+  });
+});
+
 describe('formatDate — friendly report-meta timestamp', () => {
   // formatDate is module-private; assert through renderReport's rendered output
   // (the friendly text appears in the <title> and the report-meta <time>). TZ is

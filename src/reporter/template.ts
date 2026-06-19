@@ -202,15 +202,22 @@ function renderAction(
       ? `<pre class="action-error">${escapeHtml(action.failureMessage ?? 'unknown error')}</pre>`
       : '';
   const parameters = renderParameters(action.parameters);
-  return `
-<li class="action" data-status="${action.status}">
-  <div class="action-row">
-    <span class="branch" aria-hidden="true">${branch}</span>
+
+  const rowInner = `<span class="branch" aria-hidden="true">${branch}</span>
     ${statusBadge(action.status)}
     <code class="action-name">${escapeHtml(action.action)}</code>
-    <span class="action-duration">${formatDuration(action.durationMs)}</span>
-    ${screenshots ? `<span class="action-shots">${screenshots}</span>` : ''}
-  </div>
+    <span class="action-duration">${formatDuration(action.durationMs)}</span>`;
+
+  const row = screenshots
+    ? `<details class="shots">
+    <summary class="action-row">${rowInner}<span class="sr-only"> — toggle screenshots</span></summary>
+    ${screenshots}
+  </details>`
+    : `<div class="action-row">${rowInner}</div>`;
+
+  return `
+<li class="action" data-status="${action.status}">
+  ${row}
   ${parameters}
   ${errorBlock}
 </li>`;
@@ -254,10 +261,7 @@ function renderScreenshots(
     action.diffRatio !== undefined
       ? `<p class="diff-stats" id="${diffStatsId}">${action.diffPixels} pixels differ (${(action.diffRatio * 100).toFixed(3)}%)</p>`
       : '';
-  return `
-<details class="shots">
-  <summary><span aria-hidden="true">[</span>view<span aria-hidden="true">]</span></summary>
-  <fieldset class="shot-radio" data-default-tab="${defaultTab}">
+  return `<fieldset class="shot-radio" data-default-tab="${defaultTab}">
     <legend class="sr-only">Screenshot to display</legend>
     ${shotRadio(actionId, 'baseline', baseline === undefined)}
     ${shotRadio(actionId, 'actual', actual === undefined)}
@@ -266,8 +270,7 @@ function renderScreenshots(
   ${shotPanel(actionId, 'baseline', baseline, `${action.action} baseline screenshot`)}
   ${shotPanel(actionId, 'actual', actual, `${action.action} actual screenshot from this run`)}
   ${shotPanel(actionId, 'diff', diff, `Pixel diff overlay for ${action.action}: red pixels mark changed regions`, action.diffRatio !== undefined ? diffStatsId : undefined)}
-  ${diffStats}
-</details>`;
+  ${diffStats}`;
 }
 
 function shotRadio(actionId: string, name: string, disabled: boolean): string {
