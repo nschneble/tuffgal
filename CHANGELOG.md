@@ -14,16 +14,17 @@ _Nothing just yet_
 
 - Capitalize the report title to "Tuffgal report" and show a friendlier timestamp
 - Convey story status as a colored, marked story name instead of a badge
-- Show passed, changed, and failed as plain text (no icon glyphs)
+- Show the status badge as plain text (no letter glyph)
 - Rename "pass" terminology to "passed" throughout the report
 - Make the whole action row clickable to toggle screenshots (replaces the "view" link)
 - Draw continuous tree connector lines down the action list
-- Move expand/collapse buttons and the story count to the right of the filters, with filter-aware labels (e.g. "Expand all changed screenshots")
+- Move the expand/collapse buttons to the right of the filters; the story-count status now sits beside the filters, with filter-aware labels (e.g. "Expand all changed screenshots")
 - Split story totals and coverage in the summary with justify-between
 
 ### Removed
 
 - Drop the redundant "Failures" section at the bottom of the report (failures now surface inline and via the failed filter)
+- Stop linking the Playwright trace from the HTML report; its path is recorded in `results.json`
 
 ## [0.1.0-alpha.6] — 2026-06-11
 

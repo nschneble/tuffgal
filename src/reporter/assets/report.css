@@ -36,7 +36,7 @@
     --accent: #0369a1;
     --pass: #15803d;
     --pass-fg: #ffffff;
-    --changed: #a16207;
+    --changed: #854d0e;
     --changed-fg: #ffffff;
     --failed: #b91c1c;
     --failed-fg: #ffffff;
@@ -139,8 +139,8 @@ h2 {
 .summary-list {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
   gap: 1.25rem;
+  justify-content: space-between;
   margin: 0;
   padding: 0.75rem 1rem;
   list-style: none;
@@ -404,9 +404,28 @@ h2 {
 }
 
 .action:last-child {
-  /* Mask the trunk below the last └─ tee so it stops at the final action
-     rather than running past it. */
   position: relative;
+}
+
+.action:last-child::after {
+  /* Mask the decorative trunk in the gutter column below the last └─ elbow so
+     the line stops at the final action rather than running past it.
+     Geometry: the trunk (.actions::before) sits at .actions left:0.25rem; each
+     .action is inset by .actions padding-left:1rem, so reaching back to the
+     trunk column from this pseudo-element requires left: 0.25rem - 1rem
+     = -0.75rem. `top: 0.9rem` starts the mask just BELOW the └─ elbow on the
+     first row (the elbow paints near the row baseline), so the upward
+     prose→first-action connector (.actions::before top:-0.5rem) survives even
+     on a single-action story where the one .action is both first and last.
+     The backdrop behind the trunk is .stories' background (var(--bg-elevated));
+     .story/.actions/.action paint no background, so this color matches exactly
+     and the mask is invisible. Width 3px (> the 1px trunk) fully covers it. */
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 0.9rem;
+  bottom: 0;
+  width: 3px;
   background: var(--bg-elevated);
 }
 

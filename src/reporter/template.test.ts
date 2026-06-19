@@ -288,6 +288,44 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
   });
 
+  it('places the action-error block as a sibling AFTER the closing </details> for a failed shot-bearing action', () => {
+    // A failed action that ALSO has screenshots renders both a
+    // <details class="shots"> disclosure and a <pre class="action-error">.
+    // renderAction emits parameters/errorBlock OUTSIDE the disclosure, so the
+    // error must be a sibling after </details>, never nested inside it (a
+    // nested error would hide behind the collapsed disclosure).
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 0, failed: 1 },
+      stories: [
+        makeStory({
+          status: 'failed',
+          actions: [
+            makeAction({
+              action: 'click-buy',
+              status: 'failed',
+              failureMessage: 'snapshot mismatch',
+              actualPath: '/fake/report/dir/shots/buy.actual.png',
+              baselinePath: '/fake/report/dir/shots/buy.baseline.png',
+              diffPath: '/fake/report/dir/shots/buy.diff.png',
+              diffPixels: 42,
+              diffRatio: 0.004,
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    const detailsClose = html.indexOf('</details>');
+    const errorOpen = html.indexOf('class="action-error"');
+    assert.ok(detailsClose !== -1, 'a <details> disclosure renders');
+    assert.ok(errorOpen !== -1, 'the action-error block renders');
+    assert.ok(
+      detailsClose < errorOpen,
+      'action-error is a sibling AFTER </details>, not nested inside the disclosure',
+    );
+  });
+
   it('renders a screenshot-less action as a plain <div class="action-row"> with no <details>', () => {
     // The default makeAction fixture has no actualPath/baselinePath.
     const result = makeRunResult({
