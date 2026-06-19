@@ -208,40 +208,16 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     );
   });
 
-  it('renders the failure message with HTML escaped', () => {
+  it('renders the inline action-error message with HTML escaped', () => {
     assert.ok(
-      html.includes('oops &lt;script&gt;boom&lt;/script&gt;'),
-      'failure message appears with <script> tags escaped',
+      html.includes(
+        '<pre class="action-error">oops &lt;script&gt;boom&lt;/script&gt;</pre>',
+      ),
+      'failed action error appears inline with <script> tags escaped',
     );
     assert.ok(
       !html.includes('<script>boom</script>'),
       'raw unescaped <script> tag must not leak through',
-    );
-  });
-});
-
-describe('renderReport — no-failures fixture', () => {
-  const result = makeRunResult({
-    totals: { stories: 2, passed: 1, changed: 1, failed: 0 },
-    stories: [
-      makeStory({
-        file: 'stories/home.story.json',
-        status: 'pass',
-        actions: [makeAction({ status: 'pass' })],
-      }),
-      makeStory({
-        file: 'stories/settings.story.json',
-        status: 'changed',
-        actions: [makeAction({ status: 'changed' })],
-      }),
-    ],
-  });
-  const html = renderReport(result, REPORT_DIR);
-
-  it('renders the failures section empty-state when no actions failed', () => {
-    assert.ok(
-      html.includes('<p class="prose-block empty">(none)</p>'),
-      'failures section shows (none) placeholder',
     );
   });
 });

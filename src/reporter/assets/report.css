@@ -554,63 +554,6 @@ h2 {
   font-size: 0.8125rem;
 }
 
-/* Failures section */
-
-.failures {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.failure {
-  margin: 0.5rem 0;
-  padding: 0.875rem 1rem;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--failed);
-}
-
-.failure-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-}
-
-.failure-message {
-  margin: 0;
-  padding: 0.5rem 0.75rem;
-  background: var(--bg);
-  border-left: 2px solid var(--border-bright);
-  color: var(--text);
-  font-size: 0.8125rem;
-  white-space: pre-wrap;
-  overflow-x: auto;
-}
-
-.failure-trace {
-  margin: 0.5rem 0 0;
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-}
-
-.failure-trace a {
-  color: var(--accent);
-}
-
-.prose-block {
-  font-family: var(--font-sans);
-  color: var(--text-muted);
-  font-size: 0.875rem;
-}
-
-.empty {
-  color: var(--text-subtle);
-}
-
 /* Reduce motion */
 @media (prefers-reduced-motion: reduce) {
   .skip-link {

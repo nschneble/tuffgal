@@ -37,7 +37,6 @@ const STATUS_MARKERS: Record<ActionStatus, string> = {
  * pure presentation.
  */
 export function renderReport(result: RunResult, reportDir: string): string {
-  const failures = collectFailures(result);
   const dateLabel = formatDate(result.finishedAt);
   return `<!doctype html>
 <html lang="en">
@@ -60,7 +59,6 @@ export function renderReport(result: RunResult, reportDir: string): string {
 <main id="main" tabindex="-1">
   ${renderSummary(result)}
   ${renderStories(result, reportDir)}
-  ${renderFailures(failures, reportDir)}
 </main>
 <script src="assets/report.js"></script>
 </body>
@@ -306,65 +304,6 @@ function shotPanel(
         : `<p class="shot-missing">no ${name} screenshot for this action</p>`
     }
   </div>`;
-}
-
-function renderFailures(failures: FailureRecord[], reportDir: string): string {
-  if (failures.length === 0) {
-    return `
-<section aria-labelledby="failures-heading">
-  <h2 id="failures-heading">failures</h2>
-  <p class="prose-block empty">(none)</p>
-</section>`;
-  }
-  const items = failures
-    .map(
-      (failure) => `
-<article class="failure">
-  <header class="failure-head">
-    <code>${escapeHtml(failure.storyFile)}</code>
-    <span aria-hidden="true">·</span>
-    <code>${escapeHtml(failure.actionName)}</code>
-  </header>
-  <pre class="failure-message">${escapeHtml(failure.message)}</pre>
-  ${
-    failure.tracePath
-      ? `<p class="failure-trace">trace: <a href="${escapeAttribute(toReportRelative(reportDir, failure.tracePath))}">${escapeHtml(toReportRelative(reportDir, failure.tracePath))}</a></p>`
-      : ''
-  }
-</article>`,
-    )
-    .join('\n');
-  return `
-<section aria-labelledby="failures-heading">
-  <h2 id="failures-heading">failures</h2>
-  <ol class="failures" aria-label="Failed actions">
-    ${items}
-  </ol>
-</section>`;
-}
-
-interface FailureRecord {
-  storyFile: string;
-  actionName: string;
-  message: string;
-  tracePath?: string;
-}
-
-function collectFailures(result: RunResult): FailureRecord[] {
-  const out: FailureRecord[] = [];
-  for (const story of result.stories) {
-    for (const action of story.actions) {
-      if (action.status === 'failed') {
-        out.push({
-          storyFile: story.file,
-          actionName: action.action,
-          message: action.failureMessage ?? 'unknown error',
-          tracePath: story.tracePath,
-        });
-      }
-    }
-  }
-  return out;
 }
 
 function statusBadge(status: ActionStatus): string {
