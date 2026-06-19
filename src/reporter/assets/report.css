@@ -331,8 +331,28 @@ h2 {
   flex-wrap: wrap;
 }
 
+.story-marker {
+  font-weight: 600;
+  /* Pull the marker tight to the file name so it reads as attached, overriding
+     the .story-row 0.75rem gap for this pair only. */
+  margin-right: -0.45rem;
+}
+
 .story-file {
   font-weight: 600;
+}
+
+.story[data-status='pass'] .story-marker,
+.story[data-status='pass'] .story-file {
+  color: var(--pass);
+}
+.story[data-status='changed'] .story-marker,
+.story[data-status='changed'] .story-file {
+  color: var(--changed);
+}
+.story[data-status='failed'] .story-marker,
+.story[data-status='failed'] .story-file {
+  color: var(--failed);
 }
 
 .story-duration {
@@ -394,11 +414,6 @@ h2 {
   padding: 0 0.5rem;
   border: 1px solid currentColor;
   min-width: 5.5rem;
-}
-
-.status-letter {
-  font-weight: 600;
-  letter-spacing: -0.02em;
 }
 
 .status-label {

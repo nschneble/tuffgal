@@ -15,6 +15,21 @@ const STATUS_LABELS: Record<ActionStatus, string> = {
 };
 
 /**
+ * Per-tier text/glyph markers prepended to the story file name. These are the
+ * mandatory non-color cue for WCAG 1.4.1: color + an sr-only word alone do not
+ * distinguish status for sighted color-blind users, and the inset accent bar
+ * cannot tell changed from failed. Marked `aria-hidden` since the sr-only
+ * status word carries the meaning for the accessibility tree.
+ */
+const STATUS_MARKERS: Record<ActionStatus, string> = {
+  pass: '✓',
+  changed: '~',
+  failed: '✕',
+  skipped: '–',
+  new: '+',
+};
+
+/**
  * Static HTML report. Console / dev-tool aesthetic: dark by default, mono for
  * data, sans for prose, sharp 1px borders, tree branches in box-drawing
  * characters that are hidden from assistive tech. Stories + actions are
@@ -160,7 +175,7 @@ function renderStory(
   return `
 <li class="story" data-status="${story.status}">
   <div class="story-row">
-    ${storyBadge(story.status)}
+    <span class="story-marker" aria-hidden="true">${STATUS_MARKERS[story.status]}</span><span class="sr-only">${STATUS_LABELS[story.status]}</span>
     <code class="story-file">${escapeHtml(story.file)}</code>
     <span class="story-duration">${formatDuration(story.durationMs)}</span>
   </div>
@@ -351,10 +366,6 @@ function statusBadge(status: ActionStatus): string {
   return `<span class="status" data-status="${status}">
     <span class="sr-only">${STATUS_LABELS[status]}</span><span class="status-label" aria-hidden="true">${STATUS_LABELS[status]}</span>
   </span>`;
-}
-
-function storyBadge(status: ActionStatus): string {
-  return statusBadge(status);
 }
 
 function toReportRelative(reportDir: string, absolute: string): string {
