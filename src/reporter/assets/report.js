@@ -116,9 +116,29 @@
     );
     var total = stories.length;
 
+    // Bulk-toggle buttons re-labelled per active filter so sighted users know
+    // the toggle is scoped to the filtered subset (e.g. "Expand all failed
+    // screenshots"). This is a synchronous visible-text swap only — no
+    // aria-label (would risk WCAG 2.5.3 Label in Name) and no live-region
+    // write (the filter announcement already covers the context change, so the
+    // statusRegion is intentionally left untouched here).
+    var expandButton = document.querySelector('[data-bulk-toggle="expand"]');
+    var collapseButton = document.querySelector('[data-bulk-toggle="collapse"]');
+
+    function relabelBulkToggle(name) {
+      var scope = name && name !== 'all' ? ' ' + name : '';
+      if (expandButton) {
+        expandButton.textContent = 'Expand all' + scope + ' screenshots';
+      }
+      if (collapseButton) {
+        collapseButton.textContent = 'Collapse all' + scope + ' screenshots';
+      }
+    }
+
     function apply(radio) {
       var value = radio.value;
       var name = radio.getAttribute('data-filter-name') || value;
+      relabelBulkToggle(name);
       var visible = 0;
       stories.forEach(function (story) {
         var match =

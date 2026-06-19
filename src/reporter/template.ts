@@ -122,17 +122,22 @@ function renderStories(result: RunResult, reportDir: string): string {
       ${storyFilterRadio('changed', false)}
       ${storyFilterRadio('failed', false)}
     </fieldset>
-    <div class="story-bulk-toggle">
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">expand all</button>
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">collapse all</button>
-    </div>
     <!--
       The .story-filter-status region is the single polite live region for the
       stories toolbar — it carries both filter announcements and bulk-toggle
       (expand/collapse all) announcements. Adding a second polite region here
       would race against this one; reuse is intentional.
+
+      DOM order is logical: filters then status then buttons. The buttons are
+      pushed visually right via margin-left:auto on .story-bulk-toggle in the
+      CSS, never via the order property on the interactive elements (that would
+      fail WCAG 2.4.3).
     -->
     <p class="story-filter-status" role="status" aria-live="polite">Showing all ${total} stories.</p>
+    <div class="story-bulk-toggle">
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all screenshots</button>
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">Collapse all screenshots</button>
+    </div>
   </div>
   <ol class="stories" aria-label="Stories executed in dependency order">
     ${items}

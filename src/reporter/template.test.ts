@@ -114,6 +114,31 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
       ),
       'collapse-all bulk-toggle button present',
     );
+    assert.ok(
+      html.includes(
+        'data-bulk-toggle="expand">Expand all screenshots</button>',
+      ),
+      'expand button has filter-agnostic "Expand all screenshots" initial text',
+    );
+    assert.ok(
+      html.includes(
+        'data-bulk-toggle="collapse">Collapse all screenshots</button>',
+      ),
+      'collapse button has filter-agnostic "Collapse all screenshots" initial text',
+    );
+  });
+
+  it('orders the toolbar DOM filters → status → bulk-toggle buttons', () => {
+    const fieldsetIndex = html.indexOf('<fieldset class="story-filter">');
+    const statusIndex = html.indexOf('<p class="story-filter-status"');
+    const bulkToggleIndex = html.indexOf('<div class="story-bulk-toggle">');
+    assert.ok(fieldsetIndex !== -1, 'filter fieldset present');
+    assert.ok(statusIndex !== -1, 'status region present');
+    assert.ok(bulkToggleIndex !== -1, 'bulk-toggle group present');
+    assert.ok(
+      fieldsetIndex < statusIndex && statusIndex < bulkToggleIndex,
+      'reading order is filters, then status, then buttons (status sits between)',
+    );
   });
 
   it('renders the live region with initial story count and empty-state placeholder', () => {
