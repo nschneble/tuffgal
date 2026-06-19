@@ -7,19 +7,11 @@ import type {
 } from '../schema/result.ts';
 
 const STATUS_LABELS: Record<ActionStatus, string> = {
-  pass: 'pass',
+  pass: 'passed',
   changed: 'changed',
   failed: 'failed',
   skipped: 'skipped',
   new: 'new baseline',
-};
-
-const STATUS_LETTERS: Record<ActionStatus, string> = {
-  pass: 'P',
-  changed: 'C',
-  failed: 'F',
-  skipped: '·',
-  new: 'N',
 };
 
 /**
@@ -37,17 +29,17 @@ export function renderReport(result: RunResult, reportDir: string): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>tuffgal report — ${dateLabel}</title>
+<title>Tuffgal report — ${dateLabel}</title>
 <link rel="stylesheet" href="assets/report.css" />
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to report</a>
 <header class="report-header">
-  <h1>tuffgal report</h1>
+  <h1>Tuffgal report</h1>
   <p class="report-meta">
     <time datetime="${result.finishedAt}">${dateLabel}</time>
     <span aria-hidden="true">·</span>
-    duration ${formatDuration(result.durationMs)}
+    <span aria-hidden="true">⏲</span> ${formatDuration(result.durationMs)}
   </p>
 </header>
 <main id="main" tabindex="-1">
@@ -69,7 +61,7 @@ function renderSummary(result: RunResult): string {
   <h2 id="summary-heading">summary</h2>
   <ul class="summary-list" aria-label="Run totals">
     ${summaryItem('stories', result.totals.stories)}
-    ${summaryItem('pass', result.totals.passed, 'pass')}
+    ${summaryItem('passed', result.totals.passed, 'pass')}
     ${summaryItem('changed', result.totals.changed, 'changed')}
     ${summaryItem('failed', result.totals.failed, 'failed')}
     ${coverageItem('screens', screens)}
@@ -109,7 +101,7 @@ function renderStories(result: RunResult, reportDir: string): string {
   <h2 id="stories-heading">stories</h2>
   <div class="stories-toolbar">
     <fieldset class="story-filter">
-      <legend>filter</legend>
+      <legend class="sr-only">filter</legend>
       ${storyFilterRadio('all', true)}
       ${storyFilterRadio('passed', false)}
       ${storyFilterRadio('changed', false)}
@@ -357,7 +349,7 @@ function collectFailures(result: RunResult): FailureRecord[] {
 
 function statusBadge(status: ActionStatus): string {
   return `<span class="status" data-status="${status}">
-    <span class="status-letter" aria-hidden="true">${STATUS_LETTERS[status]}</span><span class="sr-only">${STATUS_LABELS[status]}</span><span class="status-label" aria-hidden="true">${STATUS_LABELS[status]}</span>
+    <span class="sr-only">${STATUS_LABELS[status]}</span><span class="status-label" aria-hidden="true">${STATUS_LABELS[status]}</span>
   </span>`;
 }
 
@@ -369,9 +361,36 @@ function toReportRelative(reportDir: string, absolute: string): string {
   return relative(reportDir, absolute);
 }
 
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/**
+ * Friendly human-readable timestamp, e.g. "June 19, 1:58pm". Month name, day,
+ * 12-hour clock with lowercase am/pm and no leading zero on the hour, no
+ * seconds. Uses local time; the machine-readable ISO value is preserved
+ * separately on the `<time datetime>` attribute for assistive tech.
+ */
 function formatDate(iso: string): string {
   const date = new Date(iso);
-  return date.toISOString().replace('T', ' ').slice(0, 19);
+  const month = MONTH_NAMES[date.getMonth()];
+  const day = date.getDate();
+  const hours24 = date.getHours();
+  const meridiem = hours24 < 12 ? 'am' : 'pm';
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${month} ${day}, ${hours12}:${minutes}${meridiem}`;
 }
 
 function formatDuration(ms: number): string {
