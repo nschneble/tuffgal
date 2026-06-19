@@ -8,6 +8,23 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.1.0-alpha.7] — 2026-06-19
+
+### Changed
+
+- Capitalize the report title to "Tuffgal report" and show a friendlier timestamp
+- Convey story status as a colored, marked story name instead of a badge
+- Show passed, changed, and failed as plain text (no icon glyphs)
+- Rename "pass" terminology to "passed" throughout the report
+- Make the whole action row clickable to toggle screenshots (replaces the "view" link)
+- Draw continuous tree connector lines down the action list
+- Move expand/collapse buttons and the story count to the right of the filters, with filter-aware labels (e.g. "Expand all changed screenshots")
+- Split story totals and coverage in the summary with justify-between
+
+### Removed
+
+- Drop the redundant "Failures" section at the bottom of the report (failures now surface inline and via the failed filter)
+
 ## [0.1.0-alpha.6] — 2026-06-11
 
 ### Added
@@ -83,7 +100,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.6...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.7...HEAD
+[0.1.0-alpha.7]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.7
 [0.1.0-alpha.6]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.4
