@@ -168,12 +168,78 @@ export async function loadConfig(cwd: string): Promise<ResolvedConfig> {
           `Did you forget \`export default defineConfig({ ... })\`?`,
       );
     }
+    assertValidConfig(module.default, absolute);
     return resolveConfig(module.default, resolve(cwd, '.'));
   }
   throw new Error(
     `No tuffgal.config.ts or tuffgal.config.js found in ${cwd}. Run ` +
       `\`npx tuffgal init\` to scaffold one.`,
   );
+}
+
+/**
+ * Shape-checks the consumer's default export before `resolveConfig`
+ * dereferences it. The config module is dynamically imported, so TypeScript
+ * cannot guarantee it actually matches `TuffgalConfig`; without this a missing
+ * `paths` or a non-string `baseUrl` throws an opaque TypeError inside
+ * `resolveConfig`. Validation covers the fields `resolveConfig` reads — the
+ * `database`/`devServers` bridges hold functions and are left to fail at their
+ * own call sites. `source` is the config file path, surfaced in every message.
+ */
+export function assertValidConfig(input: unknown, source: string): void {
+  const fail = (detail: string): never => {
+    throw new Error(`Invalid tuffgal config at ${source}: ${detail}`);
+  };
+  if (typeof input !== 'object' || input === null) {
+    fail('the default export must be a config object.');
+  }
+  const config = input as Record<string, unknown>;
+
+  if (typeof config.paths !== 'object' || config.paths === null) {
+    fail('`paths` is required and must be an object.');
+  }
+  const paths = config.paths as Record<string, unknown>;
+  for (const key of ['actions', 'stories', 'baselines', 'report'] as const) {
+    if (typeof paths[key] !== 'string') {
+      fail(`\`paths.${key}\` is required and must be a string.`);
+    }
+  }
+  if (paths.authState !== undefined && typeof paths.authState !== 'string') {
+    fail('`paths.authState` must be a string when provided.');
+  }
+
+  if (typeof config.baseUrl !== 'string') {
+    fail('`baseUrl` is required and must be a string.');
+  }
+
+  for (const key of [
+    'defaultTimeoutMs',
+    'navigationTimeoutMs',
+    'workers',
+  ] as const) {
+    const value = config[key];
+    if (value !== undefined && (typeof value !== 'number' || value <= 0)) {
+      fail(`\`${key}\` must be a positive number when provided.`);
+    }
+  }
+
+  for (const key of ['apiHost', 'frozenTime', 'flowInventory'] as const) {
+    if (config[key] !== undefined && typeof config[key] !== 'string') {
+      fail(`\`${key}\` must be a string when provided.`);
+    }
+  }
+
+  if (config.viewport !== undefined) {
+    const viewport = config.viewport as Record<string, unknown>;
+    if (
+      typeof viewport !== 'object' ||
+      viewport === null ||
+      typeof viewport.width !== 'number' ||
+      typeof viewport.height !== 'number'
+    ) {
+      fail('`viewport` must be `{ width: number, height: number }`.');
+    }
+  }
 }
 
 function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
