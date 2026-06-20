@@ -2,6 +2,7 @@ import { relative } from 'node:path';
 import type {
   ActionResult,
   ActionStatus,
+  CoverageMetric,
   RunResult,
   StoryResult,
 } from '../schema/result.ts';
@@ -82,10 +83,7 @@ function renderSummary(result: RunResult): string {
 </section>`;
 }
 
-function coverageItem(
-  label: string,
-  metric: { total: number; covered: number; ratio: number },
-): string {
+function coverageItem(label: string, metric: CoverageMetric): string {
   const pct = `${(metric.ratio * 100).toFixed(0)}%`;
   return `<li class="summary-item coverage"><span class="count">${pct}</span><span class="label">${label}</span><span class="coverage-detail" aria-hidden="true">${metric.covered}/${metric.total}</span><span class="sr-only">${metric.covered} of ${metric.total} ${label} covered</span></li>`;
 }

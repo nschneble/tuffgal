@@ -80,12 +80,20 @@ async function runStoryWithBrowser(
   for (const storyStep of story.actions) {
     const action = actions.get(storyStep.action);
     if (!action) {
-      results.push(skipped(storyStep.action, 'unknown action'));
+      results.push(
+        skipped(storyStep.action, 'unknown action', storyStep.parameters),
+      );
       storyStatus = 'failed';
       continue;
     }
     if (storyStatus === 'failed') {
-      results.push(skipped(storyStep.action, 'earlier action failed'));
+      results.push(
+        skipped(
+          storyStep.action,
+          'earlier action failed',
+          storyStep.parameters,
+        ),
+      );
       continue;
     }
     const result = await runAction({
@@ -183,11 +191,16 @@ async function persistProducedAuthState(
   }
 }
 
-function skipped(actionName: string, reason: string): ActionResult {
+function skipped(
+  actionName: string,
+  reason: string,
+  parameters?: Record<string, string>,
+): ActionResult {
   const now = new Date().toISOString();
   return {
     action: actionName,
     status: 'skipped',
+    parameters,
     startedAt: now,
     finishedAt: now,
     durationMs: 0,

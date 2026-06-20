@@ -18,11 +18,17 @@ export async function runIntercept(
       await route.fallback();
       return;
     }
-    const body = respond.body === undefined ? '' : JSON.stringify(respond.body);
+    // Only declare a JSON body when one is supplied. Forcing
+    // `application/json` on an empty body made consumers that call
+    // `res.json()` throw on what is really an empty response.
+    if (respond.body === undefined) {
+      await route.fulfill({ status: respond.status });
+      return;
+    }
     await route.fulfill({
       status: respond.status,
       contentType: 'application/json',
-      body,
+      body: JSON.stringify(respond.body),
     });
   });
 }

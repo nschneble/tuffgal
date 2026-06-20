@@ -13,6 +13,7 @@ import {
   writePng,
   writeText,
 } from '../screenshots/baselineStore.ts';
+import { sleep } from '../util.ts';
 import { interpolate, interpolateHint } from './interpolate.ts';
 import { LocatorNotFoundError, resolveLocator } from './resolveLocator.ts';
 import { runClick } from './steps/click.ts';
@@ -413,12 +414,6 @@ function validateParameters(
       );
     }
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 export class ExpectationTimedOutError extends Error {

@@ -68,6 +68,35 @@ export interface CoverageMetric {
   missing: string[];
 }
 
+/**
+ * Parses and shape-checks a `results.json` blob. `approve` re-reads the run's
+ * own output, the one JSON re-entry point that skips the zod validation every
+ * input file gets. A truncated or stale-schema artifact would otherwise throw
+ * an opaque TypeError deep in the approval loop; this fails loudly with the
+ * file path instead. Validation is intentionally shallow — enough to trust the
+ * `stories[].actions[]` walk, not a full structural mirror.
+ */
+export function parseRunResult(raw: string, sourcePath: string): RunResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'invalid JSON';
+    throw new Error(`Malformed results file ${sourcePath}: ${reason}`);
+  }
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !Array.isArray((parsed as { stories?: unknown }).stories)
+  ) {
+    throw new Error(
+      `Unexpected results file ${sourcePath}: missing a "stories" array. ` +
+        `Re-run \`tuffgal run\` to regenerate it.`,
+    );
+  }
+  return parsed as RunResult;
+}
+
 export interface RunResult {
   startedAt: string;
   finishedAt: string;

@@ -9,7 +9,10 @@ export function interpolate(
   template: string,
   parameters: Record<string, string>,
 ): string {
-  return template.replace(/\$\{([a-zA-Z0-9_]+)\}/g, (_match, name: string) => {
+  // Story parameter keys are an open string record, so hyphen/dot keys are
+  // valid. Match them too — otherwise `${my-key}` wouldn't match at all and the
+  // missing-parameter guard below would never fire, leaking the literal token.
+  return template.replace(/\$\{([\w.-]+)\}/g, (_match, name: string) => {
     const value = parameters[name];
     if (value === undefined) {
       throw new Error(`Missing parameter "${name}" for template "${template}"`);

@@ -3,6 +3,7 @@ import { createWriteStream, mkdirSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
 import type { ResolvedConfig } from '../../config.ts';
+import { sleep } from '../../util.ts';
 
 const DEFAULT_READY_TIMEOUT_MS = 60_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
@@ -165,11 +166,5 @@ function probePort(host: string, port: number): Promise<boolean> {
     socket.once('error', () => cleanup(false));
     socket.once('timeout', () => cleanup(false));
     socket.setTimeout(1_500);
-  });
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveSleep) => {
-    setTimeout(resolveSleep, ms);
   });
 }

@@ -3,6 +3,7 @@ import { createWriteStream, mkdirSync, statSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
 import type { ResolvedConfig, DevServerBridge } from '../config.ts';
+import { sleep } from '../util.ts';
 
 const HEARTBEAT_FILE = '.heartbeat';
 const SIGTERM_GRACE_MS = 5_000;
@@ -258,10 +259,4 @@ function numberFromEnv(name: string, fallback: number): number {
   if (!raw) return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveSleep) => {
-    setTimeout(resolveSleep, ms);
-  });
 }

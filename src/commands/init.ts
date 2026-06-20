@@ -1,5 +1,6 @@
-import { mkdir, writeFile, access } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
+import { pathExists } from '../util.ts';
 
 const CONFIG_FILES = ['tuffgal.config.ts', 'tuffgal.config.js'];
 
@@ -130,13 +131,4 @@ export async function init(options: InitOptions): Promise<void> {
       '',
     ].join('\n'),
   );
-}
-
-async function pathExists(absolute: string): Promise<boolean> {
-  try {
-    await access(absolute);
-    return true;
-  } catch {
-    return false;
-  }
 }

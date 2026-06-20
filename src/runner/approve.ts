@@ -1,8 +1,10 @@
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ResolvedConfig } from '../config.ts';
 import { copyToBaseline } from '../screenshots/baselineStore.ts';
-import type { ActionResult, RunResult } from '../schema/result.ts';
+import { parseRunResult } from '../schema/result.ts';
+import type { ActionResult } from '../schema/result.ts';
+import { pathExists } from '../util.ts';
 import { storyMatchesFilter } from './storyFilter.ts';
 
 export interface ApproveOptions {
@@ -39,7 +41,7 @@ export async function approveAll(
       `No prior run found at ${resultsPath}. Run \`tuffgal run\` first.`,
     );
   });
-  const result = JSON.parse(raw) as RunResult;
+  const result = parseRunResult(raw, resultsPath);
   let approved = 0;
   let skipped = 0;
   for (const story of result.stories) {
@@ -88,13 +90,4 @@ function isApprovable(
     return false;
   }
   return Boolean(action.actualPath && action.baselinePath);
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
 }
