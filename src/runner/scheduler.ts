@@ -53,7 +53,6 @@ export function buildSchedule(stories: StoryFile[]): ScheduledStory[] {
 }
 
 interface RunContext {
-  satisfied: Set<string>;
   completed: Set<string>;
   inFlight: Set<string>;
   results: Map<string, StoryResult>;
@@ -64,11 +63,13 @@ export type StoryRunner = (scheduled: ScheduledStory) => Promise<StoryResult>;
 
 /**
  * Drains the dependency graph with up to `workerCount` concurrent runs.
- * Stories whose `needs` are satisfied move into the ready pool; the
- * scheduler keeps the pool full until everything has either completed or
- * been transitively blocked by a failure. Stories blocked by failure receive
- * a synthetic `failed` result with a descriptive message so the report
- * shows the chain of effects, not a silent absence.
+ * Readiness is tracked incrementally: each story carries the set of `needs`
+ * labels still outstanding, and completing a producer decrements only the
+ * direct consumers of its `produces` labels (looked up through a prebuilt
+ * label → consumers index). A story enters the ready queue the moment its last
+ * outstanding need clears. This avoids rescanning the whole story list on every
+ * completion. Stories blocked by a failure receive a synthetic `failed` result
+ * so the report shows the chain of effects, not a silent absence.
  */
 export async function drainSchedule(
   scheduled: ScheduledStory[],
@@ -78,7 +79,6 @@ export async function drainSchedule(
   onFinish: (item: ScheduledStory, result: StoryResult) => void,
 ): Promise<StoryResult[]> {
   const context: RunContext = {
-    satisfied: new Set(),
     completed: new Set(),
     inFlight: new Set(),
     results: new Map(),
@@ -86,13 +86,63 @@ export async function drainSchedule(
   };
   const ordered: ScheduledStory[] = [];
 
-  const allDone = (): boolean =>
-    scheduled.every((item) => context.results.has(item.file));
+  // Label → the stories that need it, plus each story's still-outstanding needs.
+  const consumersByLabel = new Map<string, ScheduledStory[]>();
+  const outstandingNeeds = new Map<string, Set<string>>();
+  for (const item of scheduled) {
+    outstandingNeeds.set(item.file, new Set(item.needs));
+    for (const label of item.needs) {
+      const consumers = consumersByLabel.get(label) ?? [];
+      consumers.push(item);
+      consumersByLabel.set(label, consumers);
+    }
+  }
+
+  // Stories with no prerequisites are ready immediately. Later stories are
+  // pushed here as their last outstanding need clears.
+  const ready: ScheduledStory[] = scheduled.filter(
+    (item) => item.needs.length === 0,
+  );
+
+  const allDone = (): boolean => context.results.size === scheduled.length;
+
+  const pickReady = (): ScheduledStory | undefined => {
+    while (ready.length > 0) {
+      const candidate = ready.shift();
+      if (
+        candidate &&
+        !context.completed.has(candidate.file) &&
+        !context.inFlight.has(candidate.file) &&
+        !context.skipped.has(candidate.file)
+      ) {
+        return candidate;
+      }
+    }
+    return undefined;
+  };
+
+  const satisfyProduced = (item: ScheduledStory): void => {
+    for (const label of item.produces) {
+      for (const consumer of consumersByLabel.get(label) ?? []) {
+        const outstanding = outstandingNeeds.get(consumer.file);
+        if (!outstanding) continue;
+        outstanding.delete(label);
+        if (
+          outstanding.size === 0 &&
+          !context.completed.has(consumer.file) &&
+          !context.inFlight.has(consumer.file) &&
+          !context.skipped.has(consumer.file)
+        ) {
+          ready.push(consumer);
+        }
+      }
+    }
+  };
 
   await new Promise<void>((resolveOuter, rejectOuter) => {
     const fillSlots = (): void => {
       while (context.inFlight.size < workerCount) {
-        const next = pickNextReady(scheduled, context);
+        const next = pickReady();
         if (!next) {
           break;
         }
@@ -107,14 +157,12 @@ export async function drainSchedule(
             context.inFlight.delete(next.file);
             context.results.set(next.file, result);
             ordered.push(next);
+            context.completed.add(next.file);
             if (result.status === 'failed') {
               skipDependents(next, scheduled, context, ordered);
             } else {
-              for (const label of next.produces) {
-                context.satisfied.add(label);
-              }
+              satisfyProduced(next);
             }
-            context.completed.add(next.file);
             onFinish(next, result);
             if (allDone()) {
               resolveOuter();
@@ -131,20 +179,13 @@ export async function drainSchedule(
     fillSlots();
   });
 
-  return ordered.map((item) => context.results.get(item.file)!);
-}
-
-function pickNextReady(
-  scheduled: ScheduledStory[],
-  context: RunContext,
-): ScheduledStory | undefined {
-  return scheduled.find(
-    (item) =>
-      !context.completed.has(item.file) &&
-      !context.inFlight.has(item.file) &&
-      !context.skipped.has(item.file) &&
-      item.needs.every((label) => context.satisfied.has(label)),
-  );
+  return ordered.map((item) => {
+    const result = context.results.get(item.file);
+    if (!result) {
+      throw new SchedulerError(`internal: missing result for ${item.file}`);
+    }
+    return result;
+  });
 }
 
 function skipDependents(
@@ -195,6 +236,7 @@ function detectCycles(
   scheduled: ScheduledStory[],
   producerByLabel: Map<string, string>,
 ): void {
+  const byFile = new Map(scheduled.map((entry) => [entry.file, entry]));
   const visited = new Set<string>();
   const onStack = new Set<string>();
   const visit = (file: string): void => {
@@ -207,7 +249,7 @@ function detectCycles(
       return;
     }
     onStack.add(file);
-    const item = scheduled.find((entry) => entry.file === file);
+    const item = byFile.get(file);
     if (item) {
       for (const label of item.needs) {
         const upstream = producerByLabel.get(label);

@@ -137,6 +137,35 @@ describe('drainSchedule — execution', () => {
     );
   });
 
+  it('cascades a failure transitively through the chain', async () => {
+    // a (fails) -> b needs la -> c needs lb. Both b and c must be blocked.
+    const scheduled = buildSchedule([
+      makeStoryFile('a.json', { produces: ['la'] }),
+      makeStoryFile('b.json', { needs: ['la'], produces: ['lb'] }),
+      makeStoryFile('c.json', { needs: ['lb'] }),
+    ]);
+    const runner: StoryRunner = async (item) => {
+      if (item.file === 'a.json') {
+        return { ...passResult(item), status: 'failed' };
+      }
+      return passResult(item);
+    };
+    const results = await drainSchedule(scheduled, 4, runner, noop, noop);
+    const byFile = new Map(results.map((result) => [result.file, result]));
+    assert.equal(byFile.get('b.json')?.status, 'failed');
+    assert.equal(byFile.get('c.json')?.status, 'failed');
+    assert.match(
+      byFile.get('b.json')?.actions[0]?.failureMessage ?? '',
+      /blocked by failed prerequisite a\.json/,
+    );
+    // c is blocked by b (its direct prerequisite), not by the root a.
+    assert.match(
+      byFile.get('c.json')?.actions[0]?.failureMessage ?? '',
+      /blocked by failed prerequisite b\.json/,
+    );
+    assert.equal(results.length, 3);
+  });
+
   it('never exceeds the worker count in flight', async () => {
     const scheduled = buildSchedule([
       makeStoryFile('a.json'),
