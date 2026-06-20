@@ -2,12 +2,15 @@
 // project has no DOM harness), so its behavior is covered by manual/visual
 // verification rather than unit tests.
 (function () {
-  // Shared writer for the `.story-filter-status` polite live region. Both the
-  // filter (debounced) and the bulk-toggle (synchronous) write through this
-  // helper so a fresher write always supersedes a pending stale one — the
-  // most-recent action wins. `write()` and `writeDebounced()` both implicitly
-  // cancel any in-flight debounce before scheduling, so callers cannot
-  // accidentally re-introduce the race by forgetting to clear the timer.
+  // Writer factory for a polite live region, bound to the element matched by
+  // `selector`. Two instances exist: one for the filter status line and one for
+  // the (sr-only) bulk-toggle status. They are kept separate so toggling
+  // screenshots never overwrites the visible filter status; each region is
+  // written by a single user action, so they cannot race each other.
+  //
+  // Within one region, `write()` and `writeDebounced()` both implicitly cancel
+  // any in-flight debounce before scheduling, so a fresher write supersedes a
+  // pending stale one for that region.
   //
   // Contract:
   //   write(msg)             → cancel pending debounce, set textContent now
@@ -19,10 +22,10 @@
   // future caller that needs forced re-announcement would add a separate
   // `forceWrite()`; out of scope for this helper.
   //
-  // If `.story-filter-status` is missing from the DOM, every method is a
-  // silent no-op (matches the prior early-return pattern at each call site).
-  function createStatusRegion() {
-    var element = document.querySelector('.story-filter-status');
+  // If `selector` matches nothing, every method is a silent no-op (matches the
+  // prior early-return pattern at each call site).
+  function createStatusRegion(selector) {
+    var element = document.querySelector(selector);
     var timer = null;
 
     function cancel() {
@@ -53,7 +56,8 @@
     };
   }
 
-  var statusRegion = createStatusRegion();
+  var statusRegion = createStatusRegion('.story-filter-status');
+  var bulkRegion = createStatusRegion('.bulk-toggle-status');
 
   // Reveals the matching <div.shot-panel> for the radio the user picks. The
   // radio group already handles keyboard navigation natively (arrow keys move
@@ -119,23 +123,23 @@
     var total = stories.length;
 
     // Bulk-toggle buttons re-labelled per active filter so sighted users know
-    // the toggle is scoped to the filtered subset (e.g. "Expand all failed
-    // screenshots"). This is a synchronous visible-text swap only — no
-    // aria-label (would risk WCAG 2.5.3 Label in Name) and no live-region
-    // write (the filter announcement already covers the context change, so the
-    // statusRegion is intentionally left untouched here).
+    // the toggle is scoped to the filtered subset: "Expand all" / "Collapse
+    // all" with no filter, "Expand passed" / "Collapse passed" when filtered.
+    // This is a synchronous visible-text swap only — no aria-label (would risk
+    // WCAG 2.5.3 Label in Name) and no live-region write (the filter
+    // announcement already covers the context change).
     var expandButton = document.querySelector('[data-bulk-toggle="expand"]');
     var collapseButton = document.querySelector(
       '[data-bulk-toggle="collapse"]',
     );
 
     function relabelBulkToggle(name) {
-      var scope = name && name !== 'all' ? ' ' + name : '';
+      var scope = name && name !== 'all' ? name : 'all';
       if (expandButton) {
-        expandButton.textContent = 'Expand all' + scope + ' screenshots';
+        expandButton.textContent = 'Expand ' + scope;
       }
       if (collapseButton) {
-        collapseButton.textContent = 'Collapse all' + scope + ' screenshots';
+        collapseButton.textContent = 'Collapse ' + scope;
       }
     }
 
@@ -162,21 +166,10 @@
       if (expandButton) expandButton.disabled = hasNone;
       if (collapseButton) collapseButton.disabled = hasNone;
 
-      var message;
-      if (value === 'all') {
-        message = 'Showing all ' + total + ' stories.';
-      } else if (hasNone) {
-        message = 'Filter: ' + name + '. No stories match.';
-      } else {
-        message =
-          'Filter: ' +
-          name +
-          '. ' +
-          visible +
-          ' of ' +
-          total +
-          ' stories shown.';
-      }
+      var message =
+        value === 'all'
+          ? 'Showing all ' + total + ' stories'
+          : 'Showing ' + visible + ' of ' + total + ' stories';
 
       statusRegion.writeDebounced(message, 150);
     }
@@ -204,13 +197,11 @@
   // The filter's 150ms debounce exists because radios announce on every arrow
   // move; here a single click → single message is fine.
   //
-  // Live-region ordering: bulk-toggle writes synchronously via
-  // `statusRegion.write(msg)`, which internally cancels any pending filter
-  // debounce set by `writeDebounced`. Result: when a bulk-toggle fires within
-  // 150ms of a filter radio change, the most-recent action wins — the screen
-  // reader hears only the toggle announcement, not the now-stale filter one.
-  // This matches polite-region supersession semantics where unspoken pending
-  // updates yield to fresher writes.
+  // Toggle announcements go to their own `.bulk-toggle-status` region via
+  // `bulkRegion.write(msg)`, NOT the filter's `.story-filter-status`. Toggling
+  // screenshots is orthogonal to the filter, so it leaves the visible filter
+  // status line untouched. The two regions never write on the same action, so
+  // there is no cross-region race to arbitrate.
   (function () {
     var buttons = Array.prototype.slice.call(
       document.querySelectorAll('[data-bulk-toggle]'),
@@ -237,17 +228,15 @@
       var count = visibleStories.length;
       var verb = shouldOpen ? 'Expanded' : 'Collapsed';
       // Echo the active filter scope so the announcement matches the
-      // filter-aware button label (e.g. "Expanded failed screenshots in 3
-      // stories."). Read the checked radio at click time; use the same
-      // data-filter-name || value fallback relabelBulkToggle uses. "all" (or no
-      // checked radio) yields an empty scope so we never emit a double space.
+      // filter-aware button label (e.g. "Expanded passed in 3 stories"). Read
+      // the checked radio at click time; use the same data-filter-name || value
+      // fallback relabelBulkToggle uses. No checked radio falls back to "all".
       var checked = document.querySelector('.story-filter input:checked');
       var name =
-        checked && (checked.getAttribute('data-filter-name') || checked.value);
-      var scope = name && name !== 'all' ? ' ' + name : '';
-      statusRegion.write(
-        verb + scope + ' screenshots in ' + count + ' stories.',
-      );
+        (checked &&
+          (checked.getAttribute('data-filter-name') || checked.value)) ||
+        'all';
+      bulkRegion.write(verb + ' ' + name + ' in ' + count + ' stories');
     }
 
     buttons.forEach(function (button) {

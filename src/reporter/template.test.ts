@@ -120,16 +120,12 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
       'collapse-all bulk-toggle button present',
     );
     assert.ok(
-      html.includes(
-        'data-bulk-toggle="expand">Expand all screenshots</button>',
-      ),
-      'expand button has filter-agnostic "Expand all screenshots" initial text',
+      html.includes('data-bulk-toggle="expand">Expand all</button>'),
+      'expand button has filter-agnostic "Expand all" initial text',
     );
     assert.ok(
-      html.includes(
-        'data-bulk-toggle="collapse">Collapse all screenshots</button>',
-      ),
-      'collapse button has filter-agnostic "Collapse all screenshots" initial text',
+      html.includes('data-bulk-toggle="collapse">Collapse all</button>'),
+      'collapse button has filter-agnostic "Collapse all" initial text',
     );
   });
 
@@ -149,9 +145,15 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
   it('renders the live region with initial story count and empty-state placeholder', () => {
     assert.ok(
       html.includes(
-        '<p class="story-filter-status" role="status" aria-live="polite">Showing all 3 stories.</p>',
+        '<p class="story-filter-status" role="status" aria-live="polite">Showing all 3 stories</p>',
       ),
-      'live region carries default "Showing all 3 stories." text',
+      'live region carries default "Showing all 3 stories" text',
+    );
+    assert.ok(
+      html.includes(
+        '<p class="bulk-toggle-status sr-only" role="status" aria-live="polite"></p>',
+      ),
+      'separate bulk-toggle live region present',
     );
     assert.ok(
       html.includes('<p class="stories-empty" hidden>no stories match</p>'),
@@ -324,6 +326,23 @@ describe('renderAction — whole row as screenshot disclosure', () => {
       detailsClose < errorOpen,
       'action-error is a sibling AFTER </details>, not nested inside the disclosure',
     );
+  });
+
+  it('emits no box-drawing branch glyphs (the CSS trunk line replaces them)', () => {
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      stories: [
+        makeStory({
+          status: 'pass',
+          actions: [makeAction(), makeAction({ action: 'second' })],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(!html.includes('class="branch"'), 'no .branch span is emitted');
+    assert.ok(!html.includes('├─'), 'no mid branch glyph');
+    assert.ok(!html.includes('└─'), 'no last branch glyph');
   });
 
   it('renders a screenshot-less action as a plain <div class="action-row"> with no <details>', () => {

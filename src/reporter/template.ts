@@ -31,10 +31,9 @@ const STATUS_MARKERS: Record<ActionStatus, string> = {
 
 /**
  * Static HTML report. Console / dev-tool aesthetic: dark by default, mono for
- * data, sans for prose, sharp 1px borders, tree branches in box-drawing
- * characters that are hidden from assistive tech. Stories + actions are
- * conveyed semantically through nested `<ol>` elements; the glyphs are
- * pure presentation.
+ * data, sans for prose, sharp 1px borders, and a decorative CSS trunk line
+ * down each story's action list. Stories + actions are conveyed semantically
+ * through nested `<ol>` elements; the trunk is pure presentation.
  */
 export function renderReport(result: RunResult, reportDir: string): string {
   const dateLabel = formatDate(result.finishedAt);
@@ -43,7 +42,7 @@ export function renderReport(result: RunResult, reportDir: string): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tuffgal report — ${dateLabel}</title>
+<title>Tuffgal report – ${dateLabel}</title>
 <link rel="stylesheet" href="assets/report.css" />
 </head>
 <body>
@@ -121,21 +120,24 @@ function renderStories(result: RunResult, reportDir: string): string {
       ${storyFilterRadio('failed', false)}
     </fieldset>
     <!--
-      The .story-filter-status region is the single polite live region for the
-      stories toolbar — it carries both filter announcements and bulk-toggle
-      (expand/collapse all) announcements. Adding a second polite region here
-      would race against this one; reuse is intentional.
+      Two independent polite live regions: .story-filter-status carries filter
+      announcements ("Showing m of n stories"), .bulk-toggle-status carries
+      expand/collapse-all announcements. They are split so toggling screenshots
+      never overwrites the visible filter status line. Because each action
+      writes to its own region they cannot race the way a single shared region
+      would.
 
       DOM order is logical: filters then status then buttons. The buttons are
       pushed visually right via margin-left:auto on .story-bulk-toggle in the
       CSS, never via the order property on the interactive elements (that would
       fail WCAG 2.4.3).
     -->
-    <p class="story-filter-status" role="status" aria-live="polite">Showing all ${total} stories.</p>
+    <p class="story-filter-status" role="status" aria-live="polite">Showing all ${total} stories</p>
     <div class="story-bulk-toggle">
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all screenshots</button>
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">Collapse all screenshots</button>
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all</button>
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">Collapse all</button>
     </div>
+    <p class="bulk-toggle-status sr-only" role="status" aria-live="polite"></p>
   </div>
   <ol class="stories" aria-label="Stories executed in dependency order">
     ${items}
@@ -166,13 +168,8 @@ function renderStory(
   reportDir: string,
 ): string {
   const actions = story.actions
-    .map((action, actionIndex, all) =>
-      renderAction(
-        action,
-        `s${storyIndex}-a${actionIndex}`,
-        actionIndex === all.length - 1,
-        reportDir,
-      ),
+    .map((action, actionIndex) =>
+      renderAction(action, `s${storyIndex}-a${actionIndex}`, reportDir),
     )
     .join('\n');
   return `
@@ -192,10 +189,8 @@ function renderStory(
 function renderAction(
   action: ActionResult,
   actionId: string,
-  isLast: boolean,
   reportDir: string,
 ): string {
-  const branch = isLast ? '└─' : '├─';
   const screenshots = renderScreenshots(action, actionId, reportDir);
   const errorBlock =
     action.status === 'failed'
@@ -203,8 +198,7 @@ function renderAction(
       : '';
   const parameters = renderParameters(action.parameters);
 
-  const rowInner = `<span class="branch" aria-hidden="true">${branch}</span>
-    ${statusBadge(action.status)}
+  const rowInner = `${statusBadge(action.status)}
     <code class="action-name">${escapeHtml(action.action)}</code>
     <span class="action-duration">${formatDuration(action.durationMs)}</span>`;
 

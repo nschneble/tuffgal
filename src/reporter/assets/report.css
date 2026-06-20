@@ -51,6 +51,22 @@
   box-sizing: border-box;
 }
 
+/* Suppress whole-page text selection so Cmd+A / drag doesn't highlight the
+   entire report. The report is read, not copied. Selection is re-enabled below
+   on the diagnostic content worth copying into a bug report. */
+html {
+  user-select: none;
+}
+
+.report-meta,
+.story-file,
+.action-name,
+.action-parameters,
+.action-error,
+.diff-stats {
+  user-select: text;
+}
+
 body {
   margin: 0;
   padding: 0 1.5rem 4rem;
@@ -140,12 +156,19 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 1.25rem;
-  justify-content: space-between;
   margin: 0;
   padding: 0.75rem 1rem;
   list-style: none;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
+}
+
+/* Two visual groups: the story tiers (stories/passed/changed/failed) cluster
+   left, the coverage percentages (screens/flows) cluster right. The first
+   coverage item carries margin-left:auto to open the justify-between gap
+   between the two groups while each group stays tight on the 1.25rem gap. */
+.summary-item:not(.coverage) + .summary-item.coverage {
+  margin-left: auto;
 }
 
 .summary-item {
@@ -408,15 +431,15 @@ h2 {
 }
 
 .action:last-child::after {
-  /* Mask the decorative trunk in the gutter column below the last └─ elbow so
+  /* Mask the decorative trunk in the gutter column below the last action row so
      the line stops at the final action rather than running past it.
      Geometry: the trunk (.actions::before) sits at .actions left:0.25rem; each
      .action is inset by .actions padding-left:1rem, so reaching back to the
      trunk column from this pseudo-element requires left: 0.25rem - 1rem
-     = -0.75rem. `top: 0.9rem` starts the mask just BELOW the └─ elbow on the
-     first row (the elbow paints near the row baseline), so the upward
-     prose→first-action connector (.actions::before top:-0.5rem) survives even
-     on a single-action story where the one .action is both first and last.
+     = -0.75rem. `top: 0.9rem` starts the mask just below the first row's text
+     baseline, so the upward prose→first-action connector (.actions::before
+     top:-0.5rem) survives even on a single-action story where the one .action
+     is both first and last.
      The backdrop behind the trunk is .stories' background (var(--bg-elevated));
      .story/.actions/.action paint no background, so this color matches exactly
      and the mask is invisible. Width 3px (> the 1px trunk) fully covers it. */
@@ -441,11 +464,6 @@ h2 {
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
-}
-
-.branch {
-  color: var(--text-subtle);
-  user-select: none;
 }
 
 .action-name {
@@ -531,6 +549,26 @@ summary.action-row::-webkit-details-marker {
   display: none;
 }
 
+/* Persistent disclosure caret: the standing affordance that a row opens the
+   screenshots (cursor:pointer only shows on hover). Pinned to the row's right
+   edge after .action-duration's margin-left:auto. Decorative — native
+   <details> already exposes expanded/collapsed state to AT. --text-subtle
+   clears 3:1 on --bg-elevated in both themes (WCAG 1.4.11). */
+summary.action-row::after {
+  content: '▸';
+  display: inline-block;
+  color: var(--text-subtle);
+  transition: transform 0.15s ease;
+}
+
+details.shots[open] > summary.action-row::after {
+  transform: rotate(90deg);
+}
+
+summary.action-row:hover {
+  background: var(--bg);
+}
+
 summary.action-row:focus-visible {
   /* outline (not box-shadow/border) so flex-wrap doesn't clip it. --accent
      clears 3:1 in both themes. */
@@ -595,7 +633,8 @@ summary.action-row:focus-visible {
 
 /* Reduce motion */
 @media (prefers-reduced-motion: reduce) {
-  .skip-link {
+  .skip-link,
+  summary.action-row::after {
     transition: none;
   }
 }
