@@ -4,7 +4,9 @@
   --bg-elevated: #111111;
   --text: #e5e5e5;
   --text-muted: #a3a3a3;
-  --text-subtle: #737373;
+  /* #8a8a8a clears WCAG 1.4.3 4.5:1 as normal text on both --bg (#0a0a0a) and
+     --bg-elevated (#111111); the prior #737373 was ~4.0:1 and failed. */
+  --text-subtle: #8a8a8a;
   --border: #262626;
   --border-bright: #404040;
   --accent: #38bdf8;
@@ -34,7 +36,9 @@
     --bg-elevated: #ffffff;
     --text: #18181b;
     --text-muted: #525252;
-    --text-subtle: #737373;
+    /* #6b6b6b clears 4.5:1 on --bg (#fafafa, ~5.1:1); the prior #737373 was
+       ~4.46:1 and failed WCAG 1.4.3 for normal text. */
+    --text-subtle: #6b6b6b;
     --border: #d4d4d4;
     --border-bright: #a3a3a3;
     --accent: #0369a1;
@@ -278,6 +282,19 @@ h2 {
 .chip--toggle:has(input:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* Focus-ring fallback for engines without :has(). The radio itself is
+   opacity:0, so without the projected outline a keyboard user would see no
+   focus indicator at all (WCAG 2.4.7). On :has()-capable browsers this block is
+   skipped, so the outline never double-renders. The radios are
+   pointer-events:none, so :focus-within can only fire from keyboard focus —
+   matching the :focus-visible intent. */
+@supports not (selector(:has(*))) {
+  .chip--toggle:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
 }
 
 /* Stories toolbar (status filter) */

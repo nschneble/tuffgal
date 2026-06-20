@@ -98,6 +98,10 @@ export async function drainSchedule(
         }
         context.inFlight.add(next.file);
         onStart(next);
+        // Invariant: `runner` must always be async. The completion `.then`
+        // re-enters fillSlots; if a runner ever resolved synchronously it would
+        // re-enter while this `while` is still iterating and inFlight accounting
+        // could momentarily exceed workerCount.
         runner(next)
           .then((result) => {
             context.inFlight.delete(next.file);

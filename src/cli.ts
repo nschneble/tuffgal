@@ -45,10 +45,10 @@ function parseArguments(argv: string[]): ParsedArguments {
     } else if (arg.startsWith('--story=')) {
       parsed.storyFilter = arg.slice('--story='.length);
     } else if (arg === '--workers') {
-      parsed.workers = Number(rest[index + 1]);
+      parsed.workers = numericFlag('--workers', rest[index + 1]);
       index += 1;
     } else if (arg.startsWith('--workers=')) {
-      parsed.workers = Number(arg.slice('--workers='.length));
+      parsed.workers = numericFlag('--workers', arg.slice('--workers='.length));
     } else if (arg === '--manage-servers') {
       parsed.manageServers = true;
     } else if (arg === '--coverage') {
@@ -56,30 +56,62 @@ function parseArguments(argv: string[]): ParsedArguments {
     } else if (arg === '--new-only') {
       parsed.newOnly = true;
     } else if (arg === '--healthcheck-interval') {
-      parsed.healthcheckIntervalMs = Number(rest[index + 1]);
+      parsed.healthcheckIntervalMs = numericFlag(
+        '--healthcheck-interval',
+        rest[index + 1],
+      );
       index += 1;
     } else if (arg.startsWith('--healthcheck-interval=')) {
-      parsed.healthcheckIntervalMs = Number(
+      parsed.healthcheckIntervalMs = numericFlag(
+        '--healthcheck-interval',
         arg.slice('--healthcheck-interval='.length),
       );
     } else if (arg === '--idle-limit') {
-      parsed.idleLimitMs = Number(rest[index + 1]);
+      parsed.idleLimitMs = numericFlag('--idle-limit', rest[index + 1]);
       index += 1;
     } else if (arg.startsWith('--idle-limit=')) {
-      parsed.idleLimitMs = Number(arg.slice('--idle-limit='.length));
+      parsed.idleLimitMs = numericFlag(
+        '--idle-limit',
+        arg.slice('--idle-limit='.length),
+      );
     } else if (arg === '--max-runtime') {
-      parsed.maxRuntimeMs = Number(rest[index + 1]);
+      parsed.maxRuntimeMs = numericFlag('--max-runtime', rest[index + 1]);
       index += 1;
     } else if (arg.startsWith('--max-runtime=')) {
-      parsed.maxRuntimeMs = Number(arg.slice('--max-runtime='.length));
+      parsed.maxRuntimeMs = numericFlag(
+        '--max-runtime',
+        arg.slice('--max-runtime='.length),
+      );
     } else if (arg === '--max-respawns') {
-      parsed.maxRespawns = Number(rest[index + 1]);
+      parsed.maxRespawns = numericFlag('--max-respawns', rest[index + 1]);
       index += 1;
     } else if (arg.startsWith('--max-respawns=')) {
-      parsed.maxRespawns = Number(arg.slice('--max-respawns='.length));
+      parsed.maxRespawns = numericFlag(
+        '--max-respawns',
+        arg.slice('--max-respawns='.length),
+      );
     }
   }
   return parsed;
+}
+
+/**
+ * Parses a numeric CLI flag, rejecting anything non-finite or <= 0. Without
+ * this, `--idle-limit foo` became `NaN` and flowed into `setTimeout(…, NaN)`,
+ * which behaves as `0` and busy-loops the supervisor's healthcheck. Fail loudly
+ * at parse time instead.
+ */
+function numericFlag(flag: string, raw: string | undefined): number {
+  const value = Number(raw);
+  if (
+    raw === undefined ||
+    raw === '' ||
+    !Number.isFinite(value) ||
+    value <= 0
+  ) {
+    throw new Error(`${flag} requires a positive number (got "${raw ?? ''}")`);
+  }
+  return value;
 }
 
 function printHelp(): void {

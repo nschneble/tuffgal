@@ -41,6 +41,12 @@ export function diffPngs(
       { width: actualPng.width, height: actualPng.height },
     );
   }
+  // SSIM and pixelmatch both assume tightly-packed RGBA (4 bytes/pixel). If a
+  // future pngjs option changed channel depth, the buffer view and the
+  // width/height would silently disagree and produce a garbage score rather
+  // than throwing. Fail loudly instead.
+  assertPackedRgba(baselinePng);
+  assertPackedRgba(actualPng);
   const diffPng = new PNG({
     width: baselinePng.width,
     height: baselinePng.height,
@@ -82,6 +88,15 @@ export function diffPngs(
     diffRatio: diffPixels / totalPixels,
     ssimScore: ssimResult.mssim,
   };
+}
+
+function assertPackedRgba(png: PNG): void {
+  const expected = png.width * png.height * 4;
+  if (png.data.byteLength !== expected) {
+    throw new Error(
+      `Unexpected PNG pixel format: ${png.width}x${png.height} should be ${expected} bytes (RGBA) but buffer is ${png.data.byteLength}`,
+    );
+  }
 }
 
 export class ScreenshotSizeMismatchError extends Error {
