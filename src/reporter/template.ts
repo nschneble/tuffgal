@@ -15,13 +15,6 @@ const STATUS_LABELS: Record<ActionStatus, string> = {
   new: 'new baseline',
 };
 
-/**
- * Per-tier text/glyph markers prepended to the story file name. These are the
- * mandatory non-color cue for WCAG 1.4.1: color + an sr-only word alone do not
- * distinguish status for sighted color-blind users, and the inset accent bar
- * cannot tell changed from failed. Marked `aria-hidden` since the sr-only
- * status word carries the meaning for the accessibility tree.
- */
 const STATUS_MARKERS: Record<ActionStatus, string> = {
   pass: '✓',
   changed: '~',
@@ -31,37 +24,37 @@ const STATUS_MARKERS: Record<ActionStatus, string> = {
 };
 
 /**
- * Static HTML report. Console / dev-tool aesthetic: dark by default, mono for
- * data, sans for prose, sharp 1px borders, and a decorative CSS trunk line
- * down each story's action list. Stories + actions are conveyed semantically
- * through nested `<ol>` elements; the trunk is pure presentation.
+ * Static HTML report. Rocks a terminal, dev-tool aesthetic. Dark mode by
+ * default, monospace font for data, sharp borders, and minimal but
+ * evocative icons + neon colors to indicate statuses.
  */
 export function renderReport(result: RunResult, reportDir: string): string {
   const dateLabel = formatDate(result.finishedAt);
-  return `<!doctype html>
+  return `
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tuffgal report – ${dateLabel}</title>
-<link rel="stylesheet" href="assets/report.css" />
-</head>
-<body>
-<a class="skip-link" href="#main">Skip to report</a>
-<header class="report-header">
-  <h1>Tuffgal report</h1>
-  <p class="report-meta">
-    <time datetime="${result.finishedAt}">${dateLabel}</time>
-    <span aria-hidden="true">·</span>
-    <span aria-hidden="true">⏲</span> ${formatDuration(result.durationMs)}
-  </p>
-</header>
-<main id="main" tabindex="-1">
-  ${renderSummary(result)}
-  ${renderStories(result, reportDir)}
-</main>
-<script src="assets/report.js"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tuffgal report – ${dateLabel}</title>
+    <link rel="stylesheet" href="assets/report.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to report</a>
+    <header class="report-header">
+      <h1>Tuffgal report</h1>
+      <p class="report-meta">
+        <time datetime="${result.finishedAt}">${dateLabel}</time>
+        <span aria-hidden="true">·</span>
+        <span aria-hidden="true">⏲</span> ${formatDuration(result.durationMs)}
+      </p>
+    </header>
+    <main id="main" tabindex="-1">
+      ${renderSummary(result)}
+      ${renderStories(result, reportDir)}
+    </main>
+    <script src="assets/report.js"></script>
+  </body>
 </html>
 `;
 }
@@ -80,12 +73,20 @@ function renderSummary(result: RunResult): string {
     ${coverageItem('screens', screens)}
     ${coverageItem('flows', flows)}
   </ul>
-</section>`;
+</section>
+`;
 }
 
 function coverageItem(label: string, metric: CoverageMetric): string {
   const pct = `${(metric.ratio * 100).toFixed(0)}%`;
-  return `<li class="summary-item coverage"><span class="count">${pct}</span><span class="label">${label}</span><span class="coverage-detail" aria-hidden="true">${metric.covered}/${metric.total}</span><span class="sr-only">${metric.covered} of ${metric.total} ${label} covered</span></li>`;
+  return `
+<li class="summary-item coverage">
+  <span class="count">${pct}</span>
+  <span class="label">${label}</span>
+  <span class="coverage-detail" aria-hidden="true">· ${metric.covered}/${metric.total}</span>
+  <span class="sr-only">${metric.covered} of ${metric.total} ${label} covered</span>
+</li>
+`;
 }
 
 function summaryItem(
@@ -93,9 +94,12 @@ function summaryItem(
   value: number,
   statusKey?: ActionStatus,
 ): string {
-  return `<li class="summary-item"${
-    statusKey ? ` data-status="${statusKey}"` : ''
-  }><span class="count">${value}</span><span class="indicator label">${label}</span></li>`;
+  return `
+<li class="summary-item"${statusKey ? ` data-status="${statusKey}"` : ''}>
+  <span class="count">${value}</span>
+  <span class="indicator label">${label}</span>
+</li>
+`;
 }
 
 function renderStories(result: RunResult, reportDir: string): string {
@@ -114,19 +118,6 @@ function renderStories(result: RunResult, reportDir: string): string {
       ${storyFilterRadio('changed', false)}
       ${storyFilterRadio('failed', false)}
     </fieldset>
-    <!--
-      Two independent polite live regions: .story-filter-status carries filter
-      announcements ("Showing m of n stories"), .bulk-toggle-status carries
-      expand/collapse-all announcements. They are split so toggling screenshots
-      never overwrites the visible filter status line. Because each action
-      writes to its own region they cannot race the way a single shared region
-      would.
-
-      DOM order is logical: filters then status then buttons. The buttons are
-      pushed visually right via margin-left:auto on .story-bulk-toggle in the
-      CSS, never via the order property on the interactive elements (that would
-      fail WCAG 2.4.3).
-    -->
     <p class="story-filter-status" role="status" aria-live="polite">Showing all ${total} stories</p>
     <div class="story-bulk-toggle">
       <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all</button>
@@ -137,24 +128,27 @@ function renderStories(result: RunResult, reportDir: string): string {
   <ol class="stories" aria-label="Stories executed in dependency order">
     ${items}
   </ol>
-  <p class="stories-empty" hidden>no stories match</p>
-</section>`;
+  <p class="stories-empty" hidden>No matching stories</p>
+</section>
+`;
 }
 
 function storyFilterRadio(status: string, checked: boolean): string {
   const inputId = `story-filter-${status}`;
   const value = status === 'passed' ? 'pass' : status;
-  return `<label for="${inputId}" class="chip chip--toggle story-filter-label">
-    <input
-      type="radio"
-      name="story-filter"
-      id="${inputId}"
-      value="${value}"
-      data-filter-name="${status}"
-      ${checked ? 'checked' : ''}
-    />
-    ${status}
-  </label>`;
+  return `
+<label for="${inputId}" class="chip chip--toggle story-filter-label">
+  <input
+    type="radio"
+    name="story-filter"
+    id="${inputId}"
+    value="${value}"
+    data-filter-name="${status}"
+    ${checked ? 'checked' : ''}
+  />
+  ${status}
+</label>
+`;
 }
 
 function renderStory(
@@ -170,15 +164,18 @@ function renderStory(
   return `
 <li class="story" data-status="${story.status}">
   <div class="story-row">
-    <span class="story-marker" aria-hidden="true">${STATUS_MARKERS[story.status]}</span><span class="sr-only">${STATUS_LABELS[story.status]}</span>
+    <span class="story-marker" aria-hidden="true">${STATUS_MARKERS[story.status]}</span>
+    <span class="sr-only">${STATUS_LABELS[story.status]}</span>
     <code class="story-file">${escapeHtml(story.file)}</code>
     <span class="story-duration">${formatDuration(story.durationMs)}</span>
   </div>
   <p class="story-prose">${escapeHtml(story.story)}</p>
+  <br/>
   <ol class="actions" aria-label="Actions">
     ${actions}
   </ol>
-</li>`;
+</li>
+`;
 }
 
 function renderAction(
@@ -193,23 +190,34 @@ function renderAction(
       : '';
   const parameters = renderParameters(action.parameters);
 
-  const rowInner = `${statusBadge(action.status)}
-    <code class="action-name">${escapeHtml(action.action)}</code>
-    <span class="action-duration">${formatDuration(action.durationMs)}</span>`;
+  const rowInner = `
+${statusBadge(action.status)}
+<code class="action-name">${escapeHtml(action.action)}</code>
+<span class="action-duration">${formatDuration(action.durationMs)}</span>
+`;
 
   const row = screenshots
-    ? `<details class="shots">
-    <summary class="action-row">${rowInner}<span class="sr-only"> — toggle screenshots</span></summary>
-    ${screenshots}
-  </details>`
-    : `<div class="action-row">${rowInner}</div>`;
+    ? `
+<details class="shots">
+  <summary class="action-row">
+    ${rowInner}
+    <span class="sr-only">toggle screenshots</span>
+  </summary>
+  ${screenshots}
+</details>`
+    : `
+<div class="action-row">
+  ${rowInner}
+</div>
+`;
 
   return `
 <li class="action" data-status="${action.status}">
   ${row}
   ${parameters}
   ${errorBlock}
-</li>`;
+</li>
+`;
 }
 
 function renderParameters(
@@ -245,12 +253,6 @@ function renderScreenshots(
     ? toReportRelative(reportDir, action.diffPath)
     : undefined;
   const defaultTab = diff ? 'diff' : 'actual';
-  // Server-render the initial tab so the report works with JS disabled or
-  // failed: pick the preferred tab if its image exists, else the first
-  // available one. Its radio ships `checked` and its panel un-hidden, mirroring
-  // setupShots() in report.js. Without this every panel stays `hidden` and the
-  // screenshots — the whole payload — are unreachable when the script doesn't
-  // run (WCAG 1.1.1).
   const available = { baseline, actual, diff };
   const initialTab =
     available[defaultTab] !== undefined
@@ -261,18 +263,20 @@ function renderScreenshots(
   const diffStatsId = `${actionId}-diff-stats`;
   const diffStats =
     action.diffRatio !== undefined
-      ? `<p class="diff-stats" id="${diffStatsId}">${action.diffPixels} pixels differ (${(action.diffRatio * 100).toFixed(3)}%)</p>`
+      ? `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`
       : '';
-  return `<fieldset class="shot-radio" data-default-tab="${defaultTab}">
-    <legend class="sr-only">Screenshot to display</legend>
-    ${shotRadio(actionId, 'baseline', baseline === undefined, initialTab === 'baseline')}
-    ${shotRadio(actionId, 'actual', actual === undefined, initialTab === 'actual')}
-    ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff')}
-  </fieldset>
-  ${shotPanel(actionId, 'baseline', baseline, `${action.action} baseline screenshot`, initialTab === 'baseline')}
-  ${shotPanel(actionId, 'actual', actual, `${action.action} actual screenshot from this run`, initialTab === 'actual')}
-  ${shotPanel(actionId, 'diff', diff, `Pixel diff overlay for ${action.action}; changed regions are highlighted`, initialTab === 'diff', action.diffRatio !== undefined ? diffStatsId : undefined)}
-  ${diffStats}`;
+  return `
+<fieldset class="shot-radio" data-default-tab="${defaultTab}">
+  <legend class="sr-only">Screenshot to display</legend>
+  ${shotRadio(actionId, 'baseline', baseline === undefined, initialTab === 'baseline')}
+  ${shotRadio(actionId, 'actual', actual === undefined, initialTab === 'actual')}
+  ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff')}
+  ${diffStats}
+</fieldset>
+${shotPanel(actionId, 'baseline', baseline, `${action.action} baseline screenshot`, initialTab === 'baseline')}
+${shotPanel(actionId, 'actual', actual, `${action.action} actual screenshot from this run`, initialTab === 'actual')}
+${shotPanel(actionId, 'diff', diff, `Pixel diff overlay for ${action.action}; changed regions are highlighted`, initialTab === 'diff', action.diffRatio !== undefined ? diffStatsId : undefined)}
+`;
 }
 
 function shotRadio(
@@ -282,18 +286,20 @@ function shotRadio(
   checked: boolean,
 ): string {
   const inputId = `${actionId}-radio-${name}`;
-  return `<label for="${inputId}" class="chip chip--toggle shot-radio-label">
-    <input
-      type="radio"
-      name="${actionId}-shot"
-      id="${inputId}"
-      value="${name}"
-      data-tab="${name}"
-      ${disabled ? 'disabled' : ''}
-      ${checked ? 'checked' : ''}
-    />
-    ${name}
-  </label>`;
+  return `
+<label for="${inputId}" class="chip chip--toggle shot-radio-label">
+  <input
+    type="radio"
+    name="${actionId}-shot"
+    id="${inputId}"
+    value="${name}"
+    data-tab="${name}"
+    ${disabled ? 'disabled' : ''}
+    ${checked ? 'checked' : ''}
+  />
+  ${name}
+</label>
+`;
 }
 
 function shotPanel(
@@ -304,24 +310,29 @@ function shotPanel(
   visible: boolean,
   describedById?: string,
 ): string {
-  return `<div
-    class="shot-panel"
-    id="panel-${actionId}-${name}"
-    data-tab="${name}"
-    ${visible ? '' : 'hidden'}
-  >
-    ${
-      src
-        ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy"${describedById ? ` aria-describedby="${describedById}"` : ''} />`
-        : `<p class="shot-missing">no ${name} screenshot for this action</p>`
-    }
-  </div>`;
+  return `
+<div
+  class="shot-panel"
+  id="panel-${actionId}-${name}"
+  data-tab="${name}"
+  ${visible ? '' : 'hidden'}
+>
+  ${
+    src
+      ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy"${describedById ? ` aria-describedby="${describedById}"` : ''} />`
+      : `<p class="shot-missing">no ${name} screenshot for this action</p>`
+  }
+</div>
+`;
 }
 
 function statusBadge(status: ActionStatus): string {
-  return `<span class="status" data-status="${status}">
-    <span class="sr-only">${STATUS_LABELS[status]}</span><span class="status-label" aria-hidden="true">${STATUS_LABELS[status]}</span>
-  </span>`;
+  return `
+<span class="status" data-status="${status}">
+  <span class="sr-only">${STATUS_LABELS[status]}</span>
+  <span class="status-label" aria-hidden="true">${STATUS_LABELS[status]}</span>
+</span>
+`;
 }
 
 function toReportRelative(reportDir: string, absolute: string): string {
@@ -343,12 +354,6 @@ const MONTH_NAMES = [
   'December',
 ];
 
-/**
- * Friendly human-readable timestamp, e.g. "June 19, 1:58pm". Month name, day,
- * 12-hour clock with lowercase am/pm and no leading zero on the hour, no
- * seconds. Uses local time; the machine-readable ISO value is preserved
- * separately on the `<time datetime>` attribute for assistive tech.
- */
 function formatDate(iso: string): string {
   const date = new Date(iso);
   const month = MONTH_NAMES[date.getMonth()];

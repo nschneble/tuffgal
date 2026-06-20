@@ -1,15 +1,16 @@
 :root {
   color-scheme: dark light;
+
   --bg: #0a0a0a;
   --bg-elevated: #111111;
   --text: #e5e5e5;
   --text-muted: #a3a3a3;
-  /* #8a8a8a clears WCAG 1.4.3 4.5:1 as normal text on both --bg (#0a0a0a) and
-     --bg-elevated (#111111); the prior #737373 was ~4.0:1 and failed. */
   --text-subtle: #8a8a8a;
   --border: #262626;
   --border-bright: #404040;
   --accent: #38bdf8;
+  --img-outline: rgba(255, 255, 255, 0.1);
+
   --pass: #22c55e;
   --pass-fg: #052e16;
   --changed: #facc15;
@@ -20,10 +21,7 @@
   --skipped-fg: #18181b;
   --new: #38bdf8;
   --new-fg: #082f49;
-  /* Neutral image edge separator: pure white at low alpha on dark. Never a
-     tinted near-white — a tint picks up the surface beneath and reads as dirt
-     on the image edge. Light-mode override is pure black below. */
-  --img-outline: rgba(255, 255, 255, 0.1);
+
   --font-mono:
     ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
   --font-sans:
@@ -36,12 +34,12 @@
     --bg-elevated: #ffffff;
     --text: #18181b;
     --text-muted: #525252;
-    /* #6b6b6b clears 4.5:1 on --bg (#fafafa, ~5.1:1); the prior #737373 was
-       ~4.46:1 and failed WCAG 1.4.3 for normal text. */
     --text-subtle: #6b6b6b;
     --border: #d4d4d4;
     --border-bright: #a3a3a3;
     --accent: #0369a1;
+    --img-outline: rgba(0, 0, 0, 0.1);
+
     --pass: #15803d;
     --pass-fg: #ffffff;
     --changed: #854d0e;
@@ -52,7 +50,6 @@
     --skipped-fg: #ffffff;
     --new: #0369a1;
     --new-fg: #ffffff;
-    --img-outline: rgba(0, 0, 0, 0.1);
   }
 }
 
@@ -60,25 +57,9 @@
   box-sizing: border-box;
 }
 
-/* Suppress whole-page text selection so Cmd+A / drag doesn't highlight the
-   entire report. The report is read, not copied. Selection is re-enabled below
-   on the diagnostic content worth copying into a bug report. */
 html {
-  user-select: none;
-  /* macOS renders text heavier than intended by default; antialiased smoothing
-     at the root makes the mono data and sans prose render crisper. No-op on
-     other platforms. */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-.report-meta,
-.story-file,
-.action-name,
-.action-parameters,
-.action-error,
-.diff-stats {
-  user-select: text;
 }
 
 body {
@@ -163,8 +144,6 @@ h2 {
   text-wrap: balance;
 }
 
-/* Summary */
-
 .summary {
   margin-top: 0.5rem;
 }
@@ -180,10 +159,6 @@ h2 {
   border: 1px solid var(--border);
 }
 
-/* Two visual groups: the story tiers (stories/passed/changed/failed) cluster
-   left, the coverage percentages (screens/flows) cluster right. The first
-   coverage item carries margin-left:auto to open the justify-between gap
-   between the two groups while each group stays tight on the 1.25rem gap. */
 .summary-item:not(.coverage) + .summary-item.coverage {
   margin-left: auto;
 }
@@ -206,9 +181,11 @@ h2 {
 .summary-item[data-status='pass'] .indicator {
   color: var(--pass);
 }
+
 .summary-item[data-status='changed'] .indicator {
   color: var(--changed);
 }
+
 .summary-item[data-status='failed'] .indicator {
   color: var(--failed);
 }
@@ -218,36 +195,25 @@ h2 {
   font-size: 0.8125rem;
 }
 
-/* Chip: shared inline-flex pill used by toolbar buttons and radio-driven
-   labels. The `--toggle` modifier adds the radio-checked / focus-visible
-   accent treatment that buttons don't want. */
-
 .chip {
   display: inline-flex;
   align-items: center;
-  /* min-height brings chips up to the WCAG 2.5.8 (minimum) 24px target. */
   min-height: 24px;
   padding: 0.2rem 0.6rem;
   border: 1px solid var(--border-bright);
   cursor: pointer;
   font-size: 0.8125rem;
   color: var(--text-muted);
-  /* Specific properties only (never `transition: all`): scale drives the
-     press feedback, color/border-color smooth the hover affordance. */
   transition-property: scale, color, border-color;
   transition-duration: 0.15s;
   transition-timing-function: ease;
 }
 
-/* Hover affordance on the toggle chips that aren't already checked/disabled —
-   the checked state owns the accent border, disabled labels stay dimmed. */
 .chip--toggle:not(:has(input:checked)):not(:has(input:disabled)):hover {
   color: var(--text);
   border-color: var(--border-bright);
 }
 
-/* Subtle scale-down on press for tactile feedback. 0.96 — anything below 0.95
-   feels exaggerated. Suppressed under prefers-reduced-motion below. */
 .chip:active {
   scale: 0.96;
 }
@@ -263,20 +229,12 @@ h2 {
   outline-offset: 1px;
 }
 
-/* Focus-ring fallback for engines without :has(). The radio itself is
-   opacity:0, so without the projected outline a keyboard user would see no
-   focus indicator at all (WCAG 2.4.7). On :has()-capable browsers this block is
-   skipped, so the outline never double-renders. The radios are
-   pointer-events:none, so :focus-within can only fire from keyboard focus —
-   matching the :focus-visible intent. */
 @supports not (selector(:has(*))) {
   .chip--toggle:focus-within {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
 }
-
-/* Stories toolbar (status filter) */
 
 .stories-toolbar {
   display: flex;
@@ -314,22 +272,13 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  /* Push the bulk-toggle buttons to the right edge of the toolbar. Using
-     margin-left (not flex `order` or row-reverse) keeps the DOM order
-     filters → status → buttons intact, so reading order matches visual
-     order for WCAG 2.4.3 / 1.3.2. No `overflow: hidden` here — it would
-     clip the 1px focus outline at the pushed-right edge. */
   margin-left: auto;
 }
 
 .story-bulk-toggle-button {
   background: transparent;
-  /* `font: inherit` resets font-size, so re-assert the chip's 0.8125rem
-     here after the shorthand to keep the visual size consistent. */
   font: inherit;
   font-size: 0.8125rem;
-  /* Re-assert the chip's WCAG 2.5.8 24px target; `font: inherit` does not
-     touch min-height, but keep it explicit alongside the font reset. */
   min-height: 24px;
 }
 
@@ -361,8 +310,6 @@ h2 {
   text-wrap: pretty;
 }
 
-/* Stories tree */
-
 .stories {
   margin: 0;
   padding: 0;
@@ -377,12 +324,13 @@ h2 {
 }
 
 .story:first-child {
-  border-top: 0;
+  border-top: 1px solid transparent;
 }
 
 .story[data-status='failed'] {
   box-shadow: inset 3px 0 0 var(--failed);
 }
+
 .story[data-status='changed'] {
   box-shadow: inset 3px 0 0 var(--changed);
 }
@@ -392,15 +340,11 @@ h2 {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
-  /* Reserve the same caret gutter as action rows so every duration right-aligns
-     in one column, whether or not the row carries a disclosure caret. */
   padding-right: 1.1rem;
 }
 
 .story-marker {
   font-weight: 600;
-  /* Pull the marker tight to the file name so it reads as attached, overriding
-     the .story-row 0.75rem gap for this pair only. */
   margin-right: -0.45rem;
 }
 
@@ -412,10 +356,12 @@ h2 {
 .story[data-status='pass'] .story-file {
   color: var(--pass);
 }
+
 .story[data-status='changed'] .story-marker,
 .story[data-status='changed'] .story-file {
   color: var(--changed);
 }
+
 .story[data-status='failed'] .story-marker,
 .story[data-status='failed'] .story-file {
   color: var(--failed);
@@ -436,22 +382,9 @@ h2 {
 
 .actions {
   position: relative;
-  margin: 0.5rem 0 0;
-  padding: 0 0 0 1rem;
+  margin: 0;
+  padding: 0;
   list-style: none;
-}
-
-.actions::before {
-  /* Continuous vertical trunk, decorative. The negative top extends the line
-     up into the story-prose → first-action gap, which IS Change 2's
-     prose→first-action connector (pure CSS, zero DOM nodes). */
-  content: '';
-  position: absolute;
-  left: 0.25rem;
-  top: -0.5rem;
-  bottom: 0;
-  width: 1px;
-  background: var(--text-subtle);
 }
 
 .action {
@@ -462,31 +395,10 @@ h2 {
   position: relative;
 }
 
-.action:last-child::after {
-  /* Mask the decorative trunk in the gutter column below the last action row so
-     the line stops at the final action rather than running past it.
-     Geometry: the trunk (.actions::before) sits at .actions left:0.25rem; each
-     .action is inset by .actions padding-left:1rem, so reaching back to the
-     trunk column from this pseudo-element requires left: 0.25rem - 1rem
-     = -0.75rem. `top: 0.9rem` starts the mask just below the first row's text
-     baseline, so the upward prose→first-action connector (.actions::before
-     top:-0.5rem) survives even on a single-action story where the one .action
-     is both first and last.
-     The backdrop behind the trunk is .stories' background (var(--bg-elevated));
-     .story/.actions/.action paint no background, so this color matches exactly
-     and the mask is invisible. Width 3px (> the 1px trunk) fully covers it. */
-  content: '';
-  position: absolute;
-  left: -0.75rem;
-  top: 0.9rem;
-  bottom: 0;
-  width: 3px;
-  background: var(--bg-elevated);
-}
-
 .action[data-status='failed'] {
   color: var(--failed);
 }
+
 .action[data-status='changed'] {
   color: var(--changed);
 }
@@ -496,9 +408,6 @@ h2 {
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
-  /* Caret gutter reserved on every action row (shot-bearing or not) so all
-     durations align in one column. The caret on shot rows is absolutely
-     positioned into this gutter rather than sitting in the flex flow. */
   padding-right: 1.1rem;
 }
 
@@ -511,15 +420,13 @@ h2 {
   color: var(--text-subtle);
 }
 
-/* Status badges: text label only, sans-serif */
-
 .status {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   padding: 0 0.5rem;
   border: 1px solid currentColor;
-  min-width: 5.5rem;
+  min-width: 5rem;
 }
 
 .status-label {
@@ -530,15 +437,19 @@ h2 {
 .status[data-status='pass'] {
   color: var(--pass);
 }
+
 .status[data-status='changed'] {
   color: var(--changed);
 }
+
 .status[data-status='failed'] {
   color: var(--failed);
 }
+
 .status[data-status='skipped'] {
   color: var(--skipped);
 }
+
 .status[data-status='new'] {
   color: var(--new);
 }
@@ -572,31 +483,35 @@ h2 {
   overflow-x: auto;
 }
 
-/* Screenshot details / radiogroup */
-
-/* The whole action row is now the disclosure trigger. The summary spans the
-   full row; only shot-bearing rows get the pointer cursor + focus ring. */
 summary.action-row {
   list-style: none;
   cursor: pointer;
-  /* Anchor the absolutely-positioned caret to the row. */
   position: relative;
+}
+
+summary.action-row > .action-name {
+  text-decoration: underline;
+  text-underline-offset: 4.5px;
+}
+
+.action[data-status='pass'] summary.action-row:hover > .action-name {
+  color: var(--pass);
+}
+
+.action[data-status='changed'] summary.action-row:hover > .action-name {
+  color: var(--changed);
+}
+
+.action[data-status='failed'] summary.action-row:hover > .action-name {
+  color: var(--failed);
 }
 
 summary.action-row::-webkit-details-marker {
   display: none;
 }
 
-/* Persistent disclosure caret: the standing affordance that a row opens the
-   screenshots (cursor:pointer only shows on hover). Absolutely positioned into
-   the row's reserved right gutter (padding-right) so it never shifts the
-   duration's column. Pinned to the first line (top:0 + a one-line-tall box,
-   not box-centered) so it stays aligned with the row text when the row wraps to
-   two lines. Decorative — native <details> already exposes expanded/collapsed
-   state to AT. --text-subtle clears 3:1 on --bg-elevated in both themes
-   (WCAG 1.4.11). */
 summary.action-row::after {
-  content: '▸';
+  content: '➤';
   position: absolute;
   top: 0;
   right: 0.4rem;
@@ -611,23 +526,15 @@ details.shots[open] > summary.action-row::after {
   transform: rotate(90deg);
 }
 
-summary.action-row:hover {
-  background: var(--bg);
-}
-
 summary.action-row:focus-visible {
-  /* outline (not box-shadow/border) so flex-wrap doesn't clip it. --accent
-     clears 3:1 in both themes. */
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* Screenshot body content sits inside the <details>, which no longer carries
-   the old 2.2rem indent. Nudge the body in so it aligns under the row text
-   rather than the branch glyph. */
 .shot-radio {
   display: flex;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.5rem;
   margin: 0.5rem 0 0.5rem 2.2rem;
   padding: 0;
   border: 0;
@@ -660,9 +567,6 @@ summary.action-row:focus-visible {
   display: block;
   width: 100%;
   height: auto;
-  /* Neutral inset outline instead of a tinted border: outline doesn't affect
-     layout (image stays its intended size) and the offset keeps it inside the
-     box. The panel keeps its own var(--border) frame for the structural edge. */
   outline: 1px solid var(--img-outline);
   outline-offset: -1px;
 }
@@ -677,20 +581,32 @@ summary.action-row:focus-visible {
 }
 
 .diff-stats {
-  margin: 0.5rem 0 0 2.2rem;
-  color: var(--text-muted);
+  margin: 0 0 0 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.8125rem;
+  color: var(--text);
 }
 
-/* Reduce motion */
+.diff-stats .count {
+  font-weight: 600;
+}
+
+.diff-stats .label {
+  color: var(--text-muted);
+}
+
+.diff-stats .coverage-detail {
+  color: var(--text-subtle);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
   summary.action-row::after,
   .chip {
     transition: none;
   }
-  /* Disabling the transition alone still leaves an abrupt 1 → 0.96 jump on
-     press, which is interaction-triggered motion; suppress the scale itself. */
   .chip:active {
     scale: none;
   }
