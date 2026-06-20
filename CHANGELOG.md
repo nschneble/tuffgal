@@ -10,7 +10,7 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Fixed
 
-- Reset the page scroll to the origin before each full-page capture, so `position: sticky` and `fixed` elements no longer render shifted by `scrollY`. A page captured mid-scroll was producing baselines where only the sticky chrome (sidebars, headers) had moved.
+- Reset page scroll to origin before each full-page capture, so `position: sticky` and `fixed` elements no longer render shifted by `scrollY`
 
 ## [0.1.0-alpha.7] — 2026-06-20
 
