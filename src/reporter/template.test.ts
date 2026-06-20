@@ -156,7 +156,7 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
       'separate bulk-toggle live region present',
     );
     assert.ok(
-      html.includes('<p class="stories-empty" hidden>no stories match</p>'),
+      html.includes('<p class="stories-empty" hidden>No matching stories</p>'),
       'empty-state paragraph present and hidden by default',
     );
   });
@@ -187,24 +187,24 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
       'summary section present',
     );
     assert.ok(
-      html.includes('<li class="summary-item"><span class="count">3</span>'),
+      html.includes('<li class="summary-item">\n  <span class="count">3</span>'),
       'stories total is 3',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="pass"><span class="count">1</span>',
+        '<li class="summary-item" data-status="pass">\n  <span class="count">1</span>',
       ),
       'pass tier total is 1',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="changed"><span class="count">1</span>',
+        '<li class="summary-item" data-status="changed">\n  <span class="count">1</span>',
       ),
       'changed tier total is 1',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="failed"><span class="count">1</span>',
+        '<li class="summary-item" data-status="failed">\n  <span class="count">1</span>',
       ),
       'failed tier total is 1',
     );
@@ -261,8 +261,8 @@ describe('renderAction — whole row as screenshot disclosure', () => {
       'the full action row is the <summary class="action-row"> trigger, not a plain <div>',
     );
     assert.ok(
-      html.includes('<span class="sr-only"> — toggle screenshots</span>'),
-      'summary carries the sr-only " — toggle screenshots" hint',
+      html.includes('<span class="sr-only">toggle screenshots</span>'),
+      'summary carries the sr-only "toggle screenshots" hint',
     );
     // The old tiny "[view]" disclosure is gone entirely.
     assert.ok(
@@ -423,7 +423,7 @@ describe('renderStory — status marker + sr-only word per tier', () => {
   it('emits the ✓ marker + "passed" sr-only word for a pass story', () => {
     assert.ok(
       html.includes(
-        '<span class="story-marker" aria-hidden="true">✓</span><span class="sr-only">passed</span>',
+        '<span class="story-marker" aria-hidden="true">✓</span>\n    <span class="sr-only">passed</span>',
       ),
       'pass story carries aria-hidden ✓ glyph followed by sr-only "passed"',
     );
@@ -432,7 +432,7 @@ describe('renderStory — status marker + sr-only word per tier', () => {
   it('emits the ~ marker + "changed" sr-only word for a changed story', () => {
     assert.ok(
       html.includes(
-        '<span class="story-marker" aria-hidden="true">~</span><span class="sr-only">changed</span>',
+        '<span class="story-marker" aria-hidden="true">~</span>\n    <span class="sr-only">changed</span>',
       ),
       'changed story carries aria-hidden ~ glyph followed by sr-only "changed"',
     );
@@ -441,7 +441,7 @@ describe('renderStory — status marker + sr-only word per tier', () => {
   it('emits the ✕ marker + "failed" sr-only word for a failed story', () => {
     assert.ok(
       html.includes(
-        '<span class="story-marker" aria-hidden="true">✕</span><span class="sr-only">failed</span>',
+        '<span class="story-marker" aria-hidden="true">✕</span>\n    <span class="sr-only">failed</span>',
       ),
       'failed story carries aria-hidden ✕ glyph followed by sr-only "failed"',
     );
