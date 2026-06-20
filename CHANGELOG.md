@@ -6,11 +6,11 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] — 2026-06-20
+
 ### Added
 
 - Add `npm run preview` to render a sample report without running a suite
-
-## [0.1.0-alpha.7] — 2026-06-19
 
 ### Changed
 
@@ -22,6 +22,17 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 - Draw continuous tree connector lines down the action list
 - Move the expand/collapse buttons to the right of the filters; the story-count status now sits beside the filters, with filter-aware labels (e.g. "Expand all changed screenshots")
 - Split story totals and coverage in the summary with justify-between
+- Validate the consumer config before resolving it, failing with the config file path instead of an opaque `TypeError`
+
+### Fixed
+
+- Render the report's default screenshot server-side so screenshots still show when JavaScript fails or is disabled
+- Serialize per-baseline writes so stories sharing an action no longer race to create the same baseline under `--workers > 1`
+- Memoize coverage initialization so concurrent workers no longer orphan the report
+- Raise subtle-text contrast to clear WCAG 1.4.3 (4.5:1) in both light and dark themes
+- Add a `:focus-within` focus-ring fallback for engines without `:has()` support
+- Reject non-finite or non-positive numeric CLI flags at parse time (e.g. `--idle-limit foo` no longer busy-loops the supervisor)
+- Guard the diff core against non-RGBA PNG pixel formats so a format change fails loudly instead of scoring garbage
 
 ### Removed
 
