@@ -1,9 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, mkdirSync, statSync } from 'node:fs';
-import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
 import type { ResolvedConfig, DevServerBridge } from '../config.ts';
-import { sleep } from '../util.ts';
+import { parseHostPort, probeTcp, sleep } from '../util.ts';
 
 const HEARTBEAT_FILE = '.heartbeat';
 const SIGTERM_GRACE_MS = 5_000;
@@ -188,25 +187,8 @@ async function probeAllHealthchecks(
 }
 
 function probeUrl(url: string): Promise<boolean> {
-  const parsed = new URL(url);
-  const port = parsed.port
-    ? Number(parsed.port)
-    : parsed.protocol === 'https:'
-      ? 443
-      : 80;
-  const host = parsed.hostname;
-  return new Promise((resolveProbe) => {
-    const socket = createConnection({ port, host });
-    const cleanup = (result: boolean): void => {
-      socket.removeAllListeners();
-      socket.destroy();
-      resolveProbe(result);
-    };
-    socket.once('connect', () => cleanup(true));
-    socket.once('error', () => cleanup(false));
-    socket.once('timeout', () => cleanup(false));
-    socket.setTimeout(HEALTHCHECK_PROBE_TIMEOUT_MS);
-  });
+  const { host, port } = parseHostPort(url);
+  return probeTcp(host, port, HEALTHCHECK_PROBE_TIMEOUT_MS);
 }
 
 function heartbeatIsStale(heartbeatPath: string, idleLimitMs: number): boolean {

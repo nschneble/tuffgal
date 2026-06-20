@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, mkdirSync } from 'node:fs';
-import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
 import type { ResolvedConfig } from '../../config.ts';
-import { sleep } from '../../util.ts';
+import { parseHostPort, probeTcp, sleep } from '../../util.ts';
+
+const READY_PROBE_TIMEOUT_MS = 1_500;
 
 const DEFAULT_READY_TIMEOUT_MS = 60_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
@@ -130,20 +131,14 @@ async function waitForUrl(
   timeoutMs: number,
   getEarlyExit: () => Error | undefined,
 ): Promise<void> {
-  const parsed = new URL(url);
-  const port = parsed.port
-    ? Number(parsed.port)
-    : parsed.protocol === 'https:'
-      ? 443
-      : 80;
-  const host = parsed.hostname;
+  const { host, port } = parseHostPort(url);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const earlyExit = getEarlyExit();
     if (earlyExit) {
       throw earlyExit;
     }
-    const open = await probePort(host, port);
+    const open = await probeTcp(host, port, READY_PROBE_TIMEOUT_MS);
     if (open) {
       return;
     }
@@ -152,19 +147,4 @@ async function waitForUrl(
   throw new Error(
     `Health-check URL ${url} (TCP ${host}:${port}) did not respond within ${timeoutMs}ms`,
   );
-}
-
-function probePort(host: string, port: number): Promise<boolean> {
-  return new Promise((resolveProbe) => {
-    const socket = createConnection({ port, host });
-    const cleanup = (result: boolean): void => {
-      socket.removeAllListeners();
-      socket.destroy();
-      resolveProbe(result);
-    };
-    socket.once('connect', () => cleanup(true));
-    socket.once('error', () => cleanup(false));
-    socket.once('timeout', () => cleanup(false));
-    socket.setTimeout(1_500);
-  });
 }
