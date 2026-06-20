@@ -4,6 +4,15 @@ This is the canonical Tuffgal recipe for a project backed by Postgres and Prisma
 
 Copy the `tuffgal/` directory and `tuffgal.config.ts` into your project root, then walk through the integration steps below.
 
+The bridge files import two runtime dependencies that your project must have installed:
+
+```bash
+npm install pg bcryptjs
+npm install -D @types/pg   # if your project is TypeScript
+```
+
+(See [Why `bcryptjs`?](#why-bcryptjs) and [Why pure `pg`, not Prisma client?](#why-pure-pg-not-prisma-client) below for the rationale, and how to substitute if you already use `bcrypt` or another client.)
+
 ## What's in the box
 
 ```

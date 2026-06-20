@@ -24,6 +24,83 @@ An ordered chain of actions that model a user journey. Lives under
 action says "navigate, click add, fill out form, submit." A
 `user-saves-record` story says "As a logged-in user, I save a record."
 
+## Schema reference
+
+Two file shapes. Both are strict JSON validated on load — a bad field fails
+loudly with the file path, never at run time. (The examples below are valid
+JSON: no comments, no trailing commas. Field notes follow each block.)
+
+### Action JSON
+
+```json
+{
+  "action": "rename-record",
+  "parameters": ["name"],
+  "steps": [
+    { "kind": "click", "hint": { "role": "button", "text": "Edit" } },
+    {
+      "kind": "input",
+      "hint": { "role": "textbox", "text": "Name" },
+      "value": "${name}"
+    },
+    { "kind": "click", "hint": { "role": "button", "text": "Save" } }
+  ],
+  "screenshot": true,
+  "expect": { "anyOf": [{ "role": "status", "text": "Saved" }] },
+  "mask": [{ "selector": ".timestamp" }],
+  "retry": { "attempts": 2, "backoffMs": 200 },
+  "diff": { "ssimThreshold": 0.99, "pixelThreshold": 0.1 }
+}
+```
+
+- `action` — required. Lowercase-kebab, unique across all actions.
+- `parameters` — optional `string[]`. Names the `${...}` placeholders this
+  action uses (see below).
+- `steps` — required, at least one. The primitives table is above.
+- `screenshot` — optional, default `true`. Set `false` to skip the capture.
+- `expect`, `mask`, `retry`, `diff` — optional. See the feature sections below.
+
+### Story JSON
+
+```json
+{
+  "story": "User renames a record",
+  "storageState": "logged-in",
+  "needs": ["seeded-records"],
+  "fixtures": ["one-record"],
+  "flow": "Rename a record",
+  "viewport": { "width": 1280, "height": 800 },
+  "actions": [
+    { "action": "rename-record", "parameters": { "name": "Groceries" } }
+  ]
+}
+```
+
+- `story` — required. The WHY of the journey, in prose.
+- `storageState` — optional. `"logged-in"` is sugar for `needs: ["logged-in"]`;
+  `"fresh"` is the default.
+- `needs` / `produces` — optional label arrays for the dependency graph.
+- `fixtures` — optional DB fixtures applied before the browser launches.
+- `flow` — optional flow-inventory tag for coverage.
+- `viewport` — optional per-story override of the config viewport.
+- `actions` — required, at least one. Each entry names an action and optionally
+  supplies its `parameters` map.
+
+### Passing parameters from a story to an action
+
+The keyword `parameters` means two different things on the two sides, and the
+`${...}` placeholder is the bridge between them:
+
+- On an **action** it is a `string[]` — the list of placeholder names the action
+  declares (`"parameters": ["name"]`).
+- On a **story step** it is a `Record<string, string>` — a name→value map
+  (`"parameters": { "name": "Groceries" }`).
+
+At run time every `${name}` in the action's hint `text`/`selector` and in
+`input`/`type` `value` fields is replaced with the matching story value. A
+placeholder with no supplied value fails loudly rather than leaking the literal
+`${name}`. An action may be reused by many stories, each supplying its own map.
+
 ## Hint resolution
 
 Every interactive step (e.g. `click`, `input`, `waitFor`) takes a `hint`,
