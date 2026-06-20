@@ -93,12 +93,9 @@ function summaryItem(
   value: number,
   statusKey?: ActionStatus,
 ): string {
-  const indicator = statusKey
-    ? `<span class="indicator" data-status="${statusKey}" aria-hidden="true"></span>`
-    : '';
   return `<li class="summary-item"${
     statusKey ? ` data-status="${statusKey}"` : ''
-  }><span class="count">${value}</span>${indicator}<span class="label">${label}</span></li>`;
+  }><span class="count">${value}</span><span class="indicator label">${label}</span></li>`;
 }
 
 function renderStories(result: RunResult, reportDir: string): string {

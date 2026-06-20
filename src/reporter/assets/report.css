@@ -203,40 +203,19 @@ h2 {
   color: var(--text-muted);
 }
 
-.indicator {
-  display: inline-block;
-  width: 0.625rem;
-  height: 0.625rem;
-  background: var(--text-muted);
-  border: 1px solid currentColor;
-}
-
 .summary-item[data-status='pass'] .indicator {
-  background: var(--pass);
   color: var(--pass);
 }
 .summary-item[data-status='changed'] .indicator {
-  background: var(--changed);
   color: var(--changed);
 }
 .summary-item[data-status='failed'] .indicator {
-  background: var(--failed);
   color: var(--failed);
-}
-
-.summary-item.coverage {
-  gap: 0.4rem;
 }
 
 .summary-item.coverage .coverage-detail {
   color: var(--text-subtle);
   font-size: 0.8125rem;
-}
-
-.summary-item.coverage .coverage-detail::before {
-  content: '·';
-  margin-right: 0.35rem;
-  color: var(--text-subtle);
 }
 
 /* Chip: shared inline-flex pill used by toolbar buttons and radio-driven
@@ -413,6 +392,9 @@ h2 {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  /* Reserve the same caret gutter as action rows so every duration right-aligns
+     in one column, whether or not the row carries a disclosure caret. */
+  padding-right: 1.1rem;
 }
 
 .story-marker {
@@ -514,6 +496,10 @@ h2 {
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
+  /* Caret gutter reserved on every action row (shot-bearing or not) so all
+     durations align in one column. The caret on shot rows is absolutely
+     positioned into this gutter rather than sitting in the flex flow. */
+  padding-right: 1.1rem;
 }
 
 .action-name {
@@ -593,6 +579,8 @@ h2 {
 summary.action-row {
   list-style: none;
   cursor: pointer;
+  /* Anchor the absolutely-positioned caret to the row. */
+  position: relative;
 }
 
 summary.action-row::-webkit-details-marker {
@@ -600,13 +588,21 @@ summary.action-row::-webkit-details-marker {
 }
 
 /* Persistent disclosure caret: the standing affordance that a row opens the
-   screenshots (cursor:pointer only shows on hover). Pinned to the row's right
-   edge after .action-duration's margin-left:auto. Decorative — native
-   <details> already exposes expanded/collapsed state to AT. --text-subtle
-   clears 3:1 on --bg-elevated in both themes (WCAG 1.4.11). */
+   screenshots (cursor:pointer only shows on hover). Absolutely positioned into
+   the row's reserved right gutter (padding-right) so it never shifts the
+   duration's column. Pinned to the first line (top:0 + a one-line-tall box,
+   not box-centered) so it stays aligned with the row text when the row wraps to
+   two lines. Decorative — native <details> already exposes expanded/collapsed
+   state to AT. --text-subtle clears 3:1 on --bg-elevated in both themes
+   (WCAG 1.4.11). */
 summary.action-row::after {
   content: '▸';
-  display: inline-block;
+  position: absolute;
+  top: 0;
+  right: 0.4rem;
+  height: 1.55em;
+  display: inline-flex;
+  align-items: center;
   color: var(--text-subtle);
   transition: transform 0.15s ease;
 }
