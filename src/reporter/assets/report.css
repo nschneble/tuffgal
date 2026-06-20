@@ -18,6 +18,10 @@
   --skipped-fg: #18181b;
   --new: #38bdf8;
   --new-fg: #082f49;
+  /* Neutral image edge separator: pure white at low alpha on dark. Never a
+     tinted near-white — a tint picks up the surface beneath and reads as dirt
+     on the image edge. Light-mode override is pure black below. */
+  --img-outline: rgba(255, 255, 255, 0.1);
   --font-mono:
     ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
   --font-sans:
@@ -44,6 +48,7 @@
     --skipped-fg: #ffffff;
     --new: #0369a1;
     --new-fg: #ffffff;
+    --img-outline: rgba(0, 0, 0, 0.1);
   }
 }
 
@@ -56,6 +61,11 @@
    on the diagnostic content worth copying into a bug report. */
 html {
   user-select: none;
+  /* macOS renders text heavier than intended by default; antialiased smoothing
+     at the root makes the mono data and sans prose render crisper. No-op on
+     other platforms. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .report-meta,
@@ -119,12 +129,14 @@ body {
   margin: 0 0 0.25rem;
   font-size: 1.25rem;
   font-weight: 600;
+  text-wrap: balance;
 }
 
 .report-meta {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.875rem;
+  text-wrap: pretty;
 }
 
 main {
@@ -144,6 +156,7 @@ h2 {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
+  text-wrap: balance;
 }
 
 /* Summary */
@@ -236,6 +249,24 @@ h2 {
   cursor: pointer;
   font-size: 0.8125rem;
   color: var(--text-muted);
+  /* Specific properties only (never `transition: all`): scale drives the
+     press feedback, color/border-color smooth the hover affordance. */
+  transition-property: scale, color, border-color;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+/* Hover affordance on the toggle chips that aren't already checked/disabled —
+   the checked state owns the accent border, disabled labels stay dimmed. */
+.chip--toggle:not(:has(input:checked)):not(:has(input:disabled)):hover {
+  color: var(--text);
+  border-color: var(--border-bright);
+}
+
+/* Subtle scale-down on press for tactile feedback. 0.96 — anything below 0.95
+   feels exaggerated. Suppressed under prefers-reduced-motion below. */
+.chip:active {
+  scale: 0.96;
 }
 
 .chip--toggle:has(input:checked) {
@@ -331,6 +362,7 @@ h2 {
   font-family: var(--font-sans);
   font-size: 0.875rem;
   text-align: center;
+  text-wrap: pretty;
 }
 
 /* Stories tree */
@@ -400,6 +432,7 @@ h2 {
   color: var(--text-muted);
   font-family: var(--font-sans);
   font-size: 0.875rem;
+  text-wrap: pretty;
 }
 
 .actions {
@@ -614,7 +647,11 @@ summary.action-row:focus-visible {
   display: block;
   width: 100%;
   height: auto;
-  border: 1px solid var(--border);
+  /* Neutral inset outline instead of a tinted border: outline doesn't affect
+     layout (image stays its intended size) and the offset keeps it inside the
+     box. The panel keeps its own var(--border) frame for the structural edge. */
+  outline: 1px solid var(--img-outline);
+  outline-offset: -1px;
 }
 
 .shot-missing {
@@ -623,6 +660,7 @@ summary.action-row:focus-visible {
   text-align: center;
   color: var(--text-subtle);
   font-family: var(--font-sans);
+  text-wrap: pretty;
 }
 
 .diff-stats {
@@ -634,7 +672,13 @@ summary.action-row:focus-visible {
 /* Reduce motion */
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
-  summary.action-row::after {
+  summary.action-row::after,
+  .chip {
     transition: none;
+  }
+  /* Disabling the transition alone still leaves an abrupt 1 → 0.96 jump on
+     press, which is interaction-triggered motion; suppress the scale itself. */
+  .chip:active {
+    scale: none;
   }
 }
