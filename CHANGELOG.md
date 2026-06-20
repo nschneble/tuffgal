@@ -6,7 +6,9 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Added
+
+- Add `npm run preview` to render a sample report without running a suite
 
 ## [0.1.0-alpha.7] — 2026-06-19
 
