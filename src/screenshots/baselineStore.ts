@@ -55,6 +55,37 @@ export function pathsFor(options: StoreOptions): BaselinePaths {
   };
 }
 
+/**
+ * Per-path serialization for baseline creation. A baseline is keyed only on
+ * action name (see `pathsFor`), so when the same action runs in two stories
+ * concurrently (`workers > 1`, fresh run), both would otherwise read "no
+ * baseline" and race to write the same `0.png` — a torn or last-writer-wins
+ * file. Callers wrap their read-then-maybe-write critical section in this lock
+ * so exactly one writer per baseline path runs at a time; later callers see the
+ * baseline the first writer produced. The map is keyed by path, so distinct
+ * actions never block each other; entries are bounded by the action count.
+ */
+const baselineLocks = new Map<string, Promise<void>>();
+
+export function withBaselineLock<T>(
+  key: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const previous = baselineLocks.get(key) ?? Promise.resolve();
+  // Run `fn` only after the prior holder settles, regardless of its outcome.
+  const run = previous.then(fn, fn);
+  // Tail used purely for sequencing; swallow its result/rejection so a failed
+  // critical section never poisons the next caller in the chain.
+  baselineLocks.set(
+    key,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return run;
+}
+
 export async function readBaseline(path: string): Promise<Buffer | undefined> {
   try {
     await access(path);

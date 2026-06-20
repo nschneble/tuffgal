@@ -9,6 +9,7 @@ import {
   pathsFor,
   readBaseline,
   readJsonBaseline,
+  withBaselineLock,
   writePng,
   writeText,
 } from '../screenshots/baselineStore.ts';
@@ -228,13 +229,25 @@ async function captureAndCompare(
   const a11yJson = await captureA11yTree(page);
   await writeText(paths.a11yActual, a11yJson);
 
-  const baselinePng = await readBaseline(paths.baseline);
-  const baselineA11y = await readJsonBaseline(paths.a11yBaseline);
   const baseResult = baseResultFor(action.action, parameters, startedAt);
 
+  // Read-then-maybe-create the baseline under a per-path lock so two stories
+  // sharing this action can't both see "no baseline" and race to write it.
+  // The first holder writes; later holders observe the baseline it produced.
+  const baselinePng = await withBaselineLock(
+    paths.baseline,
+    async (): Promise<Buffer | undefined> => {
+      const existing = await readBaseline(paths.baseline);
+      if (existing !== undefined) {
+        return existing;
+      }
+      await writePng(paths.baseline, actualPng);
+      await writeText(paths.a11yBaseline, a11yJson);
+      return undefined;
+    },
+  );
+
   if (baselinePng === undefined) {
-    await writePng(paths.baseline, actualPng);
-    await writeText(paths.a11yBaseline, a11yJson);
     return finishResult(baseResult, {
       status: 'new',
       baselinePath: paths.baseline,
@@ -244,6 +257,7 @@ async function captureAndCompare(
     });
   }
 
+  const baselineA11y = await readJsonBaseline(paths.a11yBaseline);
   const a11yChanged = baselineA11y !== undefined && baselineA11y !== a11yJson;
 
   try {

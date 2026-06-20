@@ -23,14 +23,22 @@ const PLAYWRIGHT_COVERAGE_OPTIONS = { resetOnNavigation: false } as const;
 export class CoverageCollector {
   private mcr: CoverageReportInstance | undefined;
   private readonly outputDir: string;
-  private initialised = false;
+  private initPromise: Promise<void> | undefined;
 
   constructor(reportDir: string) {
     this.outputDir = join(reportDir, 'coverage');
   }
 
-  private async ensureInitialised(): Promise<void> {
-    if (this.initialised) return;
+  private ensureInitialised(): Promise<void> {
+    // Memoize as a single shared promise. `startForPage` is called from every
+    // parallel story; a boolean flag set after the await chain would let N
+    // workers all init, racing `cleanCache()` and orphaning every report but
+    // the last. Concurrent callers now await the same initialization.
+    this.initPromise ??= this.initialise();
+    return this.initPromise;
+  }
+
+  private async initialise(): Promise<void> {
     const monocartModule = await import('monocart-coverage-reports');
     // `export = MCR` (CommonJS) becomes `.default` under ESM interop.
     const createReport = monocartModule.default;
@@ -40,7 +48,6 @@ export class CoverageCollector {
       reports: ['v8', 'console-summary'],
     });
     await this.mcr.cleanCache();
-    this.initialised = true;
   }
 
   async startForPage(page: Page): Promise<void> {

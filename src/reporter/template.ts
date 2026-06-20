@@ -250,6 +250,19 @@ function renderScreenshots(
     ? toReportRelative(reportDir, action.diffPath)
     : undefined;
   const defaultTab = diff ? 'diff' : 'actual';
+  // Server-render the initial tab so the report works with JS disabled or
+  // failed: pick the preferred tab if its image exists, else the first
+  // available one. Its radio ships `checked` and its panel un-hidden, mirroring
+  // setupShots() in report.js. Without this every panel stays `hidden` and the
+  // screenshots — the whole payload — are unreachable when the script doesn't
+  // run (WCAG 1.1.1).
+  const available = { baseline, actual, diff };
+  const initialTab =
+    available[defaultTab] !== undefined
+      ? defaultTab
+      : (['baseline', 'actual', 'diff'] as const).find(
+          (name) => available[name] !== undefined,
+        );
   const diffStatsId = `${actionId}-diff-stats`;
   const diffStats =
     action.diffRatio !== undefined
@@ -257,17 +270,22 @@ function renderScreenshots(
       : '';
   return `<fieldset class="shot-radio" data-default-tab="${defaultTab}">
     <legend class="sr-only">Screenshot to display</legend>
-    ${shotRadio(actionId, 'baseline', baseline === undefined)}
-    ${shotRadio(actionId, 'actual', actual === undefined)}
-    ${shotRadio(actionId, 'diff', diff === undefined)}
+    ${shotRadio(actionId, 'baseline', baseline === undefined, initialTab === 'baseline')}
+    ${shotRadio(actionId, 'actual', actual === undefined, initialTab === 'actual')}
+    ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff')}
   </fieldset>
-  ${shotPanel(actionId, 'baseline', baseline, `${action.action} baseline screenshot`)}
-  ${shotPanel(actionId, 'actual', actual, `${action.action} actual screenshot from this run`)}
-  ${shotPanel(actionId, 'diff', diff, `Pixel diff overlay for ${action.action}: red pixels mark changed regions`, action.diffRatio !== undefined ? diffStatsId : undefined)}
+  ${shotPanel(actionId, 'baseline', baseline, `${action.action} baseline screenshot`, initialTab === 'baseline')}
+  ${shotPanel(actionId, 'actual', actual, `${action.action} actual screenshot from this run`, initialTab === 'actual')}
+  ${shotPanel(actionId, 'diff', diff, `Pixel diff overlay for ${action.action}; changed regions are highlighted`, initialTab === 'diff', action.diffRatio !== undefined ? diffStatsId : undefined)}
   ${diffStats}`;
 }
 
-function shotRadio(actionId: string, name: string, disabled: boolean): string {
+function shotRadio(
+  actionId: string,
+  name: string,
+  disabled: boolean,
+  checked: boolean,
+): string {
   const inputId = `${actionId}-radio-${name}`;
   return `<label for="${inputId}" class="chip chip--toggle shot-radio-label">
     <input
@@ -277,6 +295,7 @@ function shotRadio(actionId: string, name: string, disabled: boolean): string {
       value="${name}"
       data-tab="${name}"
       ${disabled ? 'disabled' : ''}
+      ${checked ? 'checked' : ''}
     />
     ${name}
   </label>`;
@@ -287,13 +306,14 @@ function shotPanel(
   name: string,
   src: string | undefined,
   alt: string,
+  visible: boolean,
   describedById?: string,
 ): string {
   return `<div
     class="shot-panel"
     id="panel-${actionId}-${name}"
     data-tab="${name}"
-    hidden
+    ${visible ? '' : 'hidden'}
   >
     ${
       src
