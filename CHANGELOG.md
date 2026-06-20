@@ -10,34 +10,31 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Added
 
-- Add `npm run preview` to render a sample report without running a suite
+- Add `npm run preview` to render a sample HTML report
 
 ### Changed
 
 - Capitalize the report title to "Tuffgal report" and show a friendlier timestamp
 - Convey story status as a colored, marked story name instead of a badge
-- Show the status badge as plain text (no letter glyph)
-- Rename "pass" terminology to "passed" throughout the report
-- Make the whole action row clickable to toggle screenshots (replaces the "view" link)
-- Draw continuous tree connector lines down the action list
-- Move the expand/collapse buttons to the right of the filters; the story-count status now sits beside the filters, with filter-aware labels (e.g. "Expand all changed screenshots")
-- Split story totals and coverage in the summary with justify-between
+- Make the whole action row clickable to toggle screenshots
+- Move the expand/collapse buttons to the right of the filters; the story-count status now sits beside the filters, with filter-aware labels
+- Rename "pass" terminology to "passed" throughout the HTML report
+- Show the status badge as plain text (no glyphs)
 - Validate the consumer config before resolving it, failing with the config file path instead of an opaque `TypeError`
 
 ### Fixed
 
-- Render the report's default screenshot server-side so screenshots still show when JavaScript fails or is disabled
-- Serialize per-baseline writes so stories sharing an action no longer race to create the same baseline under `--workers > 1`
-- Memoize coverage initialization so concurrent workers no longer orphan the report
-- Raise subtle-text contrast to clear WCAG 1.4.3 (4.5:1) in both light and dark themes
-- Add a `:focus-within` focus-ring fallback for engines without `:has()` support
-- Reject non-finite or non-positive numeric CLI flags at parse time (e.g. `--idle-limit foo` no longer busy-loops the supervisor)
 - Guard the diff core against non-RGBA PNG pixel formats so a format change fails loudly instead of scoring garbage
+- Memoize coverage init so concurrent workers no longer orphan the HTML report
+- Raise subtle-text contrast to clear WCAG 1.4.3 (4.5:1) in both light and dark themes
+- Reject non-finite or non-positive numeric CLI flags at parse time (e.g. `--idle-limit foo` no longer busy-loops the supervisor)
+- Render the HTML report's default screenshot server-side so screenshots still show when JavaScript fails or is disabled
+- Serialize per-baseline writes so stories sharing an action no longer race to create the same baseline under `--workers > 1`
 
 ### Removed
 
-- Drop the redundant "Failures" section at the bottom of the report (failures now surface inline and via the failed filter)
-- Stop linking the Playwright trace from the HTML report; its path is recorded in `results.json`
+- Drop redundant "Failures" section at the bottom of the HTML report
+- Stop linking to Playwright trace in the HTML report
 
 ## [0.1.0-alpha.6] — 2026-06-11
 

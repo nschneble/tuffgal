@@ -8,10 +8,10 @@ The bridge files import two runtime dependencies that your project must have ins
 
 ```bash
 npm install pg bcryptjs
-npm install -D @types/pg   # if your project is TypeScript
+npm install -D @types/pg  # if your project is TypeScript
 ```
 
-(See [Why `bcryptjs`?](#why-bcryptjs) and [Why pure `pg`, not Prisma client?](#why-pure-pg-not-prisma-client) below for the rationale, and how to substitute if you already use `bcrypt` or another client.)
+See [Why `bcryptjs`?](#why-bcryptjs) and [Why pure `pg`, not Prisma client?](#why-pure-pg-not-prisma-client) below for the rationale, and how to substitute if you already use `bcrypt` or another client.
 
 ## What's in the box
 

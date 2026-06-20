@@ -26,9 +26,9 @@ action says "navigate, click add, fill out form, submit." A
 
 ## Schema reference
 
-Two file shapes. Both are strict JSON validated on load — a bad field fails
-loudly with the file path, never at run time. (The examples below are valid
-JSON: no comments, no trailing commas. Field notes follow each block.)
+Both actions and stories are strict JSON validated on load. A bad field
+fails loudly with the file path. The examples below are valid JSON with no
+comments and no trailing commas. Field notes follow each block.
 
 ### Action JSON
 
@@ -53,12 +53,11 @@ JSON: no comments, no trailing commas. Field notes follow each block.)
 }
 ```
 
-- `action` — required. Lowercase-kebab, unique across all actions.
-- `parameters` — optional `string[]`. Names the `${...}` placeholders this
-  action uses (see below).
-- `steps` — required, at least one. The primitives table is above.
-- `screenshot` — optional, default `true`. Set `false` to skip the capture.
-- `expect`, `mask`, `retry`, `diff` — optional. See the feature sections below.
+- `action`: Required. Lowercase-kebab. Unique across all actions.
+- `parameters`: Optional `string[]`. Names the `${...}` placeholders this action uses. See below.
+- `steps`: At least one required. Primitives table is above.
+- `screenshot`: Optional. Defaults to `true`. Set to `false` to skip capture.
+- `expect`, `mask`, `retry`, `diff`: Optional. See feature sections below.
 
 ### Story JSON
 
@@ -76,30 +75,27 @@ JSON: no comments, no trailing commas. Field notes follow each block.)
 }
 ```
 
-- `story` — required. The WHY of the journey, in prose.
-- `storageState` — optional. `"logged-in"` is sugar for `needs: ["logged-in"]`;
-  `"fresh"` is the default.
-- `needs` / `produces` — optional label arrays for the dependency graph.
-- `fixtures` — optional DB fixtures applied before the browser launches.
-- `flow` — optional flow-inventory tag for coverage.
-- `viewport` — optional per-story override of the config viewport.
-- `actions` — required, at least one. Each entry names an action and optionally
-  supplies its `parameters` map.
+- `story`: Required. The WHY of the journey, in prose.
+- `storageState`: Optional. `"logged-in"` is sugar for `needs: ["logged-in"]`; `"fresh"` is the default.
+- `needs` / `produces`: Optional label arrays for the dependency graph.
+- `fixtures`: Optional DB fixtures applied before the browser launches.
+- `flow`: Optional flow-inventory tag for coverage.
+- `viewport`: Optional per-story override of the config viewport.
+- `actions`: At least one required. Each entry names an action and optionally supplies its `parameters` map.
 
 ### Passing parameters from a story to an action
 
-The keyword `parameters` means two different things on the two sides, and the
-`${...}` placeholder is the bridge between them:
+The keyword `parameters` means different things to stories and actions, and
+the `${...}` placeholder is the bridge between them:
 
-- On an **action** it is a `string[]` — the list of placeholder names the action
-  declares (`"parameters": ["name"]`).
-- On a **story step** it is a `Record<string, string>` — a name→value map
-  (`"parameters": { "name": "Groceries" }`).
+- On an **action** it's a `string[]`, the list of placeholder names the action declares (`"parameters": ["name"]`)
+- On a **story step** it's a `Record<string, string>`, a name→value map (`"parameters": { "name": "Groceries" }`)
 
 At run time every `${name}` in the action's hint `text`/`selector` and in
-`input`/`type` `value` fields is replaced with the matching story value. A
-placeholder with no supplied value fails loudly rather than leaking the literal
-`${name}`. An action may be reused by many stories, each supplying its own map.
+each `input`/`type` `value` fields is replaced with the matching story
+value. A placeholder with no supplied value fails loudly rather than
+leaking the literal `${name}`. An action may be reused by many stories,
+each supplying its own map.
 
 ## Hint resolution
 
@@ -427,8 +423,8 @@ For every new story:
 
 ## Debugging a failed story
 
-1. Open `paths.report/index.html`. Set the status filter to "failed" to isolate the failed stories, then read the inline error message rendered on each failed action row (the `<pre class="action-error">` block under the action).
-2. Find the failed story's `tracePath` in `paths.report/results.json` and open its trace: `npx playwright show-trace <tracePath>`. Walk the timeline, inspect DOM snapshots, and watch network calls. (The trace zip is not linked from the HTML report — its path lives in the JSON.)
+1. Open `paths.report/index.html`. Set the status filter to "failed" to isolate the failed stories, then read the inline error message rendered on each failed action row.
+2. Find the failed story's `tracePath` in `paths.report/results.json` and open its trace: `npx playwright show-trace <tracePath>`. Walk the timeline, inspect DOM snapshots, and watch network calls.
 3. Compare baseline / actual / diff images in the report's screenshot panel. The diff engine flagged something, so check whether it's a real regression or new drift to absorb with `mask` or `ssimThreshold`.
 4. If the locator missed, re-read the hint precedence list above and tighten it.
 
