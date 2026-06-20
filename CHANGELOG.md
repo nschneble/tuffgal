@@ -6,7 +6,35 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+## [0.1.0-alpha.7] — 2026-06-20
+
+### Added
+
+- Add `npm run preview` to render a sample HTML report
+
+### Changed
+
+- Capitalize the report title to "Tuffgal report" and show a friendlier timestamp
+- Convey story status as a colored, marked story name instead of a badge
+- Make the whole action row clickable to toggle screenshots
+- Move the expand/collapse buttons to the right of the filters; the story-count status now sits beside the filters, with filter-aware labels
+- Rename "pass" terminology to "passed" throughout the HTML report
+- Show the status badge as plain text (no glyphs)
+- Validate the consumer config before resolving it, failing with the config file path instead of an opaque `TypeError`
+
+### Fixed
+
+- Guard the diff core against non-RGBA PNG pixel formats so a format change fails loudly instead of scoring garbage
+- Memoize coverage init so concurrent workers no longer orphan the HTML report
+- Raise subtle-text contrast to clear WCAG 1.4.3 (4.5:1) in both light and dark themes
+- Reject non-finite or non-positive numeric CLI flags at parse time (e.g. `--idle-limit foo` no longer busy-loops the supervisor)
+- Render the HTML report's default screenshot server-side so screenshots still show when JavaScript fails or is disabled
+- Serialize per-baseline writes so stories sharing an action no longer race to create the same baseline under `--workers > 1`
+
+### Removed
+
+- Drop redundant "Failures" section at the bottom of the HTML report
+- Stop linking to Playwright trace in the HTML report
 
 ## [0.1.0-alpha.6] — 2026-06-11
 
@@ -83,7 +111,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.6...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.7...HEAD
+[0.1.0-alpha.7]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.7
 [0.1.0-alpha.6]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.4

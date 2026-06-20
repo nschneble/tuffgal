@@ -1,12 +1,6 @@
 import { access, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-
-export interface ScreenCoverage {
-  total: number;
-  covered: number;
-  ratio: number;
-  missing: string[];
-}
+import type { CoverageMetric } from '../schema/result.ts';
 
 const SCREENS_SUBDIR = 'screens';
 
@@ -20,7 +14,7 @@ const SCREENS_SUBDIR = 'screens';
 export async function computeScreenCoverage(
   actionsDir: string,
   baselinesDir: string,
-): Promise<ScreenCoverage> {
+): Promise<CoverageMetric> {
   const screensRoot = join(actionsDir, SCREENS_SUBDIR);
   let entries: string[] = [];
   try {

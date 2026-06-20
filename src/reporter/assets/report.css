@@ -1,13 +1,16 @@
 :root {
   color-scheme: dark light;
+
   --bg: #0a0a0a;
   --bg-elevated: #111111;
   --text: #e5e5e5;
   --text-muted: #a3a3a3;
-  --text-subtle: #737373;
+  --text-subtle: #8a8a8a;
   --border: #262626;
   --border-bright: #404040;
   --accent: #38bdf8;
+  --img-outline: rgba(255, 255, 255, 0.1);
+
   --pass: #22c55e;
   --pass-fg: #052e16;
   --changed: #facc15;
@@ -18,6 +21,7 @@
   --skipped-fg: #18181b;
   --new: #38bdf8;
   --new-fg: #082f49;
+
   --font-mono:
     ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
   --font-sans:
@@ -30,13 +34,15 @@
     --bg-elevated: #ffffff;
     --text: #18181b;
     --text-muted: #525252;
-    --text-subtle: #737373;
+    --text-subtle: #6b6b6b;
     --border: #d4d4d4;
     --border-bright: #a3a3a3;
     --accent: #0369a1;
+    --img-outline: rgba(0, 0, 0, 0.1);
+
     --pass: #15803d;
     --pass-fg: #ffffff;
-    --changed: #a16207;
+    --changed: #854d0e;
     --changed-fg: #ffffff;
     --failed: #b91c1c;
     --failed-fg: #ffffff;
@@ -49,6 +55,11 @@
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -103,12 +114,14 @@ body {
   margin: 0 0 0.25rem;
   font-size: 1.25rem;
   font-weight: 600;
+  text-wrap: balance;
 }
 
 .report-meta {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.875rem;
+  text-wrap: pretty;
 }
 
 main {
@@ -128,9 +141,8 @@ h2 {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
+  text-wrap: balance;
 }
-
-/* Summary */
 
 .summary {
   margin-top: 0.5rem;
@@ -145,6 +157,10 @@ h2 {
   list-style: none;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
+}
+
+.summary-item:not(.coverage) + .summary-item.coverage {
+  margin-left: auto;
 }
 
 .summary-item {
@@ -162,29 +178,16 @@ h2 {
   color: var(--text-muted);
 }
 
-.indicator {
-  display: inline-block;
-  width: 0.625rem;
-  height: 0.625rem;
-  background: var(--text-muted);
-  border: 1px solid currentColor;
-}
-
 .summary-item[data-status='pass'] .indicator {
-  background: var(--pass);
   color: var(--pass);
 }
+
 .summary-item[data-status='changed'] .indicator {
-  background: var(--changed);
   color: var(--changed);
 }
-.summary-item[data-status='failed'] .indicator {
-  background: var(--failed);
-  color: var(--failed);
-}
 
-.summary-item.coverage {
-  gap: 0.4rem;
+.summary-item[data-status='failed'] .indicator {
+  color: var(--failed);
 }
 
 .summary-item.coverage .coverage-detail {
@@ -192,24 +195,27 @@ h2 {
   font-size: 0.8125rem;
 }
 
-.summary-item.coverage .coverage-detail::before {
-  content: '·';
-  margin-right: 0.35rem;
-  color: var(--text-subtle);
-}
-
-/* Chip: shared inline-flex pill used by toolbar buttons and radio-driven
-   labels. The `--toggle` modifier adds the radio-checked / focus-visible
-   accent treatment that buttons don't want. */
-
 .chip {
   display: inline-flex;
   align-items: center;
+  min-height: 24px;
   padding: 0.2rem 0.6rem;
   border: 1px solid var(--border-bright);
   cursor: pointer;
   font-size: 0.8125rem;
   color: var(--text-muted);
+  transition-property: scale, color, border-color;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+.chip--toggle:not(:has(input:checked)):not(:has(input:disabled)):hover {
+  color: var(--text);
+  border-color: var(--border-bright);
+}
+
+.chip:active {
+  scale: 0.96;
 }
 
 .chip--toggle:has(input:checked) {
@@ -223,7 +229,12 @@ h2 {
   outline-offset: 1px;
 }
 
-/* Stories toolbar (status filter) */
+@supports not (selector(:has(*))) {
+  .chip--toggle:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
 
 .stories-toolbar {
   display: flex;
@@ -261,14 +272,14 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
+  margin-left: auto;
 }
 
 .story-bulk-toggle-button {
   background: transparent;
-  /* `font: inherit` resets font-size, so re-assert the chip's 0.8125rem
-     here after the shorthand to keep the visual size consistent. */
   font: inherit;
   font-size: 0.8125rem;
+  min-height: 24px;
 }
 
 .story-bulk-toggle-button:hover {
@@ -296,9 +307,8 @@ h2 {
   font-family: var(--font-sans);
   font-size: 0.875rem;
   text-align: center;
+  text-wrap: pretty;
 }
-
-/* Stories tree */
 
 .stories {
   margin: 0;
@@ -314,12 +324,13 @@ h2 {
 }
 
 .story:first-child {
-  border-top: 0;
+  border-top: 1px solid transparent;
 }
 
 .story[data-status='failed'] {
   box-shadow: inset 3px 0 0 var(--failed);
 }
+
 .story[data-status='changed'] {
   box-shadow: inset 3px 0 0 var(--changed);
 }
@@ -329,10 +340,31 @@ h2 {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  padding-right: 1.1rem;
+}
+
+.story-marker {
+  font-weight: 600;
+  margin-right: -0.45rem;
 }
 
 .story-file {
   font-weight: 600;
+}
+
+.story[data-status='pass'] .story-marker,
+.story[data-status='pass'] .story-file {
+  color: var(--pass);
+}
+
+.story[data-status='changed'] .story-marker,
+.story[data-status='changed'] .story-file {
+  color: var(--changed);
+}
+
+.story[data-status='failed'] .story-marker,
+.story[data-status='failed'] .story-file {
+  color: var(--failed);
 }
 
 .story-duration {
@@ -345,10 +377,12 @@ h2 {
   color: var(--text-muted);
   font-family: var(--font-sans);
   font-size: 0.875rem;
+  text-wrap: pretty;
 }
 
 .actions {
-  margin: 0.5rem 0 0;
+  position: relative;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -357,9 +391,14 @@ h2 {
   padding: 0.15rem 0;
 }
 
+.action:last-child {
+  position: relative;
+}
+
 .action[data-status='failed'] {
   color: var(--failed);
 }
+
 .action[data-status='changed'] {
   color: var(--changed);
 }
@@ -369,11 +408,7 @@ h2 {
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
-}
-
-.branch {
-  color: var(--text-subtle);
-  user-select: none;
+  padding-right: 1.1rem;
 }
 
 .action-name {
@@ -385,20 +420,13 @@ h2 {
   color: var(--text-subtle);
 }
 
-/* Status badges: square bracket letter + label, fully sans-serif label */
-
 .status {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   padding: 0 0.5rem;
   border: 1px solid currentColor;
-  min-width: 5.5rem;
-}
-
-.status-letter {
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  min-width: 5rem;
 }
 
 .status-label {
@@ -409,15 +437,19 @@ h2 {
 .status[data-status='pass'] {
   color: var(--pass);
 }
+
 .status[data-status='changed'] {
   color: var(--changed);
 }
+
 .status[data-status='failed'] {
   color: var(--failed);
 }
+
 .status[data-status='skipped'] {
   color: var(--skipped);
 }
+
 .status[data-status='new'] {
   color: var(--new);
 }
@@ -451,35 +483,59 @@ h2 {
   overflow-x: auto;
 }
 
-/* Screenshot details / radiogroup */
-
-.shots {
-  margin: 0 0 0 2.2rem;
-  margin-top: 0.25rem;
-}
-
-.shots > summary {
-  display: inline-block;
-  color: var(--accent);
-  cursor: pointer;
-  user-select: none;
+summary.action-row {
   list-style: none;
-  font-size: 0.8125rem;
+  cursor: pointer;
+  position: relative;
 }
 
-.shots > summary::-webkit-details-marker {
+summary.action-row > .action-name {
+  text-decoration: underline;
+  text-underline-offset: 4.5px;
+}
+
+.action[data-status='pass'] summary.action-row:hover > .action-name {
+  color: var(--pass);
+}
+
+.action[data-status='changed'] summary.action-row:hover > .action-name {
+  color: var(--changed);
+}
+
+.action[data-status='failed'] summary.action-row:hover > .action-name {
+  color: var(--failed);
+}
+
+summary.action-row::-webkit-details-marker {
   display: none;
 }
 
-.shots > summary:focus-visible {
+summary.action-row::after {
+  content: '➤';
+  position: absolute;
+  top: 0;
+  right: 0.4rem;
+  height: 1.55em;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-subtle);
+  transition: transform 0.15s ease;
+}
+
+details.shots[open] > summary.action-row::after {
+  transform: rotate(90deg);
+}
+
+summary.action-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 .shot-radio {
   display: flex;
-  gap: 0.25rem;
-  margin: 0.5rem 0;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.5rem 2.2rem;
   padding: 0;
   border: 0;
 }
@@ -501,6 +557,7 @@ h2 {
 
 .shot-panel {
   margin-top: 0.5rem;
+  margin-left: 2.2rem;
   padding: 0.5rem;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -510,7 +567,8 @@ h2 {
   display: block;
   width: 100%;
   height: auto;
-  border: 1px solid var(--border);
+  outline: 1px solid var(--img-outline);
+  outline-offset: -1px;
 }
 
 .shot-missing {
@@ -519,74 +577,37 @@ h2 {
   text-align: center;
   color: var(--text-subtle);
   font-family: var(--font-sans);
+  text-wrap: pretty;
 }
 
 .diff-stats {
-  margin: 0.5rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-}
-
-/* Failures section */
-
-.failures {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.failure {
-  margin: 0.5rem 0;
-  padding: 0.875rem 1rem;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--failed);
-}
-
-.failure-head {
-  display: flex;
-  flex-wrap: wrap;
+  margin: 0 0 0 0.5rem;
+  display: inline-flex;
+  align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-}
-
-.failure-message {
-  margin: 0;
-  padding: 0.5rem 0.75rem;
-  background: var(--bg);
-  border-left: 2px solid var(--border-bright);
+  font-size: 0.8125rem;
   color: var(--text);
-  font-size: 0.8125rem;
-  white-space: pre-wrap;
-  overflow-x: auto;
 }
 
-.failure-trace {
-  margin: 0.5rem 0 0;
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
+.diff-stats .count {
+  font-weight: 600;
+}
+
+.diff-stats .label {
   color: var(--text-muted);
 }
 
-.failure-trace a {
-  color: var(--accent);
-}
-
-.prose-block {
-  font-family: var(--font-sans);
-  color: var(--text-muted);
-  font-size: 0.875rem;
-}
-
-.empty {
+.diff-stats .coverage-detail {
   color: var(--text-subtle);
 }
 
-/* Reduce motion */
 @media (prefers-reduced-motion: reduce) {
-  .skip-link {
+  .skip-link,
+  summary.action-row::after,
+  .chip {
     transition: none;
+  }
+  .chip:active {
+    scale: none;
   }
 }

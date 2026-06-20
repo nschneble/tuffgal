@@ -1,12 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type { StoryFile } from '../schema/load.ts';
-
-export interface FlowCoverage {
-  total: number;
-  covered: number;
-  ratio: number;
-  missing: string[];
-}
+import type { CoverageMetric } from '../schema/result.ts';
 
 /**
  * Compares the journeys catalogued in the consumer's `flowInventory`
@@ -21,7 +15,7 @@ export interface FlowCoverage {
 export async function computeFlowCoverage(
   inventoryPath: string | undefined,
   stories: StoryFile[],
-): Promise<FlowCoverage> {
+): Promise<CoverageMetric> {
   if (!inventoryPath) {
     return { total: 0, covered: 0, ratio: 1, missing: [] };
   }

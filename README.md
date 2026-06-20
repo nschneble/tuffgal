@@ -6,7 +6,7 @@ JSON-driven visual regression testing for web apps.
 
 <img src="tuffgal.png" alt="Tuffgal" />
 
-**Status:** Pre-1.0. Published on npm as `tuffgal@0.1.0-alpha.6` with
+**Status:** Pre-1.0. Published on npm as `tuffgal@0.1.0-alpha.7` with
 provenance. [Linklater](https://github.com/nschneble/linklater) is the
 pilot consumer.
 
@@ -24,7 +24,7 @@ When a screenshot changes, a human reviews the diff and decides what to do.
 
 ## What ships in v1
 
-- 9 step primitives as action verbs: `click`, `input`, `intercept`,
+- 9 step primitives composed into actions: `click`, `input`, `intercept`,
   `navigate`, `read`, `scroll`, `type`, `wait`, `waitFor`
 - An implicit screenshot at the end of every action
 - DAG scheduler with `needs`/`produces` labels and parallel workers

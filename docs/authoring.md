@@ -24,6 +24,79 @@ An ordered chain of actions that model a user journey. Lives under
 action says "navigate, click add, fill out form, submit." A
 `user-saves-record` story says "As a logged-in user, I save a record."
 
+## Schema reference
+
+Both actions and stories are strict JSON validated on load. A bad field
+fails loudly with the file path. The examples below are valid JSON with no
+comments and no trailing commas. Field notes follow each block.
+
+### Action JSON
+
+```json
+{
+  "action": "rename-record",
+  "parameters": ["name"],
+  "steps": [
+    { "kind": "click", "hint": { "role": "button", "text": "Edit" } },
+    {
+      "kind": "input",
+      "hint": { "role": "textbox", "text": "Name" },
+      "value": "${name}"
+    },
+    { "kind": "click", "hint": { "role": "button", "text": "Save" } }
+  ],
+  "screenshot": true,
+  "expect": { "anyOf": [{ "role": "status", "text": "Saved" }] },
+  "mask": [{ "selector": ".timestamp" }],
+  "retry": { "attempts": 2, "backoffMs": 200 },
+  "diff": { "ssimThreshold": 0.99, "pixelThreshold": 0.1 }
+}
+```
+
+- `action`: Required. Lowercase-kebab. Unique across all actions.
+- `parameters`: Optional `string[]`. Names the `${...}` placeholders this action uses. See below.
+- `steps`: At least one required. Primitives table is above.
+- `screenshot`: Optional. Defaults to `true`. Set to `false` to skip capture.
+- `expect`, `mask`, `retry`, `diff`: Optional. See feature sections below.
+
+### Story JSON
+
+```json
+{
+  "story": "User renames a record",
+  "storageState": "logged-in",
+  "needs": ["seeded-records"],
+  "fixtures": ["one-record"],
+  "flow": "Rename a record",
+  "viewport": { "width": 1280, "height": 800 },
+  "actions": [
+    { "action": "rename-record", "parameters": { "name": "Groceries" } }
+  ]
+}
+```
+
+- `story`: Required. The WHY of the journey, in prose.
+- `storageState`: Optional. `"logged-in"` is sugar for `needs: ["logged-in"]`; `"fresh"` is the default.
+- `needs` / `produces`: Optional label arrays for the dependency graph.
+- `fixtures`: Optional DB fixtures applied before the browser launches.
+- `flow`: Optional flow-inventory tag for coverage.
+- `viewport`: Optional per-story override of the config viewport.
+- `actions`: At least one required. Each entry names an action and optionally supplies its `parameters` map.
+
+### Passing parameters from a story to an action
+
+The keyword `parameters` means different things to stories and actions, and
+the `${...}` placeholder is the bridge between them:
+
+- On an **action** it's a `string[]`, the list of placeholder names the action declares (`"parameters": ["name"]`)
+- On a **story step** it's a `Record<string, string>`, a name→value map (`"parameters": { "name": "Groceries" }`)
+
+At run time every `${name}` in the action's hint `text`/`selector` and in
+each `input`/`type` `value` fields is replaced with the matching story
+value. A placeholder with no supplied value fails loudly rather than
+leaking the literal `${name}`. An action may be reused by many stories,
+each supplying its own map.
+
 ## Hint resolution
 
 Every interactive step (e.g. `click`, `input`, `waitFor`) takes a `hint`,
@@ -350,8 +423,8 @@ For every new story:
 
 ## Debugging a failed story
 
-1. Open `paths.report/index.html`. Read the failure section at the bottom.
-2. Open the trace zip listed under the failure: `npx playwright show-trace paths.report/traces/<story>.zip`. Walk the timeline, inspect DOM snapshots, and watch network calls.
+1. Open `paths.report/index.html`. Set the status filter to "failed" to isolate the failed stories, then read the inline error message rendered on each failed action row.
+2. Find the failed story's `tracePath` in `paths.report/results.json` and open its trace: `npx playwright show-trace <tracePath>`. Walk the timeline, inspect DOM snapshots, and watch network calls.
 3. Compare baseline / actual / diff images in the report's screenshot panel. The diff engine flagged something, so check whether it's a real regression or new drift to absorb with `mask` or `ssimThreshold`.
 4. If the locator missed, re-read the hint precedence list above and tighten it.
 
