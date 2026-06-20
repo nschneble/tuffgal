@@ -18,6 +18,14 @@ jobs:
           node-version: '22.x'
           registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
+      - name: verify tag matches package.json version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${{ github.ref_name }}" != "v$VERSION" ]; then
+            echo "::error::tag ${{ github.ref_name }} does not match package.json version v$VERSION"
+            exit 1
+          fi
+          echo "tag ${{ github.ref_name }} matches package.json v$VERSION"
       - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
