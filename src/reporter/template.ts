@@ -303,7 +303,7 @@ function shotPanel(
   >
     ${
       src
-        ? `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(alt)}" loading="lazy"${describedById ? ` aria-describedby="${describedById}"` : ''} />`
+        ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy"${describedById ? ` aria-describedby="${describedById}"` : ''} />`
         : `<p class="shot-missing">no ${name} screenshot for this action</p>`
     }
   </div>`;
@@ -363,8 +363,4 @@ function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
-}
-
-function escapeAttribute(value: string): string {
-  return escapeHtml(value);
 }
