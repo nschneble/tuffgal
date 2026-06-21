@@ -65,6 +65,78 @@ describe('resolveRunSet', () => {
     assert.equal(runSet.length, 1);
     assert.deepEqual(runSet[0], { name: 'viewport', width: 800, height: 600 });
   });
+
+  it('runs the intersection of story.breakpoints with config, in config order', () => {
+    // Story lists desktop-then-mobile, but the kept entries follow CONFIG
+    // order (mobile, desktop) so every story's modes appear consistently.
+    const config = configWithBreakpoints([
+      { name: 'mobile', width: 375, height: 667 },
+      { name: 'tablet', width: 768, height: 1024 },
+      { name: 'desktop', width: 1280, height: 800 },
+    ]);
+    const runSet = resolveRunSet(
+      story({ breakpoints: ['desktop', 'mobile'] }),
+      config,
+    );
+    assert.deepEqual(
+      runSet.map((bp) => bp.name),
+      ['mobile', 'desktop'],
+    );
+    // Kept entries carry their resolved registry dimensions, not the story's.
+    assert.deepEqual(runSet[0], { name: 'mobile', width: 375, height: 667 });
+  });
+
+  it('drops a story breakpoint the project did not configure', () => {
+    // The story asks for `tablet`, but the project only runs mobile+desktop:
+    // a story cannot force a mode the project opted out of.
+    const config = configWithBreakpoints([
+      { name: 'mobile', width: 375, height: 667 },
+      { name: 'desktop', width: 1280, height: 800 },
+    ]);
+    const runSet = resolveRunSet(
+      story({ breakpoints: ['mobile', 'tablet'] }),
+      config,
+    );
+    assert.deepEqual(
+      runSet.map((bp) => bp.name),
+      ['mobile'],
+    );
+  });
+
+  it('falls back to the full configured set when the intersection is empty', () => {
+    // The story named only modes the project does not run. Rather than
+    // silently producing zero screenshots (a vacuous pass that hides the
+    // regression the story exists to catch), surface the mismatch by running
+    // the full matrix.
+    const config = configWithBreakpoints([
+      { name: 'mobile', width: 375, height: 667 },
+      { name: 'desktop', width: 1280, height: 800 },
+    ]);
+    const runSet = resolveRunSet(story({ breakpoints: ['tablet'] }), config);
+    assert.deepEqual(
+      runSet.map((bp) => bp.name),
+      ['mobile', 'desktop'],
+    );
+  });
+
+  it('lets a per-story viewport override win over story.breakpoints', () => {
+    // `viewport` is the more specific, dimension-level instruction: when both
+    // are set it pins one size and opts out of the matrix; `breakpoints` is
+    // ignored.
+    const config = configWithBreakpoints([
+      { name: 'mobile', width: 375, height: 667 },
+      { name: 'desktop', width: 1280, height: 800 },
+    ]);
+    const runSet = resolveRunSet(
+      story({
+        viewport: { width: 800, height: 600 },
+        breakpoints: ['mobile'],
+      }),
+      config,
+    );
+    assert.equal(runSet.length, 1);
+    assert.deepEqual(runSet[0], { name: 'viewport', width: 800, height: 600 });
+  });
 });
 
 describe('mergeStoryStatus', () => {

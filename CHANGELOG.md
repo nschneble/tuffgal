@@ -6,6 +6,17 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
+### Added
+
+- Named breakpoint modes (`mobile` 375×667, `tablet` 768×1024, `laptop` 1024×768, `desktop` 1280×800) with widths tracking Tailwind's `sm`/`md`/`lg`/`xl` dimensional breakpoints
+- `breakpoints` config field to pick which modes a project runs; each runs in its own browser context and produces its own baseline (`<action>/<breakpoint>.png`), actual, diff, and a11y snapshot
+- Per-story `breakpoints` field to restrict a story to a subset of the configured modes (intersected with the project's set, in config order)
+- Per-breakpoint grouping in the HTML report — each mode's results render under a labelled region showing the mode name and its dimensions
+
+### Changed
+
+- Existing single-`viewport` configs keep working unchanged (resolved as a single synthetic breakpoint); pre-breakpoint baselines at `<action>/0.png` are read as a fallback so they keep matching until promoted
+
 ## [0.1.0-alpha.8] — 2026-06-20
 
 ### Fixed

@@ -32,6 +32,13 @@ export default defineConfig({
   // leave this empty — cookies always persist via Playwright storage state.
   // storageStatePins: ['session_token'],
 
+  // Named viewport modes to run, keyed to Tailwind widths:
+  //   mobile 375x667 · tablet 768x1024 · laptop 1024x768 · desktop 1280x800
+  // Each mode gets its own baseline + a group in the report. Omit to run a
+  // single mode at \`viewport\` below (back-compat). A story can opt into a
+  // subset via its own \`breakpoints\` field.
+  // breakpoints: ['mobile', 'tablet', 'laptop', 'desktop'],
+
   viewport: { width: 1280, height: 800 },
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 15_000,

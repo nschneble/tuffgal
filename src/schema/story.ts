@@ -1,4 +1,18 @@
 import { z } from 'zod';
+import { BREAKPOINTS } from '../config.ts';
+
+/**
+ * The set of valid per-story breakpoint names, derived from the single
+ * {@link BREAKPOINTS} registry so the schema cannot drift from the modes the
+ * runner actually knows how to render. `Object.keys` loses the literal-union
+ * type, so we assert it back to a non-empty tuple of {@link BreakpointName}s —
+ * `z.enum` needs a literal tuple to produce a typed enum, and the registry is
+ * a non-empty `const` object so the cast is sound.
+ */
+const breakpointNames = Object.keys(BREAKPOINTS) as [
+  keyof typeof BREAKPOINTS,
+  ...(keyof typeof BREAKPOINTS)[],
+];
 
 export const storyStepSchema = z.object({
   action: z.string().min(1),
@@ -54,6 +68,27 @@ export const storySchema = z.object({
       height: z.number().int().positive(),
     })
     .optional(),
+  /**
+   * Restrict this story to a SUBSET of the project's configured breakpoints,
+   * drawn from the built-in registry (`mobile` | `tablet` | `laptop` |
+   * `desktop`). Use it for stories that only make sense at certain widths —
+   * e.g. a mobile-only nav drawer that has no desktop counterpart, or a
+   * dense dashboard that should only be screenshotted on wide modes.
+   *
+   * The story runs at the INTERSECTION of these names with the project's
+   * `config.breakpoints`, in config order: a story cannot force a mode the
+   * project opted out of (an unconfigured name is simply skipped). If the
+   * intersection is empty — the story named only breakpoints the project
+   * does not run — the story falls back to the full configured set rather
+   * than being silently dropped (see `resolveRunSet`). Omit the field to run
+   * every configured breakpoint.
+   *
+   * Mutually exclusive in spirit with the per-story `viewport` override:
+   * `viewport` pins one exact pixel size and opts the story OUT of the
+   * breakpoint matrix entirely, so when both are set `viewport` wins and
+   * `breakpoints` is ignored.
+   */
+  breakpoints: z.array(z.enum(breakpointNames)).optional(),
   actions: z.array(storyStepSchema).min(1),
 });
 

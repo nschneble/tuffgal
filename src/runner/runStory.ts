@@ -172,12 +172,29 @@ export async function runStoryWithBrowser(
 }
 
 /**
- * Picks the breakpoint(s) this story runs at. A per-story `viewport` override
- * is an explicit, pre-breakpoints escape hatch: honour it as a single run
- * under the synthetic name `viewport` so legacy stories render exactly as they
- * did before this feature — we do not multiply a story that pinned its own
- * viewport across the project's breakpoint matrix. Otherwise the story runs at
- * every configured breakpoint, in order.
+ * Picks the breakpoint(s) this story runs at, in strict precedence order:
+ *
+ *   1. `story.viewport` (explicit pixel override) — honour it as a single run
+ *      under the synthetic name `viewport`. This is the pre-breakpoints escape
+ *      hatch: a story that pinned its own viewport opts OUT of the project's
+ *      breakpoint matrix entirely and renders at exactly one size, exactly as
+ *      it did before this feature. It wins over `story.breakpoints` because it
+ *      is the more specific, dimension-level instruction.
+ *
+ *   2. `story.breakpoints` (named subset) — run the INTERSECTION of the
+ *      story's requested names with the project's configured breakpoints,
+ *      preserving CONFIG order (not the story's listing order) so a story's
+ *      modes always appear in the same order as every other story's. A name
+ *      the project did not configure is dropped: a story cannot force a mode
+ *      the project opted out of. If the intersection is EMPTY — the story
+ *      named only breakpoints the project does not run — we fall back to the
+ *      full configured set rather than running the story at zero breakpoints.
+ *      Running all is the safer failure mode: a story silently producing no
+ *      screenshots looks like a pass and hides the very regression the story
+ *      exists to catch, whereas running the full matrix surfaces the
+ *      story/config mismatch as visible (and reviewable) output.
+ *
+ *   3. neither — run every configured breakpoint, in order (the default).
  */
 export function resolveRunSet(
   story: Story,
@@ -185,6 +202,17 @@ export function resolveRunSet(
 ): ResolvedBreakpoint[] {
   if (story.viewport) {
     return [{ name: 'viewport', ...story.viewport }];
+  }
+  if (story.breakpoints && story.breakpoints.length > 0) {
+    const requested = new Set<string>(story.breakpoints);
+    // Filter the resolved config list (not the story's list) so the kept
+    // entries already carry their registry dimensions and stay in config
+    // order. Unconfigured names in `story.breakpoints` have no match here and
+    // simply fall away.
+    const intersection = config.breakpoints.filter((breakpoint) =>
+      requested.has(breakpoint.name),
+    );
+    return intersection.length > 0 ? intersection : config.breakpoints;
   }
   return config.breakpoints;
 }

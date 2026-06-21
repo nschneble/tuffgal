@@ -81,6 +81,7 @@ comments and no trailing commas. Field notes follow each block.
 - `fixtures`: Optional DB fixtures applied before the browser launches.
 - `flow`: Optional flow-inventory tag for coverage.
 - `viewport`: Optional per-story override of the config viewport.
+- `breakpoints`: Optional subset of the project's configured modes to run this story at (e.g. `["mobile"]`). See [per-story breakpoint selection](#per-story-breakpoint-selection).
 - `actions`: At least one required. Each entry names an action and optionally supplies its `parameters` map.
 
 ### Passing parameters from a story to an action
@@ -401,6 +402,39 @@ can override it for their own browser context:
 to this story's browser context — consumer stories that inherit storage
 state via `needs` still resolve their own viewport from their own override
 or the config default. Storage state and viewport are independent.
+
+A per-story `viewport` pins one exact size and opts the story OUT of the
+breakpoint matrix entirely — it runs once, not once per configured mode.
+When you want a story at a subset of named modes (not a one-off pixel size),
+use `breakpoints` below instead.
+
+## Per-story breakpoint selection
+
+When your project configures multiple [`breakpoints`](config.md#breakpoints-breakpointname),
+every story runs at all of them by default. A story that only makes sense at
+certain widths can name a subset:
+
+```json
+{
+  "story": "Mobile user opens the nav drawer",
+  "breakpoints": ["mobile"],
+  "actions": [{ "action": "open-nav-drawer" }]
+}
+```
+
+The story runs at the **intersection** of its `breakpoints` with the
+project's configured set, in config order. Two rules keep this predictable:
+
+- A story cannot force a mode the project did not configure — an
+  unconfigured name is simply dropped.
+- If the intersection is empty (the story named only modes the project does
+  not run), the story falls back to the full configured set rather than
+  being silently skipped — a story producing zero screenshots would look
+  like a pass and hide the regression it exists to catch.
+
+Precedence when more than one is set: a per-story `viewport` wins over
+`breakpoints` (it is the more specific, dimension-level instruction), which
+wins over the project default.
 
 ## Authoring checklist
 

@@ -72,12 +72,54 @@ through Playwright's storage state.
 JWTs, refresh tokens, dark-mode preferences, and accessibility preferences
 are common candidates.
 
+### `breakpoints?: BreakpointName[]`
+
+The named viewport modes your project runs, drawn from the built-in
+registry. Each selected mode renders in its own browser context, in the
+order you list (duplicates dropped), and produces its own baseline, diff,
+and a11y snapshot — so a single story can be regression-tested at several
+widths at once.
+
+| Name      | Dimensions | Tailwind anchor  |
+| --------- | ---------- | ---------------- |
+| `mobile`  | 375 × 667  | below `sm` (640) |
+| `tablet`  | 768 × 1024 | `md` (768)       |
+| `laptop`  | 1024 × 768 | `lg` (1024)      |
+| `desktop` | 1280 × 800 | `xl` (1280)      |
+
+Widths track Tailwind's default dimensional breakpoints so your runs line
+up with the responsive cutoffs your CSS already keys off of. Heights are
+conventional companions (Tailwind breakpoints are width-only).
+
+```ts
+breakpoints: ['mobile', 'desktop'],
+```
+
+When set, `breakpoints` supersedes `viewport`. When omitted, Tuffgal falls
+back to `viewport` (if set), and finally to a single `desktop` mode — so
+existing single-viewport projects keep working unchanged.
+
+Baselines are keyed by mode at `<baselines>/<action>/<breakpoint>.png`. A
+project that baselined before this feature has its snapshots at the legacy
+`<action>/0.png`; Tuffgal reads that as a fallback so existing baselines
+keep matching. As you adopt new modes, their first run reports `new` until
+you `approve` a baseline for each one.
+
+Individual stories can run a subset of these modes via the story-level
+`breakpoints` field. See
+[authoring.md](authoring.md#per-story-breakpoint-selection).
+
 ### `viewport?: { width: number; height: number }`
 
-Browser viewport. Defaults to `{ width: 1280, height: 800 }`. Choose
-dimensions that match the breakpoint most of your stories should screenshot
-at. Individual stories can override this for their own browser context via
-the story-level `viewport` field. See [authoring.md](authoring.md#per-story-viewport-override).
+Browser viewport. Defaults to `{ width: 1280, height: 800 }`. This is the
+pre-breakpoints way to set one size, kept for back-compat: when you set
+`viewport` and omit `breakpoints`, Tuffgal runs a single mode at these
+dimensions. Prefer `breakpoints` for new projects.
+
+A story can override this for its own browser context via the story-level
+`viewport` field — which pins one exact size and opts that story OUT of the
+breakpoint matrix entirely. See
+[authoring.md](authoring.md#per-story-viewport-override).
 
 ### `defaultTimeoutMs?: number`
 
@@ -181,6 +223,7 @@ The `tuffgal` package's barrel re-exports the following:
 
 ```ts
 import {
+  BREAKPOINTS,
   approveAll,
   defineConfig,
   init,
@@ -191,6 +234,7 @@ import {
   type ActionResult,
   type ActionStatus,
   type ApproveOptions,
+  type BreakpointName,
   type DatabaseBridge,
   type DevServerBridge,
   type Hint,
