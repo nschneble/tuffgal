@@ -45,6 +45,29 @@ export interface DevServerBridge {
 }
 
 /**
+ * Built-in named viewport modes. Widths track Tailwind's default dimensional
+ * breakpoints (sm=640, md=768, lg=1024, xl=1280) so a project's Tuffgal runs
+ * line up with the responsive cutoffs its CSS already keys off of:
+ *   - mobile  sits below the sm=640 cutoff (small-phone portrait)
+ *   - tablet  lands exactly on md=768
+ *   - laptop  lands exactly on lg=1024
+ *   - desktop lands exactly on xl=1280, and preserves the historical
+ *     1280x800 default so projects that never opt into breakpoints render
+ *     identically to before this feature existed.
+ * Heights are conventional companions to each width, not Tailwind values
+ * (Tailwind breakpoints are width-only).
+ */
+export const BREAKPOINTS = {
+  mobile: { width: 375, height: 667 },
+  tablet: { width: 768, height: 1024 },
+  laptop: { width: 1024, height: 768 },
+  desktop: { width: 1280, height: 800 },
+} as const;
+
+/** A built-in breakpoint name. Other modules reuse this for per-mode work. */
+export type BreakpointName = keyof typeof BREAKPOINTS;
+
+/**
  * Static paths Tuffgal reads + writes. All relative to the config file's
  * location.
  */
@@ -83,6 +106,15 @@ export interface TuffgalConfig {
   storageStatePins?: string[];
   /** Browser viewport. Defaults to 1280x800. */
   viewport?: { width: number; height: number };
+  /**
+   * Named breakpoint modes this project runs, drawn from the built-in
+   * {@link BREAKPOINTS} registry (`mobile` | `tablet` | `laptop` |
+   * `desktop`). Order is preserved and duplicates are dropped. When set, this
+   * supersedes `viewport`. When omitted, Tuffgal falls back to `viewport`
+   * (if set) and finally to a single `desktop` breakpoint, so existing
+   * single-viewport projects keep working unchanged.
+   */
+  breakpoints?: BreakpointName[];
   /** Default Playwright locator + action timeout. Defaults to 10_000. */
   defaultTimeoutMs?: number;
   /** Default navigation timeout. Defaults to 15_000. */
@@ -119,6 +151,18 @@ export interface ResolvedConfig {
   baseUrl: string;
   apiHost: string | undefined;
   storageStatePins: string[];
+  /**
+   * Resolved breakpoint modes, always non-empty. Each entry carries the
+   * viewport dimensions to render at. Built from `config.breakpoints` when
+   * set, else a single synthesised `viewport` entry for legacy projects,
+   * else a single `desktop` default.
+   */
+  breakpoints: Array<{ name: string; width: number; height: number }>;
+  /**
+   * Single viewport the current runner still reads. Kept in sync with the
+   * first resolved breakpoint until the runner is rewired to iterate
+   * `breakpoints` directly, so nothing downstream breaks meanwhile.
+   */
   viewport: { width: number; height: number };
   defaultTimeoutMs: number;
   navigationTimeoutMs: number;
@@ -240,9 +284,27 @@ export function assertValidConfig(input: unknown, source: string): void {
       fail('`viewport` must be `{ width: number, height: number }`.');
     }
   }
+
+  if (config.breakpoints !== undefined) {
+    const validNames = Object.keys(BREAKPOINTS);
+    const breakpoints = config.breakpoints;
+    if (!Array.isArray(breakpoints) || breakpoints.length === 0) {
+      fail('`breakpoints` must be a non-empty array of breakpoint names.');
+    }
+    for (const name of breakpoints as unknown[]) {
+      if (typeof name !== 'string' || !validNames.includes(name)) {
+        fail(
+          `\`breakpoints\` contains an unknown breakpoint ${JSON.stringify(
+            name,
+          )}. Valid names: ${validNames.join(', ')}.`,
+        );
+      }
+    }
+  }
 }
 
 function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
+  const breakpoints = resolveBreakpoints(input);
   return {
     rootDir,
     paths: {
@@ -258,7 +320,11 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     baseUrl: input.baseUrl,
     apiHost: input.apiHost,
     storageStatePins: input.storageStatePins ?? [],
-    viewport: input.viewport ?? DEFAULTS.viewport,
+    breakpoints,
+    // Keep the legacy single-viewport field in lockstep with the first
+    // resolved breakpoint so the current runner keeps working until Wave 3
+    // teaches it to iterate `breakpoints`.
+    viewport: { width: breakpoints[0].width, height: breakpoints[0].height },
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:
       input.navigationTimeoutMs ?? DEFAULTS.navigationTimeoutMs,
@@ -270,4 +336,45 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
       ? resolve(rootDir, input.flowInventory)
       : undefined,
   };
+}
+
+/**
+ * Collapses the three mutually-exclusive viewport-selection inputs into a
+ * single always-non-empty breakpoint list, in priority order:
+ *   1. explicit `breakpoints` — each name resolved to its registry
+ *      dimensions, original order preserved, duplicates dropped;
+ *   2. legacy `viewport` — wrapped as one synthetic `viewport` breakpoint so
+ *      pre-breakpoints projects render exactly as before;
+ *   3. neither — a single `desktop` breakpoint (1280x800), matching the
+ *      historical `DEFAULTS.viewport`.
+ * `assertValidConfig` has already rejected unknown/empty `breakpoints`, so by
+ * the time we get here every name is a valid registry key.
+ */
+type ResolvedBreakpoint = { name: string; width: number; height: number };
+
+function resolveBreakpoints(
+  input: TuffgalConfig,
+): [ResolvedBreakpoint, ...ResolvedBreakpoint[]] {
+  const [head, ...tail] = input.breakpoints ?? [];
+  if (head !== undefined) {
+    // assertValidConfig guarantees every name is a valid registry key. Seed
+    // the result with the (now provably-present) first name so the return
+    // type stays a non-empty tuple, then append the rest minus duplicates.
+    // Keeping the tuple shape lets callers read `breakpoints[0]` without an
+    // undefined check under noUncheckedIndexedAccess.
+    const seen = new Set<BreakpointName>([head]);
+    const resolved: [ResolvedBreakpoint, ...ResolvedBreakpoint[]] = [
+      { name: head, ...BREAKPOINTS[head] },
+    ];
+    for (const name of tail) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      resolved.push({ name, ...BREAKPOINTS[name] });
+    }
+    return resolved;
+  }
+  if (input.viewport) {
+    return [{ name: 'viewport', ...input.viewport }];
+  }
+  return [{ name: 'desktop', ...BREAKPOINTS.desktop }];
 }
