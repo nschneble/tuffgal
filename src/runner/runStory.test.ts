@@ -119,6 +119,38 @@ describe('resolveRunSet', () => {
     );
   });
 
+  it('falls back to the single synthetic mode when a story names breakpoints against a legacy viewport-only config', () => {
+    // The story schema accepts any registry name regardless of what the
+    // project configured, so a story can declare `breakpoints` before the
+    // project migrates off a legacy `viewport`. The resolved config is then a
+    // single synthetic `viewport` mode; intersecting it with a real name is
+    // empty, so the story falls back to that one mode rather than vanishing.
+    const config = configWithBreakpoints([
+      { name: 'viewport', width: 800, height: 600 },
+    ]);
+    const runSet = resolveRunSet(story({ breakpoints: ['mobile'] }), config);
+    assert.deepEqual(runSet, [{ name: 'viewport', width: 800, height: 600 }]);
+  });
+
+  it('collapses duplicate story breakpoint names to a single run', () => {
+    // Filtering the (already-deduped) config list rather than mapping the
+    // story's list means a repeated story name cannot double a run — guard
+    // that invariant so a refactor to map over story.breakpoints can't
+    // silently reintroduce doubled screenshots.
+    const config = configWithBreakpoints([
+      { name: 'mobile', width: 375, height: 667 },
+      { name: 'desktop', width: 1280, height: 800 },
+    ]);
+    const runSet = resolveRunSet(
+      story({ breakpoints: ['mobile', 'mobile'] }),
+      config,
+    );
+    assert.deepEqual(
+      runSet.map((bp) => bp.name),
+      ['mobile'],
+    );
+  });
+
   it('lets a per-story viewport override win over story.breakpoints', () => {
     // `viewport` is the more specific, dimension-level instruction: when both
     // are set it pins one size and opts out of the matrix; `breakpoints` is
