@@ -32,6 +32,12 @@ export interface RunActionOptions {
   parameters: Record<string, string>;
   storyFile: string;
   config: ResolvedConfig;
+  /**
+   * Named breakpoint this action is rendering at. `runStory` threads the
+   * current breakpoint context's name down so the resulting paths (and the
+   * `ActionResult.breakpoint` tag) key per-mode captures apart.
+   */
+  breakpoint: string;
 }
 
 const DEFAULT_RETRY_ATTEMPTS = 2;
@@ -48,7 +54,7 @@ const DEFAULT_EXPECT_TIMEOUT_MS = 10_000;
 export async function runAction(
   options: RunActionOptions,
 ): Promise<ActionResult> {
-  const { action, page, parameters, storyFile, config } = options;
+  const { action, page, parameters, storyFile, config, breakpoint } = options;
   validateParameters(action, parameters);
   const startedAt = new Date();
   const attempts = action.retry?.attempts ?? DEFAULT_RETRY_ATTEMPTS;
@@ -67,7 +73,14 @@ export async function runAction(
         backoffMs,
       );
     } catch (error) {
-      return failedResult(action, parameters, startedAt, index, error);
+      return failedResult(
+        action,
+        parameters,
+        breakpoint,
+        startedAt,
+        index,
+        error,
+      );
     }
   }
 
@@ -78,6 +91,7 @@ export async function runAction(
       return failedResult(
         action,
         parameters,
+        breakpoint,
         startedAt,
         action.steps.length,
         error,
@@ -86,7 +100,12 @@ export async function runAction(
   }
 
   if (action.screenshot === false) {
-    return successResultWithoutScreenshot(action, parameters, startedAt);
+    return successResultWithoutScreenshot(
+      action,
+      parameters,
+      breakpoint,
+      startedAt,
+    );
   }
 
   return captureAndCompare({
@@ -96,6 +115,7 @@ export async function runAction(
     config,
     storyFile,
     startedAt,
+    breakpoint,
   });
 }
 
@@ -212,22 +232,33 @@ interface CaptureOptions {
   config: ResolvedConfig;
   storyFile: string;
   startedAt: Date;
+  breakpoint: string;
 }
+
+/**
+ * Which existing baseline the read matched, so the caller knows where to source
+ * the a11y companion from:
+ *   - `breakpoint` — the breakpoint-keyed baseline existed (a11y from
+ *     `paths.a11yBaseline`);
+ *   - `legacy` — only the pre-breakpoint `0.png` existed; we compare against it
+ *     but never auto-promote it to the breakpoint location (a11y from
+ *     `paths.legacyA11yBaseline`).
+ * When neither exists the lock returns `undefined` (a fresh baseline is written
+ * and the action reads as `new`), so that case needs no member here.
+ */
+type BaselineSource = 'breakpoint' | 'legacy';
 
 async function captureAndCompare(
   options: CaptureOptions,
 ): Promise<ActionResult> {
-  const { action, page, parameters, config, storyFile, startedAt } = options;
+  const { action, page, parameters, config, storyFile, startedAt, breakpoint } =
+    options;
   const paths = pathsFor({
     baselinesDir: config.paths.baselines,
     reportDir: config.paths.report,
     storyFile,
     actionName: action.action,
-    // Wave 3: thread real breakpoint. `pathsFor` now requires a breakpoint to
-    // key per-breakpoint captures apart; this single caller still runs one
-    // capture per action, so pin `desktop` (the historical 1280x800 default)
-    // until the runner iterates `config.breakpoints`.
-    breakpoint: 'desktop',
+    breakpoint,
   });
   const masks = resolveMasks(page, action.mask, parameters);
   const actualPng = await capturePage(page, masks);
@@ -235,17 +266,38 @@ async function captureAndCompare(
   const a11yJson = await captureA11yTree(page);
   await writeText(paths.a11yActual, a11yJson);
 
-  const baseResult = baseResultFor(action.action, parameters, startedAt);
+  const baseResult = baseResultFor(
+    action.action,
+    parameters,
+    breakpoint,
+    startedAt,
+  );
 
   // Read-then-maybe-create the baseline under a per-path lock so two stories
   // sharing this action can't both see "no baseline" and race to write it.
   // The first holder writes; later holders observe the baseline it produced.
-  const baselinePng = await withBaselineLock(
+  //
+  // Read order under the lock:
+  //   1. breakpoint-keyed baseline (`<action>/<bp>.png`) — the canonical
+  //      location once a project has migrated to named breakpoints;
+  //   2. legacy baseline (`<action>/0.png`) — a project baselined before this
+  //      feature has only this file. We compare against it (so it still gates
+  //      pass/changed) but deliberately do NOT copy it forward to the
+  //      breakpoint location: a real baseline already lives at the legacy path,
+  //      and promotion to the new layout is `tuffgal approve`'s job, not a
+  //      silent side effect of a read. Auto-creating here would also clobber
+  //      the legacy file's role as the shared fallback for every breakpoint.
+  //   3. neither — write a fresh breakpoint baseline and report `new`.
+  const found = await withBaselineLock(
     paths.baseline,
-    async (): Promise<Buffer | undefined> => {
+    async (): Promise<{ png: Buffer; source: BaselineSource } | undefined> => {
       const existing = await readBaseline(paths.baseline);
       if (existing !== undefined) {
-        return existing;
+        return { png: existing, source: 'breakpoint' };
+      }
+      const legacy = await readBaseline(paths.legacyBaseline);
+      if (legacy !== undefined) {
+        return { png: legacy, source: 'legacy' };
       }
       await writePng(paths.baseline, actualPng);
       await writeText(paths.a11yBaseline, a11yJson);
@@ -253,7 +305,7 @@ async function captureAndCompare(
     },
   );
 
-  if (baselinePng === undefined) {
+  if (found === undefined) {
     return finishResult(baseResult, {
       status: 'new',
       baselinePath: paths.baseline,
@@ -263,7 +315,13 @@ async function captureAndCompare(
     });
   }
 
-  const baselineA11y = await readJsonBaseline(paths.a11yBaseline);
+  const baselinePng = found.png;
+  // When the comparison ran against the legacy baseline, its a11y companion
+  // lives at the legacy a11y path too — read that one so the a11yChanged
+  // signal reflects the baseline we actually diffed against.
+  const a11yBaselinePathForRead =
+    found.source === 'legacy' ? paths.legacyA11yBaseline : paths.a11yBaseline;
+  const baselineA11y = await readJsonBaseline(a11yBaselinePathForRead);
   const a11yChanged = baselineA11y !== undefined && baselineA11y !== a11yJson;
 
   try {
@@ -339,11 +397,13 @@ async function captureA11yTree(page: Page): Promise<string> {
 function baseResultFor(
   actionName: string,
   parameters: Record<string, string>,
+  breakpoint: string,
   startedAt: Date,
 ): ActionResult {
   return {
     action: actionName,
     parameters,
+    breakpoint,
     status: 'pass',
     startedAt: startedAt.toISOString(),
     finishedAt: startedAt.toISOString(),
@@ -354,12 +414,14 @@ function baseResultFor(
 function successResultWithoutScreenshot(
   action: Action,
   parameters: Record<string, string>,
+  breakpoint: string,
   startedAt: Date,
 ): ActionResult {
   const finishedAt = new Date();
   return {
     action: action.action,
     parameters,
+    breakpoint,
     status: 'pass',
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
@@ -370,6 +432,7 @@ function successResultWithoutScreenshot(
 function failedResult(
   action: Action,
   parameters: Record<string, string>,
+  breakpoint: string,
   startedAt: Date,
   failedIndex: number,
   error: unknown,
@@ -378,6 +441,7 @@ function failedResult(
   return {
     action: action.action,
     parameters,
+    breakpoint,
     status: 'failed',
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
