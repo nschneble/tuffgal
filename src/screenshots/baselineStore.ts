@@ -14,6 +14,17 @@ export interface BaselinePaths {
   diff: string;
   a11yBaseline: string;
   a11yActual: string;
+  /**
+   * Pre-breakpoint baseline location (`<action>/0.png`). Populated so a caller
+   * that finds no breakpoint-keyed baseline can fall back to a project's
+   * legacy committed baseline instead of declaring every action `new`. Read
+   * fallback only — the runner reads `baseline` first, then `legacyBaseline`;
+   * promotion always writes the breakpoint-keyed `baseline`, never this. See
+   * the Wave 3 read-order note below.
+   */
+  legacyBaseline: string;
+  /** Pre-breakpoint a11y baseline (`<action>/a11y.yaml`); see `legacyBaseline`. */
+  legacyA11yBaseline: string;
 }
 
 export interface StoreOptions {
@@ -21,6 +32,25 @@ export interface StoreOptions {
   reportDir: string;
   storyFile: string;
   actionName: string;
+  /**
+   * Named breakpoint (`mobile`/`desktop`/…) this capture renders at. Every
+   * returned path is keyed by it so two breakpoints of the same action never
+   * collide on disk. Required — the single legacy caller in `runAction` passes
+   * a literal until Wave 3 threads the real breakpoint through.
+   */
+  breakpoint: string;
+}
+
+/**
+ * Reduces an arbitrary breakpoint name to a filesystem-safe path segment.
+ * Breakpoint names are simple lowercase identifiers today (`mobile`, `desktop`,
+ * the synthetic `viewport`), but they reach here as plain strings, so we guard
+ * against anything a future config could supply: lowercase, then collapse every
+ * character outside `[a-z0-9_-]` to `-`. Deterministic so the runner and
+ * `approve` derive byte-identical paths from the same name.
+ */
+function breakpointSegment(breakpoint: string): string {
+  return breakpoint.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
 }
 
 /**
@@ -28,42 +58,67 @@ export interface StoreOptions {
  * (regenerated each run), and diff (regenerated when a baseline existed and
  * the diff was non-zero) PNGs. Centralised so the runner and the CLI's
  * `approve` command agree on layout.
+ *
+ * Every path is keyed by both action name and breakpoint so per-breakpoint
+ * captures of the same action stay isolated: baselines nest the breakpoint as a
+ * filename under the action directory (`<action>/<breakpoint>.png`), while
+ * report-side artifacts splice it into the filename
+ * (`<action>.<breakpoint>.actual.png`) since they already share one per-story
+ * directory.
  */
 export function pathsFor(options: StoreOptions): BaselinePaths {
   const storySlug = options.storyFile.replace(/\.json$/i, '');
+  const bp = breakpointSegment(options.breakpoint);
   return {
-    baseline: join(options.baselinesDir, options.actionName, '0.png'),
+    baseline: join(options.baselinesDir, options.actionName, `${bp}.png`),
     actual: join(
       options.reportDir,
       'screenshots',
       storySlug,
-      `${options.actionName}.actual.png`,
+      `${options.actionName}.${bp}.actual.png`,
     ),
     diff: join(
       options.reportDir,
       'screenshots',
       storySlug,
-      `${options.actionName}.diff.png`,
+      `${options.actionName}.${bp}.diff.png`,
     ),
-    a11yBaseline: join(options.baselinesDir, options.actionName, 'a11y.yaml'),
+    a11yBaseline: join(
+      options.baselinesDir,
+      options.actionName,
+      `${bp}.a11y.yaml`,
+    ),
     a11yActual: join(
       options.reportDir,
       'screenshots',
       storySlug,
-      `${options.actionName}.a11y.yaml`,
+      `${options.actionName}.${bp}.a11y.yaml`,
+    ),
+    // Pre-breakpoint locations. A project baselined before this feature has
+    // its only committed snapshot here; the runner (Wave 3) reads `baseline`
+    // first and falls back to these when the breakpoint-keyed file is absent,
+    // so existing baselines keep matching instead of all reading as `new`.
+    legacyBaseline: join(options.baselinesDir, options.actionName, '0.png'),
+    legacyA11yBaseline: join(
+      options.baselinesDir,
+      options.actionName,
+      'a11y.yaml',
     ),
   };
 }
 
 /**
- * Per-path serialization for baseline creation. A baseline is keyed only on
- * action name (see `pathsFor`), so when the same action runs in two stories
+ * Per-path serialization for baseline creation. A baseline is keyed on action
+ * name *and* breakpoint (see `pathsFor` — the breakpoint is part of the
+ * filename), so when the same action+breakpoint runs in two stories
  * concurrently (`workers > 1`, fresh run), both would otherwise read "no
- * baseline" and race to write the same `0.png` — a torn or last-writer-wins
- * file. Callers wrap their read-then-maybe-write critical section in this lock
- * so exactly one writer per baseline path runs at a time; later callers see the
- * baseline the first writer produced. The map is keyed by path, so distinct
- * actions never block each other; entries are bounded by the action count.
+ * baseline" and race to write the same `<breakpoint>.png` — a torn or
+ * last-writer-wins file. Callers wrap their read-then-maybe-write critical
+ * section in this lock so exactly one writer per baseline path runs at a time;
+ * later callers see the baseline the first writer produced. The map is keyed by
+ * path, so distinct actions — and now distinct breakpoints of the same action,
+ * whose baseline paths differ — never block each other; entries are bounded by
+ * action count times breakpoint count.
  */
 const baselineLocks = new Map<string, Promise<void>>();
 

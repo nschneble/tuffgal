@@ -223,6 +223,11 @@ async function captureAndCompare(
     reportDir: config.paths.report,
     storyFile,
     actionName: action.action,
+    // Wave 3: thread real breakpoint. `pathsFor` now requires a breakpoint to
+    // key per-breakpoint captures apart; this single caller still runs one
+    // capture per action, so pin `desktop` (the historical 1280x800 default)
+    // until the runner iterates `config.breakpoints`.
+    breakpoint: 'desktop',
   });
   const masks = resolveMasks(page, action.mask, parameters);
   const actualPng = await capturePage(page, masks);
