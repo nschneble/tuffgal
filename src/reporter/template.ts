@@ -1,4 +1,6 @@
 import { relative } from 'node:path';
+import { BREAKPOINTS } from '../config.ts';
+import type { BreakpointName } from '../config.ts';
 import type {
   ActionResult,
   ActionStatus,
@@ -156,11 +158,6 @@ function renderStory(
   storyIndex: number,
   reportDir: string,
 ): string {
-  const actions = story.actions
-    .map((action, actionIndex) =>
-      renderAction(action, `s${storyIndex}-a${actionIndex}`, reportDir),
-    )
-    .join('\n');
   return `
 <li class="story" data-status="${story.status}">
   <div class="story-row">
@@ -171,10 +168,125 @@ function renderStory(
   </div>
   <p class="story-prose">${escapeHtml(story.story)}</p>
   <br/>
-  <ol class="actions" aria-label="Actions">
+  ${renderStoryActions(story, storyIndex, reportDir)}
+</li>
+`;
+}
+
+/**
+ * Renders a story's action results, grouped by breakpoint when the run carried
+ * per-mode tags (Wave 3+). Two shapes:
+ *
+ *   - Legacy / single-mode: when NO action carries a `breakpoint` tag (a
+ *     pre-breakpoints results.json), we fall through to the historical flat
+ *     `<ol class="actions">` — byte-identical to before this wave, so old
+ *     reports and the report.js shot/bulk-toggle queries keep resolving.
+ *   - Per-breakpoint: when ANY action is tagged, we render one labelled group
+ *     per mode (in first-seen order, which the runner emits in
+ *     `config.breakpoints` order) so a reader sees results per mode instead of
+ *     a flat interleaved list. An action with `screenshot:false` still appears
+ *     once per breakpoint (Wave 3) — it simply renders as a shot-less row in
+ *     its mode's group, no special-casing needed.
+ *
+ * `actionId` is keyed by the action's index in the original flat array
+ * (`s<story>-a<flatIndex>`), NOT a per-group counter, so radio `name`s and
+ * shot-panel `id`s stay globally unique across groups and report.js's
+ * `name="<actionId>-shot"` radio grouping never collides between modes.
+ */
+function renderStoryActions(
+  story: StoryResult,
+  storyIndex: number,
+  reportDir: string,
+): string {
+  const grouped = story.actions.some(
+    (action) => action.breakpoint !== undefined,
+  );
+  if (!grouped) {
+    const actions = story.actions
+      .map((action, actionIndex) =>
+        renderAction(action, `s${storyIndex}-a${actionIndex}`, reportDir),
+      )
+      .join('\n');
+    return `<ol class="actions" aria-label="Actions">
+    ${actions}
+  </ol>`;
+  }
+
+  // Bucket actions by breakpoint, preserving first-seen order. The synthetic
+  // legacy `viewport` mode and any untagged stragglers (mixed-schema artifact)
+  // collapse under a stable key so nothing is dropped from the report.
+  const order: string[] = [];
+  const buckets = new Map<
+    string,
+    Array<{ action: ActionResult; id: string }>
+  >();
+  story.actions.forEach((action, actionIndex) => {
+    const key = action.breakpoint ?? '';
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
+      order.push(key);
+    }
+    buckets.get(key)!.push({ action, id: `s${storyIndex}-a${actionIndex}` });
+  });
+
+  return order
+    .map((key, groupIndex) =>
+      renderBreakpointGroup(
+        key,
+        buckets.get(key)!,
+        `s${storyIndex}-bp${groupIndex}`,
+        reportDir,
+      ),
+    )
+    .join('\n');
+}
+
+/**
+ * One labelled per-breakpoint subsection. The mode label carries the
+ * breakpoint NAME and its DIMENSIONS (looked up from {@link BREAKPOINTS} when
+ * the name is a registry key; omitted for the synthetic `viewport` legacy mode
+ * and any untagged straggler, which have no canonical dimensions). The label is
+ * a non-heading caption: stories live inside an `<ol>` list, not a heading
+ * outline, so injecting an `<h3>` here would orphan it under the story's
+ * list-item subtree. Instead the action list is a labelled region — its
+ * `<ol aria-labelledby>` points at the visible caption, so assistive tech
+ * announces e.g. "mobile 375 by 667 pixels actions" (or "viewport actions" for
+ * the legacy straggler group) without minting a heading level. The trailing
+ * "actions" is an sr-only token inside the caption — "actions" never appears in
+ * the visible label, only in the computed accessible name, so the region reads
+ * as a list of actions rather than a bare dimension string.
+ *
+ * Dimensions render in their own `aria-hidden` span (decorative "375×667")
+ * with an sr-only longhand ("375 by 667 pixels") so screen readers don't read
+ * the `×` glyph as "x" mid-stream.
+ */
+function renderBreakpointGroup(
+  key: string,
+  entries: Array<{ action: ActionResult; id: string }>,
+  groupId: string,
+  reportDir: string,
+): string {
+  const labelId = `${groupId}-label`;
+  const name = key === '' ? 'viewport' : key;
+  const dimensions =
+    key in BREAKPOINTS ? BREAKPOINTS[key as BreakpointName] : undefined;
+  const dimensionMarkup = dimensions
+    ? `<span class="breakpoint-dimensions" aria-hidden="true">${dimensions.width}×${dimensions.height}</span><span class="sr-only">${dimensions.width} by ${dimensions.height} pixels</span>`
+    : '';
+  const actions = entries
+    .map(({ action, id }) => renderAction(action, id, reportDir))
+    .join('\n');
+  return `
+<div class="breakpoint-group">
+  <p class="breakpoint-label" id="${labelId}">
+    <span class="breakpoint-name">${escapeHtml(name)}</span>
+    ${dimensionMarkup}
+    <span class="sr-only"> actions</span>
+  </p>
+  <ol class="actions" aria-labelledby="${labelId}">
     ${actions}
   </ol>
-</li>
+</div>
 `;
 }
 
