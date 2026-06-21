@@ -378,15 +378,25 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
         makeStory({
           status: 'pass',
           actions: [
-            makeAction({ action: 'visit-home', breakpoint: 'mobile' }),
-            makeAction({ action: 'visit-home', breakpoint: 'desktop' }),
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'mobile',
+              breakpointWidth: 375,
+              breakpointHeight: 667,
+            }),
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'desktop',
+              breakpointWidth: 1280,
+              breakpointHeight: 800,
+            }),
           ],
         }),
       ],
     });
     const html = renderReport(result, REPORT_DIR);
 
-    // Two breakpoint groups, one per mode, in first-seen (config) order.
+    // Two breakpoint groups, one per mode, in first-seen (run-set) order.
     assert.equal(
       countOccurrences(html, '<div class="breakpoint-group">'),
       2,
@@ -460,53 +470,21 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     );
   });
 
-  it('renders the synthetic legacy `viewport` group with no dimensions', () => {
-    const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
-      stories: [
-        makeStory({
-          status: 'pass',
-          // Mixed-schema: one tagged with the synthetic `viewport` mode (which
-          // has no registry dimensions) sits alongside a real breakpoint.
-          actions: [
-            makeAction({ action: 'visit-home', breakpoint: 'viewport' }),
-            makeAction({ action: 'visit-home', breakpoint: 'tablet' }),
-          ],
-        }),
-      ],
-    });
-    const html = renderReport(result, REPORT_DIR);
-
-    assert.ok(
-      html.includes('<span class="breakpoint-name">viewport</span>'),
-      'synthetic viewport mode name rendered',
-    );
-    // viewport is not a BREAKPOINTS registry key, so it has no dimensions span.
-    const viewportLabelStart = html.indexOf('id="s0-bp0-label"');
-    const viewportLabelEnd = html.indexOf('</p>', viewportLabelStart);
-    const viewportLabel = html.slice(viewportLabelStart, viewportLabelEnd);
-    assert.ok(
-      !viewportLabel.includes('breakpoint-dimensions'),
-      'viewport group omits the dimensions span (no registry dimensions)',
-    );
-    // The real tablet group still carries its dimensions.
-    assert.ok(
-      html.includes(
-        '<span class="breakpoint-dimensions" aria-hidden="true">768×1024</span><span class="sr-only">768 by 1024 pixels</span>',
-      ),
-      'tablet group still renders 768×1024 dimensions',
-    );
-  });
-
-  it('falls through to the flat legacy list when no action carries a breakpoint', () => {
+  it('renders a single-mode story as a flat list with no breakpoint chrome', () => {
+    // The common default `desktop` project ran at one mode: no caption, no
+    // group wrapper — just the historical flat list.
     const result = makeRunResult({
       totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
       stories: [
         makeStory({
           status: 'pass',
           actions: [
-            makeAction({ action: 'visit-home' }),
-            makeAction({ action: 'second' }),
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'desktop',
+              breakpointWidth: 1280,
+              breakpointHeight: 800,
+            }),
           ],
         }),
       ],
@@ -515,15 +493,54 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
 
     assert.ok(
       html.includes('<ol class="actions" aria-label="Actions">'),
-      'untagged results render the historical flat aria-label="Actions" list',
+      'single-mode story renders the flat aria-label="Actions" list',
     );
     assert.ok(
       !html.includes('<div class="breakpoint-group">'),
-      'no breakpoint-group wrapper when nothing carries a breakpoint tag',
+      'no breakpoint-group wrapper for a single mode',
     );
     assert.ok(
       !html.includes('class="breakpoint-label"'),
-      'no breakpoint caption when ungrouped',
+      'no breakpoint caption for a single mode',
+    );
+  });
+
+  it('labels a group with the recorded override dimensions', () => {
+    // Two modes force grouping; the desktop group shows the recorded override
+    // (1440×900), never a registry default for the name.
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      stories: [
+        makeStory({
+          status: 'pass',
+          actions: [
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'mobile',
+              breakpointWidth: 375,
+              breakpointHeight: 667,
+            }),
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'desktop',
+              breakpointWidth: 1440,
+              breakpointHeight: 900,
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-dimensions" aria-hidden="true">1440×900</span><span class="sr-only">1440 by 900 pixels</span>',
+      ),
+      'overridden desktop renders the recorded 1440×900',
+    );
+    assert.ok(
+      !html.includes('1280×800'),
+      'the registry default for the overridden mode does not leak into the label',
     );
   });
 });

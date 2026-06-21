@@ -14,6 +14,22 @@ const breakpointNames = Object.keys(BREAKPOINTS) as [
   ...(keyof typeof BREAKPOINTS)[],
 ];
 
+/**
+ * One per-story breakpoint selection, identical to the config-level
+ * {@link BreakpointSelector}: a bare registry name (render at that mode's
+ * built-in dimensions) or `{ name, width?, height? }` to override them. An
+ * omitted `width`/`height` inherits the REGISTRY default — a story's list
+ * stands alone and never references the project's per-mode overrides.
+ */
+const breakpointSelectorSchema = z.union([
+  z.enum(breakpointNames),
+  z.object({
+    name: z.enum(breakpointNames),
+    width: z.number().int().positive().optional(),
+    height: z.number().int().positive().optional(),
+  }),
+]);
+
 export const storyStepSchema = z.object({
   action: z.string().min(1),
   parameters: z.record(z.string(), z.string()).optional(),
@@ -56,39 +72,17 @@ export const storySchema = z.object({
    */
   flow: z.string().min(1).optional(),
   /**
-   * Override the config-level `viewport` for this story's browser
-   * context. Width and height must be positive integers. Stories without
-   * an override inherit the resolved config default. The override does
-   * not cascade onto consumer stories that inherit storage state via
-   * `needs`/`produces` — each story resolves its own viewport.
+   * The breakpoints this story runs at, REPLACING the project's
+   * `config.breakpoints` for this story only (not intersected with them). Each
+   * entry is a bare registry name (`mobile` | `tablet` | `laptop` | `desktop`)
+   * or `{ name, width?, height? }`. Use it for stories whose modes differ from
+   * the project default — e.g. a project that defaults to `desktop`+`laptop`
+   * while a mobile-only nav drawer runs just `mobile`, or a dense dashboard
+   * that needs a wider desktop. A story may name a mode the project does not;
+   * the list stands alone, resolved against the registry. Must be non-empty
+   * when present; omit the field to run the project's `config.breakpoints`.
    */
-  viewport: z
-    .object({
-      width: z.number().int().positive(),
-      height: z.number().int().positive(),
-    })
-    .optional(),
-  /**
-   * Restrict this story to a SUBSET of the project's configured breakpoints,
-   * drawn from the built-in registry (`mobile` | `tablet` | `laptop` |
-   * `desktop`). Use it for stories that only make sense at certain widths —
-   * e.g. a mobile-only nav drawer that has no desktop counterpart, or a
-   * dense dashboard that should only be screenshotted on wide modes.
-   *
-   * The story runs at the INTERSECTION of these names with the project's
-   * `config.breakpoints`, in config order: a story cannot force a mode the
-   * project opted out of (an unconfigured name is simply skipped). If the
-   * intersection is empty — the story named only breakpoints the project
-   * does not run — the story falls back to the full configured set rather
-   * than being silently dropped (see `resolveRunSet`). Omit the field to run
-   * every configured breakpoint.
-   *
-   * Mutually exclusive in spirit with the per-story `viewport` override:
-   * `viewport` pins one exact pixel size and opts the story OUT of the
-   * breakpoint matrix entirely, so when both are set `viewport` wins and
-   * `breakpoints` is ignored.
-   */
-  breakpoints: z.array(z.enum(breakpointNames)).optional(),
+  breakpoints: z.array(breakpointSelectorSchema).min(1).optional(),
   actions: z.array(storyStepSchema).min(1),
 });
 

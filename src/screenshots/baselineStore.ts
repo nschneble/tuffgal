@@ -42,8 +42,8 @@ export interface StoreOptions {
 
 /**
  * Reduces an arbitrary breakpoint name to a filesystem-safe path segment.
- * Breakpoint names are simple lowercase identifiers today (`mobile`, `desktop`,
- * the synthetic `viewport`), but they reach here as plain strings, so we guard
+ * Breakpoint names are simple lowercase identifiers today (`mobile`, `tablet`,
+ * `laptop`, `desktop`), but they reach here as plain strings, so we guard
  * against anything a future config could supply: lowercase, then collapse every
  * character outside `[a-z0-9_-]` to `-`. Deterministic so the runner and
  * `approve` derive byte-identical paths from the same name.

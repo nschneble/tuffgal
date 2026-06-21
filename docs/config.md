@@ -12,13 +12,69 @@ Run `npx tuffgal init` to scaffold a starter config in the current directory.
 import { defineConfig } from 'tuffgal';
 
 export default defineConfig({
+  // ── Required ───────────────────────────────────────────────────────────
+  // Where Tuffgal reads + writes content. All paths relative to this file.
   paths: {
-    /* … */
+    actions: 'tuffgal/actions', // action JSON files (recurses into subdirs)
+    stories: 'tuffgal/stories', // story JSON files (recurses into subdirs)
+    baselines: 'tuffgal/baselines', // committed PNG baselines + a11y snapshots
+    report: 'tuffgal/report', // generated HTML report + traces (gitignore)
+    authState: 'tuffgal/.auth', // produces/needs label cache (gitignore); default '.auth'
   },
+  // Base URL of the running app. Every `navigate` path resolves against this.
   baseUrl: 'http://localhost:5173',
-  // optional fields below
+
+  // ── Optional ───────────────────────────────────────────────────────────
+  // API origin (scheme + host + port). Scopes `intercept` patterns to API
+  // traffic. Set only when the API runs on a different origin than the app.
+  apiHost: 'http://localhost:3000',
+  // localStorage keys to persist across stories. Cookies persist regardless.
+  storageStatePins: ['auth.jwt', 'prefs.theme'],
+  // Viewport modes to run, from the built-in registry. Each renders in its
+  // own context + produces its own baseline/diff/a11y snapshot. Bare name
+  // uses registry dimensions; object overrides width/height. Order kept,
+  // duplicate names dropped (first wins). Omit → single `desktop` (1280×800).
+  breakpoints: ['mobile', { name: 'desktop', width: 1440, height: 900 }],
+  // Default Playwright locator + action timeout (ms). Default: 10_000.
+  defaultTimeoutMs: 10_000,
+  // Default navigation timeout for `navigate` steps (ms). Default: 15_000.
+  navigationTimeoutMs: 15_000,
+  // ISO timestamp pinned into the browser via `page.clock.install`, so
+  // relative-time UI stays deterministic. Default: '2026-01-15T12:00:00.000Z'.
+  frozenTime: '2026-01-15T12:00:00.000Z',
+  // Story-pool worker count. Default: min(cpus / 2, 4).
+  workers: 4,
+  // Consumer DB bridge. `reset` runs once before the first story; each
+  // `fixtures[name]` runs before any story declaring `fixtures: ["name"]`.
+  // Fixtures must be idempotent — no per-story reset. Omit for static sites.
+  database: {
+    reset: async () => {
+      /* truncate + reseed */
+    },
+    fixtures: {
+      'name-1': async () => {
+        /* idempotent inserts */
+      },
+    },
+  },
+  // Dev-server bridge for `--manage-servers` / `supervise`. Omit when you
+  // run the dev servers yourself.
+  devServers: {
+    command: 'npm run dev', // run via `sh -c` so pipes + `&&` work
+    cwd: '.', // relative to this file; default rootDir
+    healthCheck: [{ url: 'http://localhost:5173', timeoutMs: 30_000 }], // TCP probe
+    shutdownSignal: 'SIGTERM', // default 'SIGTERM'
+    shutdownGraceMs: 5000, // grace before SIGKILL; default 5000
+  },
+  // Markdown file listing user journeys. Tuffgal reports the ratio of
+  // stories with a matching `flow:` as `customCoverage.flows`.
+  flowInventory: 'docs/flows.md',
 });
 ```
+
+The example above sets every field for illustration. In practice only
+`paths` and `baseUrl` are required — every optional field falls back to the
+default noted in its comment. The sections below detail each one.
 
 `defineConfig` is an identity helper. Its only job is type-checking the
 object against `TuffgalConfig`. The default export is what Tuffgal loads at
@@ -72,11 +128,11 @@ through Playwright's storage state.
 JWTs, refresh tokens, dark-mode preferences, and accessibility preferences
 are common candidates.
 
-### `breakpoints?: BreakpointName[]`
+### `breakpoints?: BreakpointSelector[]`
 
-The named viewport modes your project runs, drawn from the built-in
-registry. Each selected mode renders in its own browser context, in the
-order you list (duplicates dropped), and produces its own baseline, diff,
+The viewport modes your project runs, drawn from the built-in registry. Each
+selected mode renders in its own browser context, in the order you list
+(duplicate names dropped, first wins), and produces its own baseline, diff,
 and a11y snapshot — so a single story can be regression-tested at several
 widths at once.
 
@@ -91,35 +147,26 @@ Widths track Tailwind's default dimensional breakpoints so your runs line
 up with the responsive cutoffs your CSS already keys off of. Heights are
 conventional companions (Tailwind breakpoints are width-only).
 
+Each entry is either a bare registry name or a `{ name, width?, height? }`
+object that overrides that mode's dimensions. An omitted `width`/`height`
+inherits the registry default.
+
 ```ts
-breakpoints: ['mobile', 'desktop'],
+breakpoints: ['mobile', { name: 'desktop', width: 1440, height: 900 }],
 ```
 
-When set, `breakpoints` supersedes `viewport`. When omitted, Tuffgal falls
-back to `viewport` (if set), and finally to a single `desktop` mode — so
-existing single-viewport projects keep working unchanged.
+When omitted, Tuffgal runs a single `desktop` mode (1280 × 800), so a project
+that never thinks about breakpoints just works.
 
 Baselines are keyed by mode at `<baselines>/<action>/<breakpoint>.png`. A
-project that baselined before this feature has its snapshots at the legacy
-`<action>/0.png`; Tuffgal reads that as a fallback so existing baselines
-keep matching. As you adopt new modes, their first run reports `new` until
-you `approve` a baseline for each one.
+project that baselined before breakpoints existed has its snapshots at the
+legacy `<action>/0.png`; Tuffgal reads that as a fallback so existing
+baselines keep matching. As you adopt new modes, their first run reports
+`new` until you `approve` a baseline for each one.
 
-Individual stories can run a subset of these modes via the story-level
-`breakpoints` field. See
+Individual stories can run their own modes via the story-level `breakpoints`
+field, which **replaces** this set for that story. See
 [authoring.md](authoring.md#per-story-breakpoint-selection).
-
-### `viewport?: { width: number; height: number }`
-
-Browser viewport. Defaults to `{ width: 1280, height: 800 }`. This is the
-pre-breakpoints way to set one size, kept for back-compat: when you set
-`viewport` and omit `breakpoints`, Tuffgal runs a single mode at these
-dimensions. Prefer `breakpoints` for new projects.
-
-A story can override this for its own browser context via the story-level
-`viewport` field — which pins one exact size and opts that story OUT of the
-breakpoint matrix entirely. See
-[authoring.md](authoring.md#per-story-viewport-override).
 
 ### `defaultTimeoutMs?: number`
 

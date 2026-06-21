@@ -7,6 +7,7 @@ export {
   defineConfig,
   loadConfig,
   type BreakpointName,
+  type BreakpointSelector,
   type DatabaseBridge,
   type DevServerBridge,
   type PathsConfig,

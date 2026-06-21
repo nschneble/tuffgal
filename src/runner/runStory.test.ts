@@ -17,9 +17,10 @@ import {
 } from './runStory.ts';
 
 /**
- * Minimal ResolvedConfig carrying only the breakpoints field `resolveRunSet`
- * reads. Cast through `unknown` so the test does not have to spell out the
- * dozen unrelated resolved fields just to exercise breakpoint selection.
+ * Minimal ResolvedConfig carrying only the field `resolveRunSet` reads — the
+ * resolved breakpoint list. Cast through `unknown` so the test does not have to
+ * spell out the dozen unrelated resolved fields just to exercise breakpoint
+ * selection.
  */
 function configWithBreakpoints(
   breakpoints: ResolvedConfig['breakpoints'],
@@ -36,138 +37,85 @@ function story(overrides: Partial<Story> = {}): Story {
 }
 
 describe('resolveRunSet', () => {
-  it('iterates every configured breakpoint in order when the story has no viewport override', () => {
+  it('runs the project breakpoints, in order, when the story names none', () => {
     const config = configWithBreakpoints([
       { name: 'mobile', width: 375, height: 667 },
       { name: 'desktop', width: 1280, height: 800 },
     ]);
     const runSet = resolveRunSet(story(), config);
-    assert.deepEqual(
-      runSet.map((bp) => bp.name),
-      ['mobile', 'desktop'],
-    );
-    // The dimensions come straight from the resolved config — no remapping.
-    assert.deepEqual(runSet[0], { name: 'mobile', width: 375, height: 667 });
-  });
-
-  it('honours a per-story viewport override as a single synthetic "viewport" run', () => {
-    // A story that pinned its own viewport pre-breakpoints must NOT be
-    // multiplied across the project matrix — it runs exactly once, at its own
-    // dimensions, under the synthetic name `viewport` (mirrors config.ts).
-    const config = configWithBreakpoints([
+    assert.deepEqual(runSet, [
       { name: 'mobile', width: 375, height: 667 },
       { name: 'desktop', width: 1280, height: 800 },
     ]);
-    const runSet = resolveRunSet(
-      story({ viewport: { width: 800, height: 600 } }),
-      config,
-    );
-    assert.equal(runSet.length, 1);
-    assert.deepEqual(runSet[0], { name: 'viewport', width: 800, height: 600 });
   });
 
-  it('runs the intersection of story.breakpoints with config, in config order', () => {
-    // Story lists desktop-then-mobile, but the kept entries follow CONFIG
-    // order (mobile, desktop) so every story's modes appear consistently.
+  it('replaces the project breakpoints with the story list, in story order', () => {
+    // No intersection: the story's list stands alone and follows the STORY's
+    // order, not the config's.
     const config = configWithBreakpoints([
       { name: 'mobile', width: 375, height: 667 },
-      { name: 'tablet', width: 768, height: 1024 },
       { name: 'desktop', width: 1280, height: 800 },
     ]);
     const runSet = resolveRunSet(
       story({ breakpoints: ['desktop', 'mobile'] }),
       config,
     );
-    assert.deepEqual(
-      runSet.map((bp) => bp.name),
-      ['mobile', 'desktop'],
-    );
-    // Kept entries carry their resolved registry dimensions, not the story's.
-    assert.deepEqual(runSet[0], { name: 'mobile', width: 375, height: 667 });
-  });
-
-  it('drops a story breakpoint the project did not configure', () => {
-    // The story asks for `tablet`, but the project only runs mobile+desktop:
-    // a story cannot force a mode the project opted out of.
-    const config = configWithBreakpoints([
-      { name: 'mobile', width: 375, height: 667 },
+    assert.deepEqual(runSet, [
       { name: 'desktop', width: 1280, height: 800 },
-    ]);
-    const runSet = resolveRunSet(
-      story({ breakpoints: ['mobile', 'tablet'] }),
-      config,
-    );
-    assert.deepEqual(
-      runSet.map((bp) => bp.name),
-      ['mobile'],
-    );
-  });
-
-  it('falls back to the full configured set when the intersection is empty', () => {
-    // The story named only modes the project does not run. Rather than
-    // silently producing zero screenshots (a vacuous pass that hides the
-    // regression the story exists to catch), surface the mismatch by running
-    // the full matrix.
-    const config = configWithBreakpoints([
       { name: 'mobile', width: 375, height: 667 },
-      { name: 'desktop', width: 1280, height: 800 },
     ]);
-    const runSet = resolveRunSet(story({ breakpoints: ['tablet'] }), config);
-    assert.deepEqual(
-      runSet.map((bp) => bp.name),
-      ['mobile', 'desktop'],
-    );
   });
 
-  it('falls back to the single synthetic mode when a story names breakpoints against a legacy viewport-only config', () => {
-    // The story schema accepts any registry name regardless of what the
-    // project configured, so a story can declare `breakpoints` before the
-    // project migrates off a legacy `viewport`. The resolved config is then a
-    // single synthetic `viewport` mode; intersecting it with a real name is
-    // empty, so the story falls back to that one mode rather than vanishing.
+  it('lets a story run a mode the project does not configure', () => {
+    // A mobile-only story in a desktop-only project: the story replaces the
+    // project set outright, so `mobile` runs even though the project never
+    // lists it. Resolved against the registry.
     const config = configWithBreakpoints([
-      { name: 'viewport', width: 800, height: 600 },
+      { name: 'desktop', width: 1280, height: 800 },
     ]);
     const runSet = resolveRunSet(story({ breakpoints: ['mobile'] }), config);
-    assert.deepEqual(runSet, [{ name: 'viewport', width: 800, height: 600 }]);
+    assert.deepEqual(runSet, [{ name: 'mobile', width: 375, height: 667 }]);
   });
 
-  it('collapses duplicate story breakpoint names to a single run', () => {
-    // Filtering the (already-deduped) config list rather than mapping the
-    // story's list means a repeated story name cannot double a run — guard
-    // that invariant so a refactor to map over story.breakpoints can't
-    // silently reintroduce doubled screenshots.
+  it('collapses duplicate story breakpoint names, first entry wins', () => {
     const config = configWithBreakpoints([
-      { name: 'mobile', width: 375, height: 667 },
-      { name: 'desktop', width: 1280, height: 800 },
-    ]);
-    const runSet = resolveRunSet(
-      story({ breakpoints: ['mobile', 'mobile'] }),
-      config,
-    );
-    assert.deepEqual(
-      runSet.map((bp) => bp.name),
-      ['mobile'],
-    );
-  });
-
-  it('lets a per-story viewport override win over story.breakpoints', () => {
-    // `viewport` is the more specific, dimension-level instruction: when both
-    // are set it pins one size and opts out of the matrix; `breakpoints` is
-    // ignored.
-    const config = configWithBreakpoints([
-      { name: 'mobile', width: 375, height: 667 },
       { name: 'desktop', width: 1280, height: 800 },
     ]);
     const runSet = resolveRunSet(
       story({
-        viewport: { width: 800, height: 600 },
-        breakpoints: ['mobile'],
+        breakpoints: [{ name: 'mobile', width: 400 }, 'mobile'],
       }),
       config,
     );
-    assert.equal(runSet.length, 1);
-    assert.deepEqual(runSet[0], { name: 'viewport', width: 800, height: 600 });
+    // The later bare `mobile` is dropped; the first entry's override survives.
+    assert.deepEqual(runSet, [{ name: 'mobile', width: 400, height: 667 }]);
+  });
+
+  it('overrides a mode dimension via a story selector object', () => {
+    const config = configWithBreakpoints([
+      { name: 'desktop', width: 1280, height: 800 },
+    ]);
+    const runSet = resolveRunSet(
+      story({
+        breakpoints: [{ name: 'desktop', width: 1920, height: 1080 }],
+      }),
+      config,
+    );
+    assert.deepEqual(runSet, [{ name: 'desktop', width: 1920, height: 1080 }]);
+  });
+
+  it('inherits the REGISTRY dimension for an axis the story override omits', () => {
+    // The story list never references the project's per-mode overrides — an
+    // omitted axis falls back to the registry default, not the config size.
+    const config = configWithBreakpoints([
+      { name: 'desktop', width: 1440, height: 900 },
+    ]);
+    const runSet = resolveRunSet(
+      story({ breakpoints: [{ name: 'desktop', width: 1920 }] }),
+      config,
+    );
+    // height is the registry 800, NOT the config's overridden 900.
+    assert.deepEqual(runSet, [{ name: 'desktop', width: 1920, height: 800 }]);
   });
 });
 

@@ -34,7 +34,6 @@ describe('assertValidConfig', () => {
       ...validConfig(),
       apiHost: 'http://localhost:4000',
       workers: 4,
-      viewport: { width: 1280, height: 800 },
       flowInventory: 'docs/flows.md',
     };
     assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
@@ -69,11 +68,6 @@ describe('assertValidConfig', () => {
     assert.throws(() => assertValidConfig(config, SOURCE), /workers/);
   });
 
-  it('rejects a malformed viewport', () => {
-    const config = { ...validConfig(), viewport: { width: 1280 } };
-    assert.throws(() => assertValidConfig(config, SOURCE), /viewport/);
-  });
-
   it('accepts a valid breakpoints selection', () => {
     const config = { ...validConfig(), breakpoints: ['mobile', 'desktop'] };
     assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
@@ -97,6 +91,30 @@ describe('assertValidConfig', () => {
   it('rejects an empty breakpoints array', () => {
     const config = { ...validConfig(), breakpoints: [] };
     assert.throws(() => assertValidConfig(config, SOURCE), /breakpoints/);
+  });
+
+  it('accepts breakpoint override objects mixed with bare names', () => {
+    const config = {
+      ...validConfig(),
+      breakpoints: ['mobile', { name: 'desktop', width: 1440, height: 900 }],
+    };
+    assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+  });
+
+  it('rejects an unknown breakpoint name inside an override object', () => {
+    const config = {
+      ...validConfig(),
+      breakpoints: [{ name: 'phablet', width: 600 }],
+    };
+    assert.throws(() => assertValidConfig(config, SOURCE), /phablet/);
+  });
+
+  it('rejects a non-positive dimension in a breakpoint override', () => {
+    const config = {
+      ...validConfig(),
+      breakpoints: [{ name: 'desktop', width: 0 }],
+    };
+    assert.throws(() => assertValidConfig(config, SOURCE), /width/);
   });
 });
 
@@ -143,18 +161,6 @@ describe('loadConfig breakpoint resolution', () => {
     });
   });
 
-  it('synthesises a single viewport breakpoint from a legacy viewport', async () => {
-    const resolved = await load('viewport: { width: 800, height: 600 },');
-    assert.deepEqual(resolved.breakpoints, [
-      { name: 'viewport', width: 800, height: 600 },
-    ]);
-    assert.deepEqual(resolved.breakpoints[0], {
-      name: 'viewport',
-      width: 800,
-      height: 600,
-    });
-  });
-
   it('resolves named breakpoints to their registry dimensions', async () => {
     const resolved = await load("breakpoints: ['mobile', 'tablet'],");
     assert.deepEqual(resolved.breakpoints, [
@@ -179,9 +185,36 @@ describe('loadConfig breakpoint resolution', () => {
     );
   });
 
-  it('lets breakpoints win over a legacy viewport when both are set', async () => {
+  it('layers per-entry overrides over registry dimensions', async () => {
     const resolved = await load(
-      "viewport: { width: 800, height: 600 }, breakpoints: ['laptop'],",
+      "breakpoints: [{ name: 'desktop', width: 1440, height: 900 }, 'mobile'],",
+    );
+    assert.deepEqual(resolved.breakpoints, [
+      { name: 'desktop', width: 1440, height: 900 },
+      { name: 'mobile', width: 375, height: 667 },
+    ]);
+  });
+
+  it('inherits the registry dimension for an axis an override omits', async () => {
+    const resolved = await load("breakpoints: [{ name: 'desktop', width: 1440 }],");
+    assert.deepEqual(resolved.breakpoints, [
+      { name: 'desktop', width: 1440, height: 800 },
+    ]);
+  });
+
+  it('keeps the first entry when a name is duplicated with differing dimensions', async () => {
+    const resolved = await load(
+      "breakpoints: [{ name: 'desktop', width: 1440 }, { name: 'desktop', width: 1600 }],",
+    );
+    // First wins: the later duplicate (and its dimensions) is dropped.
+    assert.deepEqual(resolved.breakpoints, [
+      { name: 'desktop', width: 1440, height: 800 },
+    ]);
+  });
+
+  it('resolves a single overridden breakpoint', async () => {
+    const resolved = await load(
+      "breakpoints: [{ name: 'laptop', width: 1024, height: 768 }],",
     );
     assert.deepEqual(resolved.breakpoints, [
       { name: 'laptop', width: 1024, height: 768 },
