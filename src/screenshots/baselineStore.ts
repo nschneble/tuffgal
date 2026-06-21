@@ -20,7 +20,7 @@ export interface BaselinePaths {
    * legacy committed baseline instead of declaring every action `new`. Read
    * fallback only — the runner reads `baseline` first, then `legacyBaseline`;
    * promotion always writes the breakpoint-keyed `baseline`, never this. See
-   * the Wave 3 read-order note below.
+   * the read-order note below.
    */
   legacyBaseline: string;
   /** Pre-breakpoint a11y baseline (`<action>/a11y.yaml`); see `legacyBaseline`. */
@@ -35,8 +35,7 @@ export interface StoreOptions {
   /**
    * Named breakpoint (`mobile`/`desktop`/…) this capture renders at. Every
    * returned path is keyed by it so two breakpoints of the same action never
-   * collide on disk. Required — the single legacy caller in `runAction` passes
-   * a literal until Wave 3 threads the real breakpoint through.
+   * collide on disk.
    */
   breakpoint: string;
 }
@@ -95,9 +94,9 @@ export function pathsFor(options: StoreOptions): BaselinePaths {
       `${options.actionName}.${bp}.a11y.yaml`,
     ),
     // Pre-breakpoint locations. A project baselined before this feature has
-    // its only committed snapshot here; the runner (Wave 3) reads `baseline`
-    // first and falls back to these when the breakpoint-keyed file is absent,
-    // so existing baselines keep matching instead of all reading as `new`.
+    // its only committed snapshot here; the runner reads `baseline` first and
+    // falls back to these when the breakpoint-keyed file is absent, so existing
+    // baselines keep matching instead of all reading as `new`.
     legacyBaseline: join(options.baselinesDir, options.actionName, '0.png'),
     legacyA11yBaseline: join(
       options.baselinesDir,

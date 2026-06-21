@@ -6,7 +6,7 @@ import {
   type BrowserContext,
   type Page,
 } from 'playwright';
-import type { ResolvedConfig } from '../config.ts';
+import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
 import type { Action } from '../schema/action.ts';
 import type { Story } from '../schema/story.ts';
 import type {
@@ -52,7 +52,15 @@ export async function runStory(options: RunStoryOptions): Promise<StoryResult> {
   }
 }
 
-async function runStoryWithBrowser(
+/**
+ * Drives every selected breakpoint of one story against an already-launched
+ * browser. Split out from `runStory` (which owns browser lifecycle + fixtures)
+ * so tests can exercise the per-breakpoint loop — context isolation, the
+ * failed-action-does-not-abort-others guarantee, trace-zip uniqueness, `produces`
+ * persistence, and the throw-closes-context invariant — against fake
+ * Browser/BrowserContext/Page objects without launching a real Chromium.
+ */
+export async function runStoryWithBrowser(
   browser: Browser,
   options: RunStoryOptions,
   startedAt: Date,
@@ -87,52 +95,67 @@ async function runStoryWithBrowser(
       ignoreHTTPSErrors: true,
       permissions: ['clipboard-read', 'clipboard-write'],
     });
-    context.setDefaultTimeout(config.defaultTimeoutMs);
-    await context.tracing.start({
-      screenshots: true,
-      snapshots: true,
-      sources: true,
-      title: `${file} (${breakpoint.name})`,
-    });
-    const page = await context.newPage();
-    await page.clock.install({ time: config.frozenTime });
-    if (coverage) {
-      await coverage.startForPage(page);
-    }
+    // The whole per-breakpoint lifecycle runs under try/finally so the context
+    // is ALWAYS closed, even when something inside throws. Throw policy: an
+    // *action* failing is a normal visual-regression outcome — it returns a
+    // `failed` ActionResult, the loop records it, and the remaining breakpoints
+    // still run (the documented "one breakpoint failing does not abort the
+    // others" guarantee). A *thrown* exception here is different: it means the
+    // harness itself faulted (tracing/coverage threw, the page crashed, an
+    // unexpected error escaped `runActionsForBreakpoint`). That is not a diff to
+    // report — it is an infra fault, so we let it propagate and abort the whole
+    // story. The `finally` guarantees we still close this context first, so a
+    // throw can never leak the in-flight BrowserContext (the bug this guards).
+    try {
+      context.setDefaultTimeout(config.defaultTimeoutMs);
+      await context.tracing.start({
+        screenshots: true,
+        snapshots: true,
+        sources: true,
+        title: `${file} (${breakpoint.name})`,
+      });
+      const page = await context.newPage();
+      await page.clock.install({ time: config.frozenTime });
+      if (coverage) {
+        await coverage.startForPage(page);
+      }
 
-    const breakpointRun = await runActionsForBreakpoint(
-      page,
-      breakpoint.name,
-      options,
-    );
-    results.push(...breakpointRun.results);
-    storyStatus = mergeStoryStatus(storyStatus, breakpointRun.status);
+      const breakpointRun = await runActionsForBreakpoint(
+        page,
+        breakpoint.name,
+        options,
+      );
+      results.push(...breakpointRun.results);
+      storyStatus = mergeStoryStatus(storyStatus, breakpointRun.status);
 
-    if (coverage) {
-      await coverage.stopForPage(page);
+      if (coverage) {
+        await coverage.stopForPage(page);
+      }
+      const tracePath = await stopTracing(
+        context,
+        config,
+        file,
+        breakpoint.name,
+        breakpointRun.status,
+      );
+      if (tracePath && firstTracePath === undefined) {
+        firstTracePath = tracePath;
+      }
+      // Persist once, from the first breakpoint that ran clean. A failure in
+      // this breakpoint does not abort the loop — the remaining breakpoints
+      // still run so the report shows every mode — but it cannot supply the
+      // auth state.
+      if (
+        !producedPersisted &&
+        breakpointRun.status !== 'failed' &&
+        produces.length > 0
+      ) {
+        await persistProducedAuthState(context, config, produces);
+        producedPersisted = true;
+      }
+    } finally {
+      await context.close();
     }
-    const tracePath = await stopTracing(
-      context,
-      config,
-      file,
-      breakpoint.name,
-      breakpointRun.status,
-    );
-    if (tracePath && firstTracePath === undefined) {
-      firstTracePath = tracePath;
-    }
-    // Persist once, from the first breakpoint that ran clean. A failure in this
-    // breakpoint does not abort the loop — the remaining breakpoints still run
-    // so the report shows every mode — but it cannot supply the auth state.
-    if (
-      !producedPersisted &&
-      breakpointRun.status !== 'failed' &&
-      produces.length > 0
-    ) {
-      await persistProducedAuthState(context, config, produces);
-      producedPersisted = true;
-    }
-    await context.close();
   }
 
   const finishedAt = new Date();
@@ -146,12 +169,6 @@ async function runStoryWithBrowser(
     actions: results,
     tracePath: firstTracePath,
   };
-}
-
-interface ResolvedBreakpoint {
-  name: string;
-  width: number;
-  height: number;
 }
 
 /**

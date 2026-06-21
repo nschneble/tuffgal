@@ -68,6 +68,18 @@ export const BREAKPOINTS = {
 export type BreakpointName = keyof typeof BREAKPOINTS;
 
 /**
+ * One resolved breakpoint mode: a name plus the viewport dimensions to render
+ * at. Built from a {@link BREAKPOINTS} registry entry (or a per-project legacy
+ * `viewport`). Exported so the runner consumes the same shape `resolveConfig`
+ * emits instead of redeclaring its own copy.
+ */
+export type ResolvedBreakpoint = {
+  name: string;
+  width: number;
+  height: number;
+};
+
+/**
  * Static paths Tuffgal reads + writes. All relative to the config file's
  * location.
  */
@@ -155,15 +167,11 @@ export interface ResolvedConfig {
    * Resolved breakpoint modes, always non-empty. Each entry carries the
    * viewport dimensions to render at. Built from `config.breakpoints` when
    * set, else a single synthesised `viewport` entry for legacy projects,
-   * else a single `desktop` default.
+   * else a single `desktop` default. Typed as a non-empty tuple so callers
+   * can read `breakpoints[0]` without an undefined check under
+   * noUncheckedIndexedAccess.
    */
-  breakpoints: Array<{ name: string; width: number; height: number }>;
-  /**
-   * Single viewport the current runner still reads. Kept in sync with the
-   * first resolved breakpoint until the runner is rewired to iterate
-   * `breakpoints` directly, so nothing downstream breaks meanwhile.
-   */
-  viewport: { width: number; height: number };
+  breakpoints: [ResolvedBreakpoint, ...ResolvedBreakpoint[]];
   defaultTimeoutMs: number;
   navigationTimeoutMs: number;
   frozenTime: string;
@@ -321,10 +329,6 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     apiHost: input.apiHost,
     storageStatePins: input.storageStatePins ?? [],
     breakpoints,
-    // Keep the legacy single-viewport field in lockstep with the first
-    // resolved breakpoint so the current runner keeps working until Wave 3
-    // teaches it to iterate `breakpoints`.
-    viewport: { width: breakpoints[0].width, height: breakpoints[0].height },
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:
       input.navigationTimeoutMs ?? DEFAULTS.navigationTimeoutMs,
@@ -350,8 +354,6 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
  * `assertValidConfig` has already rejected unknown/empty `breakpoints`, so by
  * the time we get here every name is a valid registry key.
  */
-type ResolvedBreakpoint = { name: string; width: number; height: number };
-
 function resolveBreakpoints(
   input: TuffgalConfig,
 ): [ResolvedBreakpoint, ...ResolvedBreakpoint[]] {
@@ -360,8 +362,8 @@ function resolveBreakpoints(
     // assertValidConfig guarantees every name is a valid registry key. Seed
     // the result with the (now provably-present) first name so the return
     // type stays a non-empty tuple, then append the rest minus duplicates.
-    // Keeping the tuple shape lets callers read `breakpoints[0]` without an
-    // undefined check under noUncheckedIndexedAccess.
+    // The non-empty tuple lets `resolveRunSet` read `breakpoints[0]` (and
+    // index further) without an undefined check under noUncheckedIndexedAccess.
     const seen = new Set<BreakpointName>([head]);
     const resolved: [ResolvedBreakpoint, ...ResolvedBreakpoint[]] = [
       { name: head, ...BREAKPOINTS[head] },

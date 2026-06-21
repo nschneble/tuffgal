@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
@@ -180,5 +180,54 @@ describe('runAction — legacy baseline fallback', () => {
       breakpoint: 'desktop',
     });
     assert.equal(result.status, 'new');
+  });
+
+  it('reads the legacy a11y companion (a11y.yaml) and flags a11yChanged while pixels pass', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    // Legacy-only baseline: matching pixels (→ pass) but a stale a11y tree that
+    // differs from the page's current snapshot. The fallback branch must source
+    // the a11y companion from the LEGACY path (`<action>/a11y.yaml`) so the
+    // a11yChanged signal reflects the baseline we actually diffed against.
+    const legacyDir = join(config.paths.baselines, 'open');
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(join(legacyDir, '0.png'), png);
+    await writeFile(join(legacyDir, 'a11y.yaml'), '- button "Old label"');
+
+    const result = await runAction({
+      page: fakePage(png, '- button "New label"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+
+    assert.equal(result.status, 'pass');
+    assert.equal(result.a11yChanged, true);
+  });
+
+  it('leaves a11yChanged undefined when only a legacy 0.png exists with no a11y companion', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    // Legacy pixel baseline present, but no `a11y.yaml` alongside it — an older
+    // project that predates a11y snapshots. The fallback read must not throw on
+    // the absent companion; with no baseline tree to compare, a11yChanged stays
+    // undefined.
+    const legacyDir = join(config.paths.baselines, 'open');
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(join(legacyDir, '0.png'), png);
+
+    const result = await runAction({
+      page: fakePage(png),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+
+    assert.equal(result.status, 'pass');
+    assert.equal(result.a11yChanged, undefined);
   });
 });

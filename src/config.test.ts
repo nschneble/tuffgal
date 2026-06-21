@@ -135,9 +135,12 @@ describe('loadConfig breakpoint resolution', () => {
     assert.deepEqual(resolved.breakpoints, [
       { name: 'desktop', width: 1280, height: 800 },
     ]);
-    // The legacy viewport field mirrors the first breakpoint and preserves
-    // the historical 1280x800 default.
-    assert.deepEqual(resolved.viewport, { width: 1280, height: 800 });
+    // The lone resolved breakpoint preserves the historical 1280x800 default.
+    assert.deepEqual(resolved.breakpoints[0], {
+      name: 'desktop',
+      width: 1280,
+      height: 800,
+    });
   });
 
   it('synthesises a single viewport breakpoint from a legacy viewport', async () => {
@@ -145,7 +148,11 @@ describe('loadConfig breakpoint resolution', () => {
     assert.deepEqual(resolved.breakpoints, [
       { name: 'viewport', width: 800, height: 600 },
     ]);
-    assert.deepEqual(resolved.viewport, { width: 800, height: 600 });
+    assert.deepEqual(resolved.breakpoints[0], {
+      name: 'viewport',
+      width: 800,
+      height: 600,
+    });
   });
 
   it('resolves named breakpoints to their registry dimensions', async () => {
@@ -154,8 +161,12 @@ describe('loadConfig breakpoint resolution', () => {
       { name: 'mobile', width: 375, height: 667 },
       { name: 'tablet', width: 768, height: 1024 },
     ]);
-    // viewport tracks the first breakpoint, not the historical default.
-    assert.deepEqual(resolved.viewport, { width: 375, height: 667 });
+    // The first resolved breakpoint is the first named mode, not the default.
+    assert.deepEqual(resolved.breakpoints[0], {
+      name: 'mobile',
+      width: 375,
+      height: 667,
+    });
   });
 
   it('preserves order and drops duplicates', async () => {
@@ -175,6 +186,10 @@ describe('loadConfig breakpoint resolution', () => {
     assert.deepEqual(resolved.breakpoints, [
       { name: 'laptop', width: 1024, height: 768 },
     ]);
-    assert.deepEqual(resolved.viewport, { width: 1024, height: 768 });
+    assert.deepEqual(resolved.breakpoints[0], {
+      name: 'laptop',
+      width: 1024,
+      height: 768,
+    });
   });
 });
