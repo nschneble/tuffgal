@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import type { RunResult } from '../src/schema/result.ts';
 import { writeReport } from '../src/reporter/writeReport.ts';
+import { diffPngs } from '../src/screenshots/diff.ts';
 
 type Rgba = readonly [number, number, number, number];
 
@@ -52,23 +53,22 @@ function rect(
 // the real breakpoint dimensions. Everything is laid out as fractions of the
 // canvas, so the mobile shot reads as a believable narrow page rather than a
 // featureless rectangle. `shift` nudges the whole layout down-and-right so the
-// "actual" capture registers as changed against an un-shifted baseline; `diff`
-// re-skins it as pixelmatch-style magenta-on-dark to stand in for a diff image.
+// "actual" capture registers as changed against an un-shifted baseline; the
+// diff image is then produced by the real `diffPngs` engine, not faked here.
 function mockPage(
   width: number,
   height: number,
-  { shift = 0, diff = false }: { shift?: number; diff?: boolean } = {},
+  { shift = 0 }: { shift?: number } = {},
 ): Buffer {
   const png = new PNG({ width, height });
-  const bg: Rgba = diff ? [26, 28, 32, 255] : [250, 250, 251, 255];
-  rect(png, 0, 0, width, height, bg);
+  rect(png, 0, 0, width, height, [250, 250, 251, 255]);
 
   const margin = Math.round(width * 0.07);
   const contentW = width - margin * 2;
   const x = margin + shift;
-  const title: Rgba = diff ? [233, 30, 99, 255] : [34, 38, 46, 255];
-  const divider: Rgba = diff ? [233, 30, 99, 255] : [206, 210, 218, 255];
-  const text: Rgba = diff ? [233, 30, 99, 255] : [148, 154, 165, 255];
+  const title: Rgba = [34, 38, 46, 255];
+  const divider: Rgba = [206, 210, 218, 255];
+  const text: Rgba = [148, 154, 165, 255];
 
   let y = Math.round(height * 0.08) + shift;
   rect(png, x, y, Math.round(contentW * 0.58), Math.round(height * 0.035), title);
@@ -121,21 +121,36 @@ const BP = {
 
 async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'tuffgal-preview-'));
+  const writeShot = (name: string, png: Buffer): string => {
+    const path = join(dir, `${name}.png`);
+    writeFileSync(path, png);
+    return path;
+  };
   // Renders a mock page sized to the breakpoint it was captured at. `bp` is one
   // of the `BP` entries above, so the panel reflects the real 375×667 /
-  // 1280×800 shape; `opts` carries the `shift`/`diff` knobs through to mockPage.
+  // 1280×800 shape; `opts.shift` nudges the layout for a "changed" capture.
   const shot = (
     name: string,
     bp: { breakpointWidth: number; breakpointHeight: number },
-    opts: { shift?: number; diff?: boolean } = {},
-  ): string => {
-    const path = join(dir, `${name}.png`);
-    writeFileSync(
-      path,
-      mockPage(bp.breakpointWidth, bp.breakpointHeight, opts),
-    );
-    return path;
-  };
+    opts: { shift?: number } = {},
+  ): string =>
+    writeShot(name, mockPage(bp.breakpointWidth, bp.breakpointHeight, opts));
+
+  // The changed story's desktop capture: baseline vs a shifted "actual", with
+  // the diff produced by the real `diffPngs` engine so the magenta overlay
+  // highlights both the old AND new content positions — exactly what a real run
+  // emits — instead of a hand-faked re-skin. `diffPixels`/`diffRatio` below come
+  // straight from that comparison rather than invented constants.
+  const settingsBase = mockPage(
+    BP.desktop.breakpointWidth,
+    BP.desktop.breakpointHeight,
+  );
+  const settingsActual = mockPage(
+    BP.desktop.breakpointWidth,
+    BP.desktop.breakpointHeight,
+    { shift: 10 },
+  );
+  const settingsDiff = diffPngs(settingsBase, settingsActual, 0.1);
 
   const result: RunResult = {
     startedAt: '2026-06-19T13:58:17.000Z',
@@ -238,16 +253,12 @@ async function main(): Promise<void> {
             startedAt: '2026-06-19T13:58:28.300Z',
             finishedAt: '2026-06-19T13:58:29.200Z',
             durationMs: 900,
-            baselinePath: shot('settings-desktop-base', BP.desktop),
-            actualPath: shot('settings-desktop-actual', BP.desktop, {
-              shift: 10,
-            }),
-            diffPath: shot('settings-desktop-diff', BP.desktop, {
-              shift: 10,
-              diff: true,
-            }),
-            diffPixels: 4210,
-            diffRatio: 0.0182,
+            baselinePath: writeShot('settings-desktop-base', settingsBase),
+            actualPath: writeShot('settings-desktop-actual', settingsActual),
+            diffPath: writeShot('settings-desktop-diff', settingsDiff.diffPng),
+            diffPixels: settingsDiff.diffPixels,
+            diffRatio: settingsDiff.diffRatio,
+            ssimScore: settingsDiff.ssimScore,
           },
         ],
       },
