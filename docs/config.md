@@ -12,68 +12,104 @@ Run `npx tuffgal init` to scaffold a starter config in the current directory.
 import { defineConfig } from 'tuffgal';
 
 export default defineConfig({
-  // ── Required ───────────────────────────────────────────────────────────
-  // Where Tuffgal reads + writes content. All paths relative to this file.
+  /*
+   * Required fields
+   */
+
+  // where Tuffgal reads + writes content
+  // all paths are relative to this config file
   paths: {
-    actions: 'tuffgal/actions', // action JSON files (recurses into subdirs)
-    stories: 'tuffgal/stories', // story JSON files (recurses into subdirs)
-    baselines: 'tuffgal/baselines', // committed PNG baselines + a11y snapshots
-    report: 'tuffgal/report', // generated HTML report + traces (gitignore)
-    authState: 'tuffgal/.auth', // produces/needs label cache (gitignore); default '.auth'
+    // action JSON files (recursive)
+    actions: 'tuffgal/actions',
+
+    // story JSON files (recursive)
+    stories: 'tuffgal/stories',
+
+    // PNG baselines + a11y snapshots
+    baselines: 'tuffgal/baselines',
+
+    // generated HTML report + traces
+    report: 'tuffgal/report',
+
+    // produces/needs label cache
+    authState: 'tuffgal/.auth',
   },
-  // Base URL of the running app. Every `navigate` path resolves against this.
+
+  // base URL of the running app
+  // every `navigate` path resolves against this
   baseUrl: 'http://localhost:5173',
 
-  // ── Optional ───────────────────────────────────────────────────────────
-  // API origin (scheme + host + port). Scopes `intercept` patterns to API
-  // traffic. Set only when the API runs on a different origin than the app.
+  /*
+   * Optional fields
+   */
+
+  // API origin (scheme + host + port)
+  // scopes `intercept` patterns to API traffic
+  // set only when the API runs on a different origin than the app
   apiHost: 'http://localhost:3000',
-  // localStorage keys to persist across stories. Cookies persist regardless.
+
+  // localStorage keys to persist across stories
   storageStatePins: ['auth.jwt', 'prefs.theme'],
-  // Viewport modes to run, from the built-in registry. Each renders in its
-  // own context + produces its own baseline/diff/a11y snapshot. Bare name
-  // uses registry dimensions; object overrides width/height. Order kept,
-  // duplicate names dropped (first wins). Omit → single `desktop` (1280×800).
+
+  // viewport modes to run from the built-in registry
+  // each renders in its own context + produces its own baseline
+  // bare name uses registry dimensions, object overrides width/height
+  // omit to default to 'desktop' at 1280x800
   breakpoints: ['mobile', { name: 'desktop', width: 1440, height: 900 }],
-  // Default Playwright locator + action timeout (ms). Default: 10_000.
+
+  // default Playwright locator + action timeout in milliseconds
   defaultTimeoutMs: 10_000,
-  // Default navigation timeout for `navigate` steps (ms). Default: 15_000.
+
+  // default navigation timeout for `navigate` steps in milliseconds
   navigationTimeoutMs: 15_000,
-  // ISO timestamp pinned into the browser via `page.clock.install`, so
-  // relative-time UI stays deterministic. Default: '2026-01-15T12:00:00.000Z'.
+
+  // ISO timestamp pinned to the browser for deterministic relative times
+  // e.g. so "5 min ago" is always "5 min ago"
   frozenTime: '2026-01-15T12:00:00.000Z',
-  // Story-pool worker count. Default: min(cpus / 2, 4).
+
+  // story-pool worker count
+  // defaults to min(cpus / 2, 4)
   workers: 4,
-  // Consumer DB bridge. `reset` runs once before the first story; each
-  // `fixtures[name]` runs before any story declaring `fixtures: ["name"]`.
-  // Fixtures must be idempotent — no per-story reset. Omit for static sites.
+
+  // consumer DB bridge
+  // `reset` runs once before the first story
+  // each `fixtures[name]` runs before any story declaring it
+  // fixtures must be idempotent
   database: {
     reset: async () => {
-      /* truncate + reseed */
+      // truncate + reseed
     },
     fixtures: {
       'name-1': async () => {
-        /* idempotent inserts */
+        // idempotent inserts
       },
     },
   },
-  // Dev-server bridge for `--manage-servers` / `supervise`. Omit when you
-  // run the dev servers yourself.
+
+  // dev-server bridge for `--manage-servers` / `supervise`. Omit when you
+  // run the dev servers yourself
   devServers: {
-    command: 'npm run dev', // run via `sh -c` so pipes + `&&` work
-    cwd: '.', // relative to this file; default rootDir
-    healthCheck: [{ url: 'http://localhost:5173', timeoutMs: 30_000 }], // TCP probe
-    shutdownSignal: 'SIGTERM', // default 'SIGTERM'
-    shutdownGraceMs: 5000, // grace before SIGKILL; default 5000
+    // run via `sh -c` so pipes + `&&` work
+    command: 'npm run dev',
+
+    // relative to this file, defaults to root directory
+    cwd: '.',
+
+    // TCP probe
+    healthCheck: [{ url: 'http://localhost:5173', timeoutMs: 30_000 }],
+
+    shutdownSignal: 'SIGTERM',
+    shutdownGraceMs: 5000,
   },
-  // Markdown file listing user journeys. Tuffgal reports the ratio of
-  // stories with a matching `flow:` as `customCoverage.flows`.
+
+  // Markdown file listing user journeys
+  // Tuffgal reports the ratio of stories w/ matching flows
   flowInventory: 'docs/flows.md',
 });
 ```
 
 The example above sets every field for illustration. In practice only
-`paths` and `baseUrl` are required — every optional field falls back to the
+`paths` and `baseUrl` are required. Every optional field falls back to the
 default noted in its comment. The sections below detail each one.
 
 `defineConfig` is an identity helper. Its only job is type-checking the

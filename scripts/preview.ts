@@ -1,17 +1,14 @@
 /**
- * Renders a sample report so you can eyeball the HTML reporter without running
- * a real suite (which needs Playwright + a dev server). Builds a fixture
- * `RunResult` covering passed / changed / failed stories — each run at both the
- * `mobile` and `desktop` breakpoints so the reporter's multi-mode chrome is
- * exercised, and the screenshot panels are mock pages (title, divider, lorem
- * lines) painted at each breakpoint's real dimensions so mobile renders as a
- * believable narrow page — with the changed story's "actual" nudged a few
- * pixels so it reads as drifted — writes it through the real `writeReport`, and
- * opens the result in your browser.
+ * Renders a sample report so you can eyeball the HTML report without
+ * running a real suite, which needs Playwright + a dev server.
  *
- *   npm run preview
+ * Builds a fixture `RunResult` covering passed, changed, and failed
+ * stories, each run at both the `mobile` and `desktop` breakpoints, and
+ * opens the report in your web browser.
  *
- * Output goes to a throwaway temp dir; nothing in the repo is touched.
+ * `npm run preview`
+ *
+ * Outputs to a (throwaway) temp directory.
  */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -24,8 +21,6 @@ import { diffPngs } from '../src/screenshots/diff.ts';
 
 type Rgba = readonly [number, number, number, number];
 
-// Fills an axis-aligned rect into a pngjs buffer, clipped to the image bounds so
-// a shifted element near an edge can't write out of range.
 function rect(
   png: PNG,
   x: number,
@@ -49,12 +44,6 @@ function rect(
   }
 }
 
-// Paints a mock page — title bar, divider, and a few lorem paragraph lines — at
-// the real breakpoint dimensions. Everything is laid out as fractions of the
-// canvas, so the mobile shot reads as a believable narrow page rather than a
-// featureless rectangle. `shift` nudges the whole layout down-and-right so the
-// "actual" capture registers as changed against an un-shifted baseline; the
-// diff image is then produced by the real `diffPngs` engine, not faked here.
 function mockPage(
   width: number,
   height: number,
@@ -71,7 +60,14 @@ function mockPage(
   const text: Rgba = [148, 154, 165, 255];
 
   let y = Math.round(height * 0.08) + shift;
-  rect(png, x, y, Math.round(contentW * 0.58), Math.round(height * 0.035), title);
+  rect(
+    png,
+    x,
+    y,
+    Math.round(contentW * 0.58),
+    Math.round(height * 0.035),
+    title,
+  );
   y += Math.round(height * 0.06);
   rect(png, x, y, contentW, Math.max(2, Math.round(height * 0.004)), divider);
   y += Math.round(height * 0.035);
@@ -87,9 +83,6 @@ function mockPage(
 }
 
 function openInBrowser(target: string): void {
-  // win32 `start` is a shell builtin (needs an empty-title first arg); darwin
-  // and linux take the path as a normal argument, so no shell — keeps the path
-  // un-concatenated and dodges the shell-injection DeprecationWarning.
   const [command, args] =
     process.platform === 'darwin'
       ? ['open', [target]]
@@ -101,15 +94,9 @@ function openInBrowser(target: string): void {
       stdio: 'ignore',
       detached: true,
     }).unref();
-  } catch {
-    // Headless / no opener — the printed path is the fallback.
-  }
+  } catch {}
 }
 
-// The two built-in breakpoints the sample runs at, so the preview exercises
-// the reporter's multi-mode chrome (one labelled group per breakpoint) instead
-// of the single-mode flat list. Dimensions mirror the REGISTRY defaults in
-// src/config.ts. Spread one of these into each `ActionResult` to tag it.
 const BP = {
   mobile: { breakpoint: 'mobile', breakpointWidth: 375, breakpointHeight: 667 },
   desktop: {
@@ -126,9 +113,6 @@ async function main(): Promise<void> {
     writeFileSync(path, png);
     return path;
   };
-  // Renders a mock page sized to the breakpoint it was captured at. `bp` is one
-  // of the `BP` entries above, so the panel reflects the real 375×667 /
-  // 1280×800 shape; `opts.shift` nudges the layout for a "changed" capture.
   const shot = (
     name: string,
     bp: { breakpointWidth: number; breakpointHeight: number },
@@ -136,11 +120,6 @@ async function main(): Promise<void> {
   ): string =>
     writeShot(name, mockPage(bp.breakpointWidth, bp.breakpointHeight, opts));
 
-  // The changed story's desktop capture: baseline vs a shifted "actual", with
-  // the diff produced by the real `diffPngs` engine so the magenta overlay
-  // highlights both the old AND new content positions — exactly what a real run
-  // emits — instead of a hand-faked re-skin. `diffPixels`/`diffRatio` below come
-  // straight from that comparison rather than invented constants.
   const settingsBase = mockPage(
     BP.desktop.breakpointWidth,
     BP.desktop.breakpointHeight,

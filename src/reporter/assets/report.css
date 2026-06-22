@@ -587,20 +587,12 @@ summary.action-row:focus-visible {
   padding: 0.5rem;
   border: 1px solid var(--border);
   background: var(--bg);
-  /* Shrink-wrap to the capture so the panel's border hugs the image instead of
-     stretching full-width. A narrow (e.g. mobile) shot otherwise left a wide
-     gutter of panel background — indistinguishable from the image when the two
-     backgrounds match. Capped to the container so wide desktop shots still fit. */
   width: fit-content;
   max-width: 100%;
 }
 
 .shot-panel img {
   display: block;
-  /* Cap at the capture's natural width, shrinking only when it overflows the
-     panel. `width: 100%` upscaled small captures — a 375px mobile shot blew up
-     to the full panel width and blurred. max-width keeps a narrow breakpoint at
-     its true size while a wide desktop shot still scales down to fit. */
   max-width: 100%;
   height: auto;
   outline: 1px solid var(--img-outline);

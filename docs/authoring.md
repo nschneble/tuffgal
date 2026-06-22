@@ -80,7 +80,7 @@ comments and no trailing commas. Field notes follow each block.
 - `needs` / `produces`: Optional label arrays for the dependency graph.
 - `fixtures`: Optional DB fixtures applied before the browser launches.
 - `flow`: Optional flow-inventory tag for coverage.
-- `breakpoints`: Optional. The modes to run this story at, **replacing** the project's configured modes for this story (e.g. `["mobile"]`). See [per-story breakpoint selection](#per-story-breakpoint-selection).
+- `breakpoints`: Optional. The modes to run this story at, **replacing** the project's configured modes for this story. See [per-story breakpoint selection](#per-story-breakpoint-selection).
 - `actions`: At least one required. Each entry names an action and optionally supplies its `parameters` map.
 
 ### Passing parameters from a story to an action
@@ -398,8 +398,9 @@ project's set for this story:
 }
 ```
 
-Each entry is a bare registry name or a `{ name, width?, height? }` override,
+Each entry is a bare registry name or `{ name, width?, height? }` override,
 exactly like the [config-level field](config.md#breakpoints-breakpointselector).
+
 The rules:
 
 - **Replaces, not intersects.** The story runs exactly the modes it names,
@@ -407,11 +408,11 @@ The rules:
   `['desktop', 'laptop']` can still run a mobile-only story at `['mobile']`.
 - **Stands alone.** Each entry resolves against the registry. An override
   inherits the omitted axis from the **registry** default, never from the
-  project's per-mode override — `{ name: 'desktop', width: 1920 }` is
+  project's per-mode override. `{ name: 'desktop', width: 1920 }` is
   `1920×800`, regardless of any config-level desktop size.
-- **Order preserved, duplicate names dropped** (first wins).
-- **Non-empty when present.** Omit the field to inherit the project's modes;
-  do not pass `[]`.
+- **Order preserved, duplicate names dropped.** First wins.
+- **Non-empty when present.** Omit the field to inherit the project's modes
+  instead of passing an empty array.
 
 ```json
 {
@@ -421,9 +422,9 @@ The rules:
 }
 ```
 
-The override applies only to this story's browser contexts — consumer stories
-that inherit storage state via `needs` still resolve their own modes. Storage
-state and breakpoints are independent.
+The override applies only to this story's browser contexts. Consumer
+stories that inherit storage state via `needs` still resolve their own
+modes. Storage state and breakpoints are independent.
 
 ## Authoring checklist
 

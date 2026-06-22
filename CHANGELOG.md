@@ -4,6 +4,10 @@
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SHAME`
 
+## [Unreleased]
+
+_Nothing right now_
+
 ## [0.1.0-alpha.9] — 2026-06-21
 
 ### Added

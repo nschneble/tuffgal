@@ -28,8 +28,8 @@ When a screenshot changes, a human reviews the diff and decides what to do.
   `navigate`, `read`, `scroll`, `type`, `wait`, `waitFor`
 - An implicit screenshot at the end of every action
 - Named breakpoint modes (`mobile`, `tablet`, `laptop`, `desktop`) keyed to
-  Tailwind widths — pick which to run per project or per story; each mode
-  gets its own baseline and a per-mode group in the report
+  Tailwind widths. Pick which to run per project or per story. Each mode
+  gets its own baseline and a per-mode group in the HTML report
 - DAG scheduler with `needs`/`produces` labels and parallel workers
 - SSIM-gated visual diff + pixelmatch overlay + a11y-tree snapshots
 - Trace zip on failure (Playwright trace viewer)
