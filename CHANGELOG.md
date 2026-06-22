@@ -20,7 +20,9 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Removed
 
-- **Breaking:** the `viewport` config field (and per-story `viewport` override). Set a single mode's size with `breakpoints: [{ name: 'desktop', width, height }]` instead
+**Breaking:** `viewport` config field + per-story `viewport` override. Set
+a single mode's size with `breakpoints: [{ name: 'desktop', width, height }]`
+instead.
 
 ## [0.1.0-alpha.8] — 2026-06-20
 
