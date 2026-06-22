@@ -10,25 +10,24 @@ _Nothing right now_
 
 ## [0.1.0-alpha.10] — 2026-06-22
 
-### Fixed
-
-- **Per-breakpoint database isolation.** alpha.9 ran each breakpoint in its own
-  browser context but applied a story's fixtures only once, before the
-  breakpoint loop — so a story that mutated server state passed at the first
-  mode and then ran the next mode against the mutated rows (a registered user
-  collided on the second mode, an already-read link no longer showed as unread,
-  an emptied list had nothing left to empty). Fixtures are now re-applied before
-  **every** breakpoint, resetting that state to a known baseline per mode.
-  Fixtures are idempotent, so non-mutating stories are unaffected.
-
 ### Added
 
-- **`${breakpoint}` interpolation token.** The current mode name is exposed to
-  action interpolation as `${breakpoint}`, so a story can key data it creates
-  through the app (with no backing fixture to reset) per mode — e.g.
-  `fresh+${breakpoint}@example.test` registers a distinct user at each viewport
-  instead of colliding on a shared value. A story parameter literally named
-  `breakpoint` overrides the injected value.
+**`${breakpoint}` interpolation token.** The current mode name is exposed
+to action interpolation as `${breakpoint}`, so a story can key data it
+creates through the app per mode. For example,
+`fresh+${breakpoint}@example.test` registers a distinct user at each
+viewport instead of colliding on a shared value. A story parameter
+literally named `breakpoint` overrides the injected value.
+
+### Fixed
+
+**Per-breakpoint database isolation.** alpha.9 ran each breakpoint in its
+own browser context but applied a story's fixtures only once, before the
+breakpoint loop. Any story that mutated server state passed at the first
+mode and then ran the next mode against the mutated rows. Fixtures are now
+re-applied before **every** breakpoint, resetting that state to a known
+baseline per mode. Fixtures are idempotent, so non-mutating stories are
+unaffected.
 
 ## [0.1.0-alpha.9] — 2026-06-21
 
