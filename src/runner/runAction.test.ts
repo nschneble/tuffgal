@@ -121,6 +121,67 @@ describe('runAction — breakpoint threading', () => {
   });
 });
 
+describe('runAction — ${breakpoint} interpolation', () => {
+  /** Page that only records the URLs a `navigate` step passes to `goto`. */
+  function gotoRecordingPage(urls: string[]): Page {
+    return {
+      async goto(url: string): Promise<null> {
+        urls.push(url);
+        return null;
+      },
+    } as unknown as Page;
+  }
+
+  function navigateAction(parameters?: string[]): Action {
+    return {
+      action: 'visit',
+      parameters,
+      steps: [{ kind: 'navigate', path: '/u/${breakpoint}' }],
+      screenshot: false,
+    } as unknown as Action;
+  }
+
+  it('resolves ${breakpoint} to the current mode name', async () => {
+    const config = await makeConfig();
+    // runNavigate resolves the path against baseUrl, so the test config needs
+    // one for `new URL()` to succeed.
+    Object.assign(config as object, {
+      baseUrl: 'http://localhost',
+      navigationTimeoutMs: 1000,
+    });
+    const urls: string[] = [];
+    await runAction({
+      page: gotoRecordingPage(urls),
+      action: navigateAction(),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'mobile',
+    });
+    assert.deepEqual(urls, ['http://localhost/u/mobile']);
+  });
+
+  it('lets a story parameter named breakpoint override the injected value', async () => {
+    const config = await makeConfig();
+    Object.assign(config as object, {
+      baseUrl: 'http://localhost',
+      navigationTimeoutMs: 1000,
+    });
+    const urls: string[] = [];
+    await runAction({
+      page: gotoRecordingPage(urls),
+      // The action must DECLARE `breakpoint` for validateParameters to accept
+      // it as an author-supplied parameter.
+      action: navigateAction(['breakpoint']),
+      parameters: { breakpoint: 'custom' },
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'mobile',
+    });
+    assert.deepEqual(urls, ['http://localhost/u/custom']);
+  });
+});
+
 describe('runAction — legacy baseline fallback', () => {
   it('compares against the legacy 0.png when the breakpoint baseline is absent and does NOT report new', async () => {
     const config = await makeConfig();

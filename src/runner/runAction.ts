@@ -56,6 +56,17 @@ export async function runAction(
 ): Promise<ActionResult> {
   const { action, page, parameters, storyFile, config, breakpoint } = options;
   validateParameters(action, parameters);
+  // The current breakpoint name is exposed to interpolation as `${breakpoint}`
+  // so a story can key test-created data per mode (e.g. registering
+  // `fresh+${breakpoint}@example.test` at each viewport instead of colliding on
+  // a shared email). It is injected only into the interpolation map, never the
+  // validated `parameters` — `validateParameters` rejects undeclared keys, and
+  // the ActionResult must still report the author's parameters verbatim. A
+  // story parameter literally named `breakpoint` overrides the injected value.
+  const interpolationParameters: Record<string, string> = {
+    breakpoint,
+    ...parameters,
+  };
   const startedAt = new Date();
   const attempts = action.retry?.attempts ?? DEFAULT_RETRY_ATTEMPTS;
   const backoffMs = action.retry?.backoffMs ?? DEFAULT_RETRY_BACKOFF_MS;
@@ -67,7 +78,7 @@ export async function runAction(
       await dispatchWithRetry(
         page,
         step,
-        parameters,
+        interpolationParameters,
         config,
         attempts,
         backoffMs,
@@ -86,7 +97,7 @@ export async function runAction(
 
   if (action.expect) {
     try {
-      await waitForExpectation(page, action.expect, parameters);
+      await waitForExpectation(page, action.expect, interpolationParameters);
     } catch (error) {
       return failedResult(
         action,
@@ -112,6 +123,7 @@ export async function runAction(
     action,
     page,
     parameters,
+    interpolationParameters,
     config,
     storyFile,
     startedAt,
@@ -228,7 +240,10 @@ async function waitForExpectation(
 interface CaptureOptions {
   action: Action;
   page: Page;
+  /** Author-declared parameters, reported verbatim on the ActionResult. */
   parameters: Record<string, string>;
+  /** `parameters` plus the injected `${breakpoint}`, used for mask selectors. */
+  interpolationParameters: Record<string, string>;
   config: ResolvedConfig;
   storyFile: string;
   startedAt: Date;
@@ -251,8 +266,16 @@ type BaselineSource = 'breakpoint' | 'legacy';
 async function captureAndCompare(
   options: CaptureOptions,
 ): Promise<ActionResult> {
-  const { action, page, parameters, config, storyFile, startedAt, breakpoint } =
-    options;
+  const {
+    action,
+    page,
+    parameters,
+    interpolationParameters,
+    config,
+    storyFile,
+    startedAt,
+    breakpoint,
+  } = options;
   const paths = pathsFor({
     baselinesDir: config.paths.baselines,
     reportDir: config.paths.report,
@@ -260,7 +283,7 @@ async function captureAndCompare(
     actionName: action.action,
     breakpoint,
   });
-  const masks = resolveMasks(page, action.mask, parameters);
+  const masks = resolveMasks(page, action.mask, interpolationParameters);
   const actualPng = await capturePage(page, masks);
   await writePng(paths.actual, actualPng);
   const a11yJson = await captureA11yTree(page);

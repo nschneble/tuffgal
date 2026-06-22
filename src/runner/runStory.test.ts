@@ -307,6 +307,38 @@ function makeOptions(
 }
 
 describe('runStoryWithBrowser — per-breakpoint loop', () => {
+  it('re-applies the story fixtures before every breakpoint so each mode starts from a fresh seed', async () => {
+    const config = await makeConfig();
+    let seedCount = 0;
+    (config as unknown as { database: unknown }).database = {
+      fixtures: {
+        seed: async (): Promise<void> => {
+          seedCount += 1;
+        },
+      },
+    };
+    const first = fakeContext(fakePage({ screenshot: solidPng(1, 2, 3) }));
+    const second = fakeContext(fakePage({ screenshot: solidPng(1, 2, 3) }));
+    const browser = fakeBrowser([first.context, second.context]);
+
+    await runStoryWithBrowser(
+      browser,
+      makeOptions(config, {
+        story: {
+          story: 's',
+          fixtures: ['seed'],
+          actions: [{ action: 'open' }],
+        },
+      }),
+      new Date(),
+    );
+
+    // makeConfig runs two breakpoints (mobile, desktop). The fixture must be
+    // applied once per breakpoint — not once for the whole story — so a
+    // mutating story re-enters each mode from the same baseline rows.
+    assert.equal(seedCount, 2);
+  });
+
   it('runs the remaining breakpoint after the first one fails, and persists produces from the second', async () => {
     const config = await makeConfig();
     // First breakpoint's only action fails (wait step throws → `failed`
