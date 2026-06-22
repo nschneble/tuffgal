@@ -45,9 +45,8 @@ const TRACE_SUBDIR = 'traces';
  */
 export async function runStory(options: RunStoryOptions): Promise<StoryResult> {
   const startedAt = new Date();
-  for (const fixture of options.story.fixtures ?? []) {
-    await applyFixture(options.config, fixture);
-  }
+  // Fixtures are applied per breakpoint inside `runStoryWithBrowser`, not once
+  // here — see the reseed comment in the breakpoint loop.
   const browser = await chromium.launch({ headless: !options.headed });
   try {
     return await runStoryWithBrowser(browser, options, startedAt);
@@ -92,6 +91,20 @@ export async function runStoryWithBrowser(
   let firstTracePath: string | undefined;
 
   for (const breakpoint of runSet) {
+    // Re-seed the database before EVERY breakpoint. alpha.9 isolated only the
+    // browser context per breakpoint (cookies, storage), but left the DB shared
+    // across the whole story, so a story that mutates server state — registers
+    // a user, marks a link read, empties read history — would pass at the first
+    // viewport and then run the next viewport against the mutated rows. Applying
+    // the story's own fixtures here resets that state to a known baseline for
+    // each mode. Fixtures are idempotent (each deletes its own rows before
+    // re-inserting), so non-mutating stories are unaffected beyond a cheap
+    // re-apply. State the test itself creates with no backing fixture (a
+    // freshly registered user) is handled by the `${breakpoint}` token, which
+    // lets the story author key that data per mode.
+    for (const fixture of story.fixtures ?? []) {
+      await applyFixture(config, fixture);
+    }
     const context = await browser.newContext({
       baseURL: config.baseUrl,
       viewport: { width: breakpoint.width, height: breakpoint.height },
