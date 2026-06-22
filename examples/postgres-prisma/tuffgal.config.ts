@@ -21,7 +21,10 @@ export default defineConfig({
   apiHost: 'http://localhost:3000',
   storageStatePins: ['session_token'],
 
-  viewport: { width: 1280, height: 800 },
+  // Omit `breakpoints` to run a single desktop mode at 1280x800. List
+  // modes, e.g. ['mobile', 'desktop'] to run each, or override a size with
+  // { name: 'desktop', width: 1440, height: 900 }
+
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',

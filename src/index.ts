@@ -3,8 +3,11 @@
 // straight up disappear between releases.
 
 export {
+  BREAKPOINTS,
   defineConfig,
   loadConfig,
+  type BreakpointName,
+  type BreakpointSelector,
   type DatabaseBridge,
   type DevServerBridge,
   type PathsConfig,

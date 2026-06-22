@@ -14,6 +14,24 @@ export type ActionStatus = 'pass' | 'changed' | 'failed' | 'skipped' | 'new';
 export interface ActionResult {
   action: string;
   parameters?: Record<string, string>;
+  /**
+   * Named breakpoint (`mobile`/`tablet`/`laptop`/`desktop`) this result was
+   * produced at. An action that runs at N breakpoints contributes N
+   * `ActionResult` entries to the flat `StoryResult.actions` array, each tagged
+   * here so the reporter groups results by mode. Optional in the type only as a
+   * defensive parse guard for malformed `results.json`; every result the runner
+   * emits carries it.
+   */
+  breakpoint?: string;
+  /**
+   * Viewport dimensions this result was actually captured at. Carried alongside
+   * `breakpoint` so the reporter labels each group with the real size —
+   * including per-config and per-story overrides — rather than a registry
+   * lookup that would show stale dimensions for an overridden mode. Optional in
+   * the type only as a defensive parse guard; the runner always records them.
+   */
+  breakpointWidth?: number;
+  breakpointHeight?: number;
   status: ActionStatus;
   startedAt: string;
   finishedAt: string;

@@ -6,6 +6,28 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
+_Nothing right now_
+
+## [0.1.0-alpha.9] — 2026-06-21
+
+### Added
+
+- Breakpoint modes, replacing the single `viewport` config
+  - `mobile` 375×667 / `tablet` 768×1024 / `laptop` 1024×768 / `desktop` 1280×800
+  - Each mode runs in its own browser context + produces its own baselines
+  - Each `config.breakpoints` entry is a bare name (registry dimensions) or `{ name, width?, height? }` to override that mode's size; an omitted axis inherits the registry default
+  - Order preserved; when a name repeats, the first entry wins
+  - Omit `breakpoints` to run a single `desktop` mode (1280×800)
+  - Per-story `breakpoints` field, same shape, that **replaces** the project's modes for that story — a story may run a mode the project does not configure, and its overrides resolve against the registry
+  - Breakpoint grouping in the HTML report, each group labelled with the real capture size; a single-mode story renders as a flat list with no breakpoint chrome
+  - Pre-breakpoint baselines at `<action>/0.png` are read as fallbacks until promoted
+
+### Removed
+
+**Breaking:** `viewport` config field + per-story `viewport` override. Set
+a single mode's size with `breakpoints: [{ name: 'desktop', width, height }]`
+instead.
+
 ## [0.1.0-alpha.8] — 2026-06-20
 
 ### Fixed
@@ -117,7 +139,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.8...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.9...HEAD
+[0.1.0-alpha.9]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.7
 [0.1.0-alpha.6]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.6

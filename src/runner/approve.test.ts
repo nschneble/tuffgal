@@ -141,6 +141,67 @@ describe('approveAll — promotion', () => {
     assert.equal(await pathExists(newBaseline), true);
   });
 
+  it('promotes breakpoint-keyed actuals to their matching baselines + a11y pair', async () => {
+    // approve copies the paths recorded in results.json verbatim, so once the
+    // runner (Wave 3) emits breakpoint-keyed paths, promotion is per-breakpoint
+    // correct for free: each `<action>.<breakpoint>.actual.png` lands on its
+    // own `<action>/<breakpoint>.png` and the a11y pair travels with it. This
+    // guards that contract — two breakpoints of one action must not clobber.
+    const desktopActual = await actual('submit.desktop');
+    const mobileActual = await actual('submit.mobile');
+    const desktopA11y = join(report, 'submit.desktop.a11y.yaml');
+    const mobileA11y = join(report, 'submit.mobile.a11y.yaml');
+    await writeFile(desktopA11y, 'tree-desktop', 'utf8');
+    await writeFile(mobileA11y, 'tree-mobile', 'utf8');
+    const desktopBaseline = join(report, 'baselines', 'submit', 'desktop.png');
+    const mobileBaseline = join(report, 'baselines', 'submit', 'mobile.png');
+    const desktopA11yBaseline = join(
+      report,
+      'baselines',
+      'submit',
+      'desktop.a11y.yaml',
+    );
+    const mobileA11yBaseline = join(
+      report,
+      'baselines',
+      'submit',
+      'mobile.a11y.yaml',
+    );
+    await writeResults([
+      story('s.json', [
+        action({
+          action: 'submit',
+          status: 'changed',
+          actualPath: desktopActual,
+          baselinePath: desktopBaseline,
+          a11yActualPath: desktopA11y,
+          a11yBaselinePath: desktopA11yBaseline,
+        }),
+        action({
+          action: 'submit',
+          status: 'changed',
+          actualPath: mobileActual,
+          baselinePath: mobileBaseline,
+          a11yActualPath: mobileA11y,
+          a11yBaselinePath: mobileA11yBaseline,
+        }),
+      ]),
+    ]);
+
+    const summary = await approveAll(config(), {});
+    assert.equal(summary.approved, 2);
+    assert.equal(
+      await readFile(desktopBaseline, 'utf8'),
+      'pixels-submit.desktop',
+    );
+    assert.equal(
+      await readFile(mobileBaseline, 'utf8'),
+      'pixels-submit.mobile',
+    );
+    assert.equal(await readFile(desktopA11yBaseline, 'utf8'), 'tree-desktop');
+    assert.equal(await readFile(mobileA11yBaseline, 'utf8'), 'tree-mobile');
+  });
+
   it('storyFilter limits promotion to the matched story', async () => {
     const keepActual = await actual('keep');
     const dropActual = await actual('drop');

@@ -68,7 +68,7 @@ comments and no trailing commas. Field notes follow each block.
   "needs": ["seeded-records"],
   "fixtures": ["one-record"],
   "flow": "Rename a record",
-  "viewport": { "width": 1280, "height": 800 },
+  "breakpoints": ["desktop"],
   "actions": [
     { "action": "rename-record", "parameters": { "name": "Groceries" } }
   ]
@@ -80,7 +80,7 @@ comments and no trailing commas. Field notes follow each block.
 - `needs` / `produces`: Optional label arrays for the dependency graph.
 - `fixtures`: Optional DB fixtures applied before the browser launches.
 - `flow`: Optional flow-inventory tag for coverage.
-- `viewport`: Optional per-story override of the config viewport.
+- `breakpoints`: Optional. The modes to run this story at, **replacing** the project's configured modes for this story. See [per-story breakpoint selection](#per-story-breakpoint-selection).
 - `actions`: At least one required. Each entry names an action and optionally supplies its `parameters` map.
 
 ### Passing parameters from a story to an action
@@ -383,24 +383,48 @@ Common patterns:
 - Stories that don't care about auth pass over `needs`
 - Don't create cycles (Don't produce the same label from two stories)
 
-## Per-story viewport override
+## Per-story breakpoint selection
 
-Most stories should screenshot at the config-level `viewport`. Stories that
-exercise a different breakpoint (a mobile menu, an ultra-wide dashboard)
-can override it for their own browser context:
+By default every story runs at the project's
+[`breakpoints`](config.md#breakpoints-breakpointselector). A story that only
+makes sense at certain widths can name its own modes, which **replace** the
+project's set for this story:
 
 ```json
 {
   "story": "Mobile user opens the nav drawer",
-  "viewport": { "width": 390, "height": 844 },
+  "breakpoints": ["mobile"],
   "actions": [{ "action": "open-nav-drawer" }]
 }
 ```
 
-`width` and `height` must be positive integers. The override applies only
-to this story's browser context — consumer stories that inherit storage
-state via `needs` still resolve their own viewport from their own override
-or the config default. Storage state and viewport are independent.
+Each entry is a bare registry name or `{ name, width?, height? }` override,
+exactly like the [config-level field](config.md#breakpoints-breakpointselector).
+
+The rules:
+
+- **Replaces, not intersects.** The story runs exactly the modes it names,
+  regardless of the project's set. A project that defaults to
+  `['desktop', 'laptop']` can still run a mobile-only story at `['mobile']`.
+- **Stands alone.** Each entry resolves against the registry. An override
+  inherits the omitted axis from the **registry** default, never from the
+  project's per-mode override. `{ name: 'desktop', width: 1920 }` is
+  `1920×800`, regardless of any config-level desktop size.
+- **Order preserved, duplicate names dropped.** First wins.
+- **Non-empty when present.** Omit the field to inherit the project's modes
+  instead of passing an empty array.
+
+```json
+{
+  "story": "Dense dashboard at an ultra-wide desktop",
+  "breakpoints": [{ "name": "desktop", "width": 1920, "height": 1080 }],
+  "actions": [{ "action": "visit-dashboard" }]
+}
+```
+
+The override applies only to this story's browser contexts. Consumer
+stories that inherit storage state via `needs` still resolve their own
+modes. Storage state and breakpoints are independent.
 
 ## Authoring checklist
 

@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 
-import { assertValidConfig } from './config.ts';
+import {
+  assertValidConfig,
+  loadConfig,
+  type ResolvedConfig,
+} from './config.ts';
 
 const SOURCE = '/fake/tuffgal.config.ts';
 
@@ -27,7 +34,6 @@ describe('assertValidConfig', () => {
       ...validConfig(),
       apiHost: 'http://localhost:4000',
       workers: 4,
-      viewport: { width: 1280, height: 800 },
       flowInventory: 'docs/flows.md',
     };
     assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
@@ -62,8 +68,161 @@ describe('assertValidConfig', () => {
     assert.throws(() => assertValidConfig(config, SOURCE), /workers/);
   });
 
-  it('rejects a malformed viewport', () => {
-    const config = { ...validConfig(), viewport: { width: 1280 } };
-    assert.throws(() => assertValidConfig(config, SOURCE), /viewport/);
+  it('accepts a valid breakpoints selection', () => {
+    const config = { ...validConfig(), breakpoints: ['mobile', 'desktop'] };
+    assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+  });
+
+  it('rejects an unknown breakpoint name, listing the valid names', () => {
+    const config = { ...validConfig(), breakpoints: ['mobile', 'phablet'] };
+    assert.throws(
+      () => assertValidConfig(config, SOURCE),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /phablet/);
+        // The message must enumerate the valid registry names so the user
+        // can fix the typo without hunting through docs.
+        assert.match(error.message, /mobile.*tablet.*laptop.*desktop/);
+        return true;
+      },
+    );
+  });
+
+  it('rejects an empty breakpoints array', () => {
+    const config = { ...validConfig(), breakpoints: [] };
+    assert.throws(() => assertValidConfig(config, SOURCE), /breakpoints/);
+  });
+
+  it('accepts breakpoint override objects mixed with bare names', () => {
+    const config = {
+      ...validConfig(),
+      breakpoints: ['mobile', { name: 'desktop', width: 1440, height: 900 }],
+    };
+    assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+  });
+
+  it('rejects an unknown breakpoint name inside an override object', () => {
+    const config = {
+      ...validConfig(),
+      breakpoints: [{ name: 'phablet', width: 600 }],
+    };
+    assert.throws(() => assertValidConfig(config, SOURCE), /phablet/);
+  });
+
+  it('rejects a non-positive dimension in a breakpoint override', () => {
+    const config = {
+      ...validConfig(),
+      breakpoints: [{ name: 'desktop', width: 0 }],
+    };
+    assert.throws(() => assertValidConfig(config, SOURCE), /width/);
+  });
+});
+
+describe('loadConfig breakpoint resolution', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'tuffgal-config-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  // Writes a tuffgal.config.js whose default export is the given body, then
+  // resolves it through the real loader. We exercise resolution end-to-end
+  // (rather than poking the private resolveConfig) so the test pins the same
+  // path the CLI takes. `extra` is spliced verbatim into the object literal.
+  async function load(extra: string): Promise<ResolvedConfig> {
+    const body = `export default {
+      paths: {
+        actions: 'tuffgal/actions',
+        stories: 'tuffgal/stories',
+        baselines: 'tuffgal/baselines',
+        report: 'tuffgal/report',
+      },
+      baseUrl: 'http://localhost:3000',
+      ${extra}
+    };`;
+    await writeFile(join(dir, 'tuffgal.config.js'), body, 'utf8');
+    return loadConfig(dir);
+  }
+
+  it('defaults to a single desktop breakpoint when nothing is set', async () => {
+    const resolved = await load('');
+    assert.deepEqual(resolved.breakpoints, [
+      { name: 'desktop', width: 1280, height: 800 },
+    ]);
+    // The lone resolved breakpoint preserves the historical 1280x800 default.
+    assert.deepEqual(resolved.breakpoints[0], {
+      name: 'desktop',
+      width: 1280,
+      height: 800,
+    });
+  });
+
+  it('resolves named breakpoints to their registry dimensions', async () => {
+    const resolved = await load("breakpoints: ['mobile', 'tablet'],");
+    assert.deepEqual(resolved.breakpoints, [
+      { name: 'mobile', width: 375, height: 667 },
+      { name: 'tablet', width: 768, height: 1024 },
+    ]);
+    // The first resolved breakpoint is the first named mode, not the default.
+    assert.deepEqual(resolved.breakpoints[0], {
+      name: 'mobile',
+      width: 375,
+      height: 667,
+    });
+  });
+
+  it('preserves order and drops duplicates', async () => {
+    const resolved = await load(
+      "breakpoints: ['desktop', 'mobile', 'desktop', 'mobile'],",
+    );
+    assert.deepEqual(
+      resolved.breakpoints.map((b) => b.name),
+      ['desktop', 'mobile'],
+    );
+  });
+
+  it('layers per-entry overrides over registry dimensions', async () => {
+    const resolved = await load(
+      "breakpoints: [{ name: 'desktop', width: 1440, height: 900 }, 'mobile'],",
+    );
+    assert.deepEqual(resolved.breakpoints, [
+      { name: 'desktop', width: 1440, height: 900 },
+      { name: 'mobile', width: 375, height: 667 },
+    ]);
+  });
+
+  it('inherits the registry dimension for an axis an override omits', async () => {
+    const resolved = await load("breakpoints: [{ name: 'desktop', width: 1440 }],");
+    assert.deepEqual(resolved.breakpoints, [
+      { name: 'desktop', width: 1440, height: 800 },
+    ]);
+  });
+
+  it('keeps the first entry when a name is duplicated with differing dimensions', async () => {
+    const resolved = await load(
+      "breakpoints: [{ name: 'desktop', width: 1440 }, { name: 'desktop', width: 1600 }],",
+    );
+    // First wins: the later duplicate (and its dimensions) is dropped.
+    assert.deepEqual(resolved.breakpoints, [
+      { name: 'desktop', width: 1440, height: 800 },
+    ]);
+  });
+
+  it('resolves a single overridden breakpoint', async () => {
+    const resolved = await load(
+      "breakpoints: [{ name: 'laptop', width: 1024, height: 768 }],",
+    );
+    assert.deepEqual(resolved.breakpoints, [
+      { name: 'laptop', width: 1024, height: 768 },
+    ]);
+    assert.deepEqual(resolved.breakpoints[0], {
+      name: 'laptop',
+      width: 1024,
+      height: 768,
+    });
   });
 });

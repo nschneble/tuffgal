@@ -12,13 +12,105 @@ Run `npx tuffgal init` to scaffold a starter config in the current directory.
 import { defineConfig } from 'tuffgal';
 
 export default defineConfig({
+  /*
+   * Required fields
+   */
+
+  // where Tuffgal reads + writes content
+  // all paths are relative to this config file
   paths: {
-    /* … */
+    // action JSON files (recursive)
+    actions: 'tuffgal/actions',
+
+    // story JSON files (recursive)
+    stories: 'tuffgal/stories',
+
+    // PNG baselines + a11y snapshots
+    baselines: 'tuffgal/baselines',
+
+    // generated HTML report + traces
+    report: 'tuffgal/report',
+
+    // produces/needs label cache
+    authState: 'tuffgal/.auth',
   },
+
+  // base URL of the running app
+  // every `navigate` path resolves against this
   baseUrl: 'http://localhost:5173',
-  // optional fields below
+
+  /*
+   * Optional fields
+   */
+
+  // API origin (scheme + host + port)
+  // scopes `intercept` patterns to API traffic
+  // set only when the API runs on a different origin than the app
+  apiHost: 'http://localhost:3000',
+
+  // localStorage keys to persist across stories
+  storageStatePins: ['auth.jwt', 'prefs.theme'],
+
+  // viewport modes to run from the built-in registry
+  // each renders in its own context + produces its own baseline
+  // bare name uses registry dimensions, object overrides width/height
+  // omit to default to 'desktop' at 1280x800
+  breakpoints: ['mobile', { name: 'desktop', width: 1440, height: 900 }],
+
+  // default Playwright locator + action timeout in milliseconds
+  defaultTimeoutMs: 10_000,
+
+  // default navigation timeout for `navigate` steps in milliseconds
+  navigationTimeoutMs: 15_000,
+
+  // ISO timestamp pinned to the browser for deterministic relative times
+  // e.g. so "5 min ago" is always "5 min ago"
+  frozenTime: '2026-01-15T12:00:00.000Z',
+
+  // story-pool worker count
+  // defaults to min(cpus / 2, 4)
+  workers: 4,
+
+  // consumer DB bridge
+  // `reset` runs once before the first story
+  // each `fixtures[name]` runs before any story declaring it
+  // fixtures must be idempotent
+  database: {
+    reset: async () => {
+      // truncate + reseed
+    },
+    fixtures: {
+      'name-1': async () => {
+        // idempotent inserts
+      },
+    },
+  },
+
+  // dev-server bridge for `--manage-servers` / `supervise`. Omit when you
+  // run the dev servers yourself
+  devServers: {
+    // run via `sh -c` so pipes + `&&` work
+    command: 'npm run dev',
+
+    // relative to this file, defaults to root directory
+    cwd: '.',
+
+    // TCP probe
+    healthCheck: [{ url: 'http://localhost:5173', timeoutMs: 30_000 }],
+
+    shutdownSignal: 'SIGTERM',
+    shutdownGraceMs: 5000,
+  },
+
+  // Markdown file listing user journeys
+  // Tuffgal reports the ratio of stories w/ matching flows
+  flowInventory: 'docs/flows.md',
 });
 ```
+
+The example above sets every field for illustration. In practice only
+`paths` and `baseUrl` are required. Every optional field falls back to the
+default noted in its comment. The sections below detail each one.
 
 `defineConfig` is an identity helper. Its only job is type-checking the
 object against `TuffgalConfig`. The default export is what Tuffgal loads at
@@ -72,12 +164,45 @@ through Playwright's storage state.
 JWTs, refresh tokens, dark-mode preferences, and accessibility preferences
 are common candidates.
 
-### `viewport?: { width: number; height: number }`
+### `breakpoints?: BreakpointSelector[]`
 
-Browser viewport. Defaults to `{ width: 1280, height: 800 }`. Choose
-dimensions that match the breakpoint most of your stories should screenshot
-at. Individual stories can override this for their own browser context via
-the story-level `viewport` field. See [authoring.md](authoring.md#per-story-viewport-override).
+The viewport modes your project runs, drawn from the built-in registry. Each
+selected mode renders in its own browser context, in the order you list
+(duplicate names dropped, first wins), and produces its own baseline, diff,
+and a11y snapshot — so a single story can be regression-tested at several
+widths at once.
+
+| Name      | Dimensions | Tailwind anchor  |
+| --------- | ---------- | ---------------- |
+| `mobile`  | 375 × 667  | below `sm` (640) |
+| `tablet`  | 768 × 1024 | `md` (768)       |
+| `laptop`  | 1024 × 768 | `lg` (1024)      |
+| `desktop` | 1280 × 800 | `xl` (1280)      |
+
+Widths track Tailwind's default dimensional breakpoints so your runs line
+up with the responsive cutoffs your CSS already keys off of. Heights are
+conventional companions (Tailwind breakpoints are width-only).
+
+Each entry is either a bare registry name or a `{ name, width?, height? }`
+object that overrides that mode's dimensions. An omitted `width`/`height`
+inherits the registry default.
+
+```ts
+breakpoints: ['mobile', { name: 'desktop', width: 1440, height: 900 }],
+```
+
+When omitted, Tuffgal runs a single `desktop` mode (1280 × 800), so a project
+that never thinks about breakpoints just works.
+
+Baselines are keyed by mode at `<baselines>/<action>/<breakpoint>.png`. A
+project that baselined before breakpoints existed has its snapshots at the
+legacy `<action>/0.png`; Tuffgal reads that as a fallback so existing
+baselines keep matching. As you adopt new modes, their first run reports
+`new` until you `approve` a baseline for each one.
+
+Individual stories can run their own modes via the story-level `breakpoints`
+field, which **replaces** this set for that story. See
+[authoring.md](authoring.md#per-story-breakpoint-selection).
 
 ### `defaultTimeoutMs?: number`
 
@@ -181,6 +306,7 @@ The `tuffgal` package's barrel re-exports the following:
 
 ```ts
 import {
+  BREAKPOINTS,
   approveAll,
   defineConfig,
   init,
@@ -191,6 +317,7 @@ import {
   type ActionResult,
   type ActionStatus,
   type ApproveOptions,
+  type BreakpointName,
   type DatabaseBridge,
   type DevServerBridge,
   type Hint,

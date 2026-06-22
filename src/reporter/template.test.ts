@@ -187,7 +187,9 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
       'summary section present',
     );
     assert.ok(
-      html.includes('<li class="summary-item">\n  <span class="count">3</span>'),
+      html.includes(
+        '<li class="summary-item">\n  <span class="count">3</span>',
+      ),
       'stories total is 3',
     );
     assert.ok(
@@ -364,6 +366,181 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     assert.ok(
       !html.includes('<summary class="action-row">'),
       'shot-less action does not emit a <summary>',
+    );
+  });
+});
+
+describe('renderStoryActions — per-breakpoint grouping', () => {
+  it('groups tagged actions under labelled regions with mode name + dimensions', () => {
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      stories: [
+        makeStory({
+          status: 'pass',
+          actions: [
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'mobile',
+              breakpointWidth: 375,
+              breakpointHeight: 667,
+            }),
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'desktop',
+              breakpointWidth: 1280,
+              breakpointHeight: 800,
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    // Two breakpoint groups, one per mode, in first-seen (run-set) order.
+    assert.equal(
+      countOccurrences(html, '<div class="breakpoint-group">'),
+      2,
+      'one breakpoint-group div per distinct mode',
+    );
+    assert.ok(
+      html.includes('<span class="breakpoint-name">mobile</span>'),
+      'mobile mode name rendered',
+    );
+    assert.ok(
+      html.includes('<span class="breakpoint-name">desktop</span>'),
+      'desktop mode name rendered',
+    );
+
+    // Dimensions: decorative aria-hidden glyph span + sr-only longhand.
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-dimensions" aria-hidden="true">375×667</span><span class="sr-only">375 by 667 pixels</span>',
+      ),
+      'mobile dimensions render as aria-hidden 375×667 + sr-only longhand',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-dimensions" aria-hidden="true">1280×800</span><span class="sr-only">1280 by 800 pixels</span>',
+      ),
+      'desktop dimensions render as aria-hidden 1280×800 + sr-only longhand',
+    );
+
+    // The sr-only " actions" token rides inside the caption so the computed
+    // name reads "<mode> <dims> actions" without "actions" being visible.
+    assert.ok(
+      html.includes('<span class="sr-only"> actions</span>'),
+      'caption carries an sr-only " actions" token for the accessible name',
+    );
+
+    // First group's label id wires its action list via aria-labelledby.
+    assert.ok(
+      html.includes('<p class="breakpoint-label" id="s0-bp0-label">'),
+      'first group caption carries the deterministic s0-bp0-label id',
+    );
+    assert.ok(
+      html.includes('<ol class="actions" aria-labelledby="s0-bp0-label">'),
+      'first group action list points aria-labelledby at its caption id',
+    );
+    assert.ok(
+      html.includes('<p class="breakpoint-label" id="s0-bp1-label">'),
+      'second group caption carries the s0-bp1-label id',
+    );
+    assert.ok(
+      html.includes('<ol class="actions" aria-labelledby="s0-bp1-label">'),
+      'second group action list points aria-labelledby at its caption id',
+    );
+
+    // The mobile action must be nested under the mobile (first) group, not the
+    // desktop one: the mobile caption + its <ol> precede the desktop caption.
+    const mobileLabelIndex = html.indexOf('id="s0-bp0-label"');
+    const desktopLabelIndex = html.indexOf('id="s0-bp1-label"');
+    assert.ok(
+      mobileLabelIndex !== -1 && desktopLabelIndex !== -1,
+      'both group captions present',
+    );
+    assert.ok(
+      mobileLabelIndex < desktopLabelIndex,
+      'mobile group precedes desktop group (first-seen / config order)',
+    );
+
+    // No legacy flat list and no aria-label="Actions" fallback when grouped.
+    assert.ok(
+      !html.includes('<ol class="actions" aria-label="Actions">'),
+      'grouped render does not emit the legacy flat aria-label="Actions" list',
+    );
+  });
+
+  it('renders a single-mode story as a flat list with no breakpoint chrome', () => {
+    // The common default `desktop` project ran at one mode: no caption, no
+    // group wrapper — just the historical flat list.
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      stories: [
+        makeStory({
+          status: 'pass',
+          actions: [
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'desktop',
+              breakpointWidth: 1280,
+              breakpointHeight: 800,
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes('<ol class="actions" aria-label="Actions">'),
+      'single-mode story renders the flat aria-label="Actions" list',
+    );
+    assert.ok(
+      !html.includes('<div class="breakpoint-group">'),
+      'no breakpoint-group wrapper for a single mode',
+    );
+    assert.ok(
+      !html.includes('class="breakpoint-label"'),
+      'no breakpoint caption for a single mode',
+    );
+  });
+
+  it('labels a group with the recorded override dimensions', () => {
+    // Two modes force grouping; the desktop group shows the recorded override
+    // (1440×900), never a registry default for the name.
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      stories: [
+        makeStory({
+          status: 'pass',
+          actions: [
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'mobile',
+              breakpointWidth: 375,
+              breakpointHeight: 667,
+            }),
+            makeAction({
+              action: 'visit-home',
+              breakpoint: 'desktop',
+              breakpointWidth: 1440,
+              breakpointHeight: 900,
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-dimensions" aria-hidden="true">1440×900</span><span class="sr-only">1440 by 900 pixels</span>',
+      ),
+      'overridden desktop renders the recorded 1440×900',
+    );
+    assert.ok(
+      !html.includes('1280×800'),
+      'the registry default for the overridden mode does not leak into the label',
     );
   });
 });

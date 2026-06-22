@@ -70,6 +70,34 @@ describe('loadStories', () => {
     const files = stories.map((entry) => entry.file).sort();
     assert.deepEqual(files, ['a.json', 'b.json']);
   });
+
+  it('accepts breakpoint entries as bare names or override objects', async () => {
+    await write(
+      'bp.json',
+      JSON.stringify({
+        story: 'mixed breakpoints',
+        actions: [{ action: 'visit-home' }],
+        breakpoints: ['mobile', { name: 'desktop', width: 1440, height: 900 }],
+      }),
+    );
+    const stories = await loadStories(dir);
+    assert.deepEqual(stories[0]?.story.breakpoints, [
+      'mobile',
+      { name: 'desktop', width: 1440, height: 900 },
+    ]);
+  });
+
+  it('rejects a story breakpoint override naming an unknown mode', async () => {
+    await write(
+      'bad.json',
+      JSON.stringify({
+        story: 'bad breakpoint',
+        actions: [{ action: 'visit-home' }],
+        breakpoints: [{ name: 'phablet', width: 600 }],
+      }),
+    );
+    await assert.rejects(loadStories(dir), LoadError);
+  });
 });
 
 describe('loadActions', () => {

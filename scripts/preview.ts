@@ -1,30 +1,88 @@
 /**
- * Renders a sample report so you can eyeball the HTML reporter without running
- * a real suite (which needs Playwright + a dev server). Builds a fixture
- * `RunResult` covering passed / changed / failed stories, writes it through the
- * real `writeReport`, and opens the result in your browser.
+ * Renders a sample report so you can eyeball the HTML report without
+ * running a real suite, which needs Playwright + a dev server.
  *
- *   npm run preview
+ * Builds a fixture `RunResult` covering passed, changed, and failed
+ * stories, each run at both the `mobile` and `desktop` breakpoints, and
+ * opens the report in your web browser.
  *
- * Output goes to a throwaway temp dir; nothing in the repo is touched.
+ * `npm run preview`
+ *
+ * Outputs to a (throwaway) temp directory.
  */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PNG } from 'pngjs';
 import type { RunResult } from '../src/schema/result.ts';
 import { writeReport } from '../src/reporter/writeReport.ts';
+import { diffPngs } from '../src/screenshots/diff.ts';
 
-// A 1×1 PNG so the screenshot panels resolve to a real image.
-const PIXEL_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
-  'base64',
-);
+type Rgba = readonly [number, number, number, number];
+
+function rect(
+  png: PNG,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  [r, g, b, a]: Rgba,
+): void {
+  const x0 = Math.max(0, Math.round(x));
+  const y0 = Math.max(0, Math.round(y));
+  const x1 = Math.min(png.width, Math.round(x + w));
+  const y1 = Math.min(png.height, Math.round(y + h));
+  for (let py = y0; py < y1; py += 1) {
+    for (let px = x0; px < x1; px += 1) {
+      const offset = (py * png.width + px) * 4;
+      png.data[offset] = r;
+      png.data[offset + 1] = g;
+      png.data[offset + 2] = b;
+      png.data[offset + 3] = a;
+    }
+  }
+}
+
+function mockPage(
+  width: number,
+  height: number,
+  { shift = 0 }: { shift?: number } = {},
+): Buffer {
+  const png = new PNG({ width, height });
+  rect(png, 0, 0, width, height, [250, 250, 251, 255]);
+
+  const margin = Math.round(width * 0.07);
+  const contentW = width - margin * 2;
+  const x = margin + shift;
+  const title: Rgba = [34, 38, 46, 255];
+  const divider: Rgba = [206, 210, 218, 255];
+  const text: Rgba = [148, 154, 165, 255];
+
+  let y = Math.round(height * 0.08) + shift;
+  rect(
+    png,
+    x,
+    y,
+    Math.round(contentW * 0.58),
+    Math.round(height * 0.035),
+    title,
+  );
+  y += Math.round(height * 0.06);
+  rect(png, x, y, contentW, Math.max(2, Math.round(height * 0.004)), divider);
+  y += Math.round(height * 0.035);
+
+  const rowH = Math.max(3, Math.round(height * 0.014));
+  const gap = Math.round(height * 0.018);
+  for (const w of [1, 0.96, 0.88, 0.93, 0.6, 0.9, 0.84, 0.7, 0.5]) {
+    if (y + rowH > height) break;
+    rect(png, x, y, Math.round(contentW * w), rowH, text);
+    y += rowH + gap;
+  }
+  return PNG.sync.write(png);
+}
 
 function openInBrowser(target: string): void {
-  // win32 `start` is a shell builtin (needs an empty-title first arg); darwin
-  // and linux take the path as a normal argument, so no shell — keeps the path
-  // un-concatenated and dodges the shell-injection DeprecationWarning.
   const [command, args] =
     process.platform === 'darwin'
       ? ['open', [target]]
@@ -36,18 +94,42 @@ function openInBrowser(target: string): void {
       stdio: 'ignore',
       detached: true,
     }).unref();
-  } catch {
-    // Headless / no opener — the printed path is the fallback.
-  }
+  } catch {}
 }
+
+const BP = {
+  mobile: { breakpoint: 'mobile', breakpointWidth: 375, breakpointHeight: 667 },
+  desktop: {
+    breakpoint: 'desktop',
+    breakpointWidth: 1280,
+    breakpointHeight: 800,
+  },
+} as const;
 
 async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'tuffgal-preview-'));
-  const shot = (name: string): string => {
+  const writeShot = (name: string, png: Buffer): string => {
     const path = join(dir, `${name}.png`);
-    writeFileSync(path, PIXEL_PNG);
+    writeFileSync(path, png);
     return path;
   };
+  const shot = (
+    name: string,
+    bp: { breakpointWidth: number; breakpointHeight: number },
+    opts: { shift?: number } = {},
+  ): string =>
+    writeShot(name, mockPage(bp.breakpointWidth, bp.breakpointHeight, opts));
+
+  const settingsBase = mockPage(
+    BP.desktop.breakpointWidth,
+    BP.desktop.breakpointHeight,
+  );
+  const settingsActual = mockPage(
+    BP.desktop.breakpointWidth,
+    BP.desktop.breakpointHeight,
+    { shift: 10 },
+  );
+  const settingsDiff = diffPngs(settingsBase, settingsActual, 0.1);
 
   const result: RunResult = {
     startedAt: '2026-06-19T13:58:17.000Z',
@@ -68,6 +150,7 @@ async function main(): Promise<void> {
         durationMs: 8200,
         actions: [
           {
+            ...BP.mobile,
             action: 'navigate',
             parameters: { url: '/' },
             status: 'pass',
@@ -76,13 +159,33 @@ async function main(): Promise<void> {
             durationMs: 1200,
           },
           {
+            ...BP.mobile,
             action: 'screenshot',
             status: 'pass',
             startedAt: '2026-06-19T13:58:18.200Z',
             finishedAt: '2026-06-19T13:58:18.900Z',
             durationMs: 700,
-            baselinePath: shot('home-base'),
-            actualPath: shot('home-actual'),
+            baselinePath: shot('home-mobile-base', BP.mobile),
+            actualPath: shot('home-mobile-actual', BP.mobile),
+          },
+          {
+            ...BP.desktop,
+            action: 'navigate',
+            parameters: { url: '/' },
+            status: 'pass',
+            startedAt: '2026-06-19T13:58:18.900Z',
+            finishedAt: '2026-06-19T13:58:20.000Z',
+            durationMs: 1100,
+          },
+          {
+            ...BP.desktop,
+            action: 'screenshot',
+            status: 'pass',
+            startedAt: '2026-06-19T13:58:20.000Z',
+            finishedAt: '2026-06-19T13:58:20.700Z',
+            durationMs: 700,
+            baselinePath: shot('home-desktop-base', BP.desktop),
+            actualPath: shot('home-desktop-actual', BP.desktop),
           },
         ],
       },
@@ -95,6 +198,7 @@ async function main(): Promise<void> {
         durationMs: 14800,
         actions: [
           {
+            ...BP.mobile,
             action: 'navigate',
             parameters: { url: '/settings' },
             status: 'pass',
@@ -103,16 +207,37 @@ async function main(): Promise<void> {
             durationMs: 1100,
           },
           {
+            ...BP.mobile,
             action: 'screenshot',
-            status: 'changed',
+            status: 'pass',
             startedAt: '2026-06-19T13:58:26.300Z',
             finishedAt: '2026-06-19T13:58:27.200Z',
             durationMs: 900,
-            baselinePath: shot('settings-base'),
-            actualPath: shot('settings-actual'),
-            diffPath: shot('settings-diff'),
-            diffPixels: 4210,
-            diffRatio: 0.0182,
+            baselinePath: shot('settings-mobile-base', BP.mobile),
+            actualPath: shot('settings-mobile-actual', BP.mobile),
+          },
+          {
+            ...BP.desktop,
+            action: 'navigate',
+            parameters: { url: '/settings' },
+            status: 'pass',
+            startedAt: '2026-06-19T13:58:27.200Z',
+            finishedAt: '2026-06-19T13:58:28.300Z',
+            durationMs: 1100,
+          },
+          {
+            ...BP.desktop,
+            action: 'screenshot',
+            status: 'changed',
+            startedAt: '2026-06-19T13:58:28.300Z',
+            finishedAt: '2026-06-19T13:58:29.200Z',
+            durationMs: 900,
+            baselinePath: writeShot('settings-desktop-base', settingsBase),
+            actualPath: writeShot('settings-desktop-actual', settingsActual),
+            diffPath: writeShot('settings-desktop-diff', settingsDiff.diffPng),
+            diffPixels: settingsDiff.diffPixels,
+            diffRatio: settingsDiff.diffRatio,
+            ssimScore: settingsDiff.ssimScore,
           },
         ],
       },
@@ -126,6 +251,7 @@ async function main(): Promise<void> {
         tracePath: join(dir, 'checkout-trace.zip'),
         actions: [
           {
+            ...BP.mobile,
             action: 'navigate',
             parameters: { url: '/cart' },
             status: 'pass',
@@ -134,11 +260,32 @@ async function main(): Promise<void> {
             durationMs: 1000,
           },
           {
+            ...BP.mobile,
             action: 'click',
             parameters: { selector: 'button#buy' },
             status: 'failed',
             startedAt: '2026-06-19T13:58:41.000Z',
             finishedAt: '2026-06-19T13:58:46.000Z',
+            durationMs: 5000,
+            failureMessage:
+              'TimeoutError: locator.click: Timeout 5000ms exceeded.\n  waiting for locator("button#buy")',
+          },
+          {
+            ...BP.desktop,
+            action: 'navigate',
+            parameters: { url: '/cart' },
+            status: 'pass',
+            startedAt: '2026-06-19T13:58:46.000Z',
+            finishedAt: '2026-06-19T13:58:47.000Z',
+            durationMs: 1000,
+          },
+          {
+            ...BP.desktop,
+            action: 'click',
+            parameters: { selector: 'button#buy' },
+            status: 'failed',
+            startedAt: '2026-06-19T13:58:47.000Z',
+            finishedAt: '2026-06-19T13:58:52.000Z',
             durationMs: 5000,
             failureMessage:
               'TimeoutError: locator.click: Timeout 5000ms exceeded.\n  waiting for locator("button#buy")',

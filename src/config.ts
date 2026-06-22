@@ -45,6 +45,53 @@ export interface DevServerBridge {
 }
 
 /**
+ * Built-in named viewport modes. Widths track Tailwind's default dimensional
+ * breakpoints (sm=640, md=768, lg=1024, xl=1280) so a project's Tuffgal runs
+ * line up with the responsive cutoffs its CSS already keys off of:
+ *   - mobile  sits below the sm=640 cutoff (small-phone portrait)
+ *   - tablet  lands exactly on md=768
+ *   - laptop  lands exactly on lg=1024
+ *   - desktop lands exactly on xl=1280, and preserves the historical
+ *     1280x800 default so projects that never opt into breakpoints render
+ *     identically to before this feature existed.
+ * Heights are conventional companions to each width, not Tailwind values
+ * (Tailwind breakpoints are width-only).
+ */
+export const BREAKPOINTS = {
+  mobile: { width: 375, height: 667 },
+  tablet: { width: 768, height: 1024 },
+  laptop: { width: 1024, height: 768 },
+  desktop: { width: 1280, height: 800 },
+} as const;
+
+/** A built-in breakpoint name. Other modules reuse this for per-mode work. */
+export type BreakpointName = keyof typeof BREAKPOINTS;
+
+/**
+ * One resolved breakpoint mode: a name plus the viewport dimensions to render
+ * at. Built from a {@link BreakpointSelector} (a registry entry, optionally
+ * with a dimension override). Exported so the runner consumes the same shape
+ * `resolveConfig` emits instead of redeclaring its own copy.
+ */
+export type ResolvedBreakpoint = {
+  name: string;
+  width: number;
+  height: number;
+};
+
+/**
+ * One breakpoint selection in `config.breakpoints` (and per-story
+ * `breakpoints`): either a bare registry name — render at that mode's built-in
+ * dimensions — or `{ name, width?, height? }` to override the viewport for that
+ * mode. An omitted `width`/`height` inherits the registry default for the
+ * named mode. Bare-string entries keep older `['mobile', 'desktop']` configs
+ * working unchanged.
+ */
+export type BreakpointSelector =
+  | BreakpointName
+  | { name: BreakpointName; width?: number; height?: number };
+
+/**
  * Static paths Tuffgal reads + writes. All relative to the config file's
  * location.
  */
@@ -81,8 +128,16 @@ export interface TuffgalConfig {
    * state.
    */
   storageStatePins?: string[];
-  /** Browser viewport. Defaults to 1280x800. */
-  viewport?: { width: number; height: number };
+  /**
+   * Breakpoint modes this project runs, drawn from the built-in
+   * {@link BREAKPOINTS} registry (`mobile` | `tablet` | `laptop` | `desktop`).
+   * Each entry is either a bare name (registry dimensions) or
+   * `{ name, width?, height? }` to override that mode's viewport — an omitted
+   * `width`/`height` inherits the registry default. Order is preserved; when a
+   * name repeats, the first entry wins and later duplicates are dropped. Omit
+   * the field to run a single `desktop` breakpoint (1280x800).
+   */
+  breakpoints?: BreakpointSelector[];
   /** Default Playwright locator + action timeout. Defaults to 10_000. */
   defaultTimeoutMs?: number;
   /** Default navigation timeout. Defaults to 15_000. */
@@ -119,7 +174,14 @@ export interface ResolvedConfig {
   baseUrl: string;
   apiHost: string | undefined;
   storageStatePins: string[];
-  viewport: { width: number; height: number };
+  /**
+   * Resolved breakpoint modes, always non-empty. Each entry carries the
+   * viewport dimensions to render at. Built from `config.breakpoints` when set,
+   * else a single `desktop` default. Typed as a non-empty tuple so callers can
+   * read `breakpoints[0]` without an undefined check under
+   * noUncheckedIndexedAccess.
+   */
+  breakpoints: [ResolvedBreakpoint, ...ResolvedBreakpoint[]];
   defaultTimeoutMs: number;
   navigationTimeoutMs: number;
   frozenTime: string;
@@ -130,7 +192,6 @@ export interface ResolvedConfig {
 }
 
 const DEFAULTS = {
-  viewport: { width: 1280, height: 800 },
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',
@@ -229,20 +290,46 @@ export function assertValidConfig(input: unknown, source: string): void {
     }
   }
 
-  if (config.viewport !== undefined) {
-    const viewport = config.viewport as Record<string, unknown>;
-    if (
-      typeof viewport !== 'object' ||
-      viewport === null ||
-      typeof viewport.width !== 'number' ||
-      typeof viewport.height !== 'number'
-    ) {
-      fail('`viewport` must be `{ width: number, height: number }`.');
+  if (config.breakpoints !== undefined) {
+    const validNames = Object.keys(BREAKPOINTS);
+    const breakpoints = config.breakpoints;
+    if (!Array.isArray(breakpoints) || breakpoints.length === 0) {
+      fail(
+        '`breakpoints` must be a non-empty array of breakpoint names or ' +
+          'override objects.',
+      );
+    }
+    for (const entry of breakpoints as unknown[]) {
+      const name =
+        typeof entry === 'string'
+          ? entry
+          : (entry as { name?: unknown } | null)?.name;
+      if (typeof name !== 'string' || !validNames.includes(name)) {
+        fail(
+          `\`breakpoints\` contains an unknown breakpoint ${JSON.stringify(
+            entry,
+          )}. Valid names: ${validNames.join(', ')}.`,
+        );
+      }
+      if (typeof entry === 'object' && entry !== null) {
+        const override = entry as Record<string, unknown>;
+        for (const dim of ['width', 'height'] as const) {
+          if (
+            override[dim] !== undefined &&
+            (typeof override[dim] !== 'number' || (override[dim] as number) <= 0)
+          ) {
+            fail(
+              `\`breakpoints[].${dim}\` must be a positive number when provided.`,
+            );
+          }
+        }
+      }
     }
   }
 }
 
 function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
+  const breakpoints = resolveBreakpoints(input);
   return {
     rootDir,
     paths: {
@@ -258,7 +345,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     baseUrl: input.baseUrl,
     apiHost: input.apiHost,
     storageStatePins: input.storageStatePins ?? [],
-    viewport: input.viewport ?? DEFAULTS.viewport,
+    breakpoints,
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:
       input.navigationTimeoutMs ?? DEFAULTS.navigationTimeoutMs,
@@ -270,4 +357,64 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
       ? resolve(rootDir, input.flowInventory)
       : undefined,
   };
+}
+
+/**
+ * Resolves one {@link BreakpointSelector} to its concrete dimensions: a bare
+ * name takes the registry defaults, an override object layers its `width`/
+ * `height` over them. Validation guarantees the name is a valid registry key
+ * by the time we get here.
+ */
+function normaliseSelector(selector: BreakpointSelector): ResolvedBreakpoint {
+  if (typeof selector === 'string') {
+    return { name: selector, ...BREAKPOINTS[selector] };
+  }
+  const base = BREAKPOINTS[selector.name];
+  return {
+    name: selector.name,
+    width: selector.width ?? base.width,
+    height: selector.height ?? base.height,
+  };
+}
+
+/**
+ * Resolves a list of selectors to concrete breakpoints, preserving order and
+ * dropping duplicate names (first entry wins). Shared by config-level and
+ * per-story breakpoint resolution so both normalise the same way: each list
+ * stands alone, resolved against the registry, never cross-referencing the
+ * other. The caller guarantees the input is non-empty.
+ */
+export function resolveSelectorList(
+  selectors: BreakpointSelector[],
+): ResolvedBreakpoint[] {
+  const seen = new Set<string>();
+  const resolved: ResolvedBreakpoint[] = [];
+  for (const selector of selectors) {
+    const breakpoint = normaliseSelector(selector);
+    if (seen.has(breakpoint.name)) continue;
+    seen.add(breakpoint.name);
+    resolved.push(breakpoint);
+  }
+  return resolved;
+}
+
+/**
+ * Resolves `config.breakpoints` to an always-non-empty list: the explicit
+ * selectors when set (order preserved, duplicate names dropped — first wins),
+ * else a single `desktop` breakpoint (1280x800). `assertValidConfig` has
+ * already rejected unknown/empty `breakpoints`, so a non-empty input dedupes to
+ * at least one entry; the cast restores the non-empty tuple type that lets
+ * `breakpoints[0]` read without an undefined check under
+ * noUncheckedIndexedAccess.
+ */
+function resolveBreakpoints(
+  input: TuffgalConfig,
+): [ResolvedBreakpoint, ...ResolvedBreakpoint[]] {
+  if (input.breakpoints && input.breakpoints.length > 0) {
+    return resolveSelectorList(input.breakpoints) as [
+      ResolvedBreakpoint,
+      ...ResolvedBreakpoint[],
+    ];
+  }
+  return [{ name: 'desktop', ...BREAKPOINTS.desktop }];
 }

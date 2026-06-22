@@ -1,7 +1,16 @@
 import { access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { chromium, type Browser, type BrowserContext } from 'playwright';
-import type { ResolvedConfig } from '../config.ts';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from 'playwright';
+import {
+  resolveSelectorList,
+  type ResolvedBreakpoint,
+  type ResolvedConfig,
+} from '../config.ts';
 import type { Action } from '../schema/action.ts';
 import type { Story } from '../schema/story.ts';
 import type {
@@ -47,49 +56,204 @@ export async function runStory(options: RunStoryOptions): Promise<StoryResult> {
   }
 }
 
-async function runStoryWithBrowser(
+/**
+ * Drives every selected breakpoint of one story against an already-launched
+ * browser. Split out from `runStory` (which owns browser lifecycle + fixtures)
+ * so tests can exercise the per-breakpoint loop — context isolation, the
+ * failed-action-does-not-abort-others guarantee, trace-zip uniqueness, `produces`
+ * persistence, and the throw-closes-context invariant — against fake
+ * Browser/BrowserContext/Page objects without launching a real Chromium.
+ */
+export async function runStoryWithBrowser(
   browser: Browser,
   options: RunStoryOptions,
   startedAt: Date,
 ): Promise<StoryResult> {
-  const { story, file, needs, produces, actions, config, coverage } = options;
+  const { story, file, needs, produces, config, coverage } = options;
+  // Resolve the storage state once: it is viewport-independent, so every
+  // breakpoint context loads the same `needs` auth payload.
   const storageStatePath = await resolveStorageStateForNeeds(config, needs);
-  const context = await browser.newContext({
-    baseURL: config.baseUrl,
-    viewport: story.viewport ?? config.viewport,
-    storageState: storageStatePath,
-    ignoreHTTPSErrors: true,
-    permissions: ['clipboard-read', 'clipboard-write'],
-  });
-  context.setDefaultTimeout(config.defaultTimeoutMs);
-  await context.tracing.start({
-    screenshots: true,
-    snapshots: true,
-    sources: true,
-    title: file,
-  });
-  const page = await context.newPage();
-  await page.clock.install({ time: config.frozenTime });
-  if (coverage) {
-    await coverage.startForPage(page);
-  }
+  const runSet = resolveRunSet(story, config);
 
   const results: ActionResult[] = [];
+  // The story's status is the worst outcome across every breakpoint it ran at:
+  // failed if any breakpoint had a failed/skipped action, else changed if any
+  // breakpoint drifted or introduced a new baseline, else pass.
   let storyStatus: StoryStatus = 'pass';
+  // `produces` writes the post-run storage state exactly once — from the first
+  // breakpoint whose action sequence did not fail. Persisting per breakpoint
+  // would redundantly rewrite (and risk clobbering) the same `<label>.json`
+  // with state that is identical for auth purposes; one good run is enough.
+  let producedPersisted = false;
+  // Trace zips collected from the breakpoints that failed. We keep only one in
+  // the StoryResult (the first failing breakpoint) since the result carries a
+  // single `tracePath`, but each failing breakpoint still writes its own
+  // uniquely-named zip so none overwrite each other on disk.
+  let firstTracePath: string | undefined;
+
+  for (const breakpoint of runSet) {
+    const context = await browser.newContext({
+      baseURL: config.baseUrl,
+      viewport: { width: breakpoint.width, height: breakpoint.height },
+      storageState: storageStatePath,
+      ignoreHTTPSErrors: true,
+      permissions: ['clipboard-read', 'clipboard-write'],
+    });
+    // The whole per-breakpoint lifecycle runs under try/finally so the context
+    // is ALWAYS closed, even when something inside throws. Throw policy: an
+    // *action* failing is a normal visual-regression outcome — it returns a
+    // `failed` ActionResult, the loop records it, and the remaining breakpoints
+    // still run (the documented "one breakpoint failing does not abort the
+    // others" guarantee). A *thrown* exception here is different: it means the
+    // harness itself faulted (tracing/coverage threw, the page crashed, an
+    // unexpected error escaped `runActionsForBreakpoint`). That is not a diff to
+    // report — it is an infra fault, so we let it propagate and abort the whole
+    // story. The `finally` guarantees we still close this context first, so a
+    // throw can never leak the in-flight BrowserContext (the bug this guards).
+    try {
+      context.setDefaultTimeout(config.defaultTimeoutMs);
+      await context.tracing.start({
+        screenshots: true,
+        snapshots: true,
+        sources: true,
+        title: `${file} (${breakpoint.name})`,
+      });
+      const page = await context.newPage();
+      await page.clock.install({ time: config.frozenTime });
+      if (coverage) {
+        await coverage.startForPage(page);
+      }
+
+      const breakpointRun = await runActionsForBreakpoint(
+        page,
+        breakpoint,
+        options,
+      );
+      results.push(...breakpointRun.results);
+      storyStatus = mergeStoryStatus(storyStatus, breakpointRun.status);
+
+      if (coverage) {
+        await coverage.stopForPage(page);
+      }
+      const tracePath = await stopTracing(
+        context,
+        config,
+        file,
+        breakpoint.name,
+        breakpointRun.status,
+      );
+      if (tracePath && firstTracePath === undefined) {
+        firstTracePath = tracePath;
+      }
+      // Persist once, from the first breakpoint that ran clean. A failure in
+      // this breakpoint does not abort the loop — the remaining breakpoints
+      // still run so the report shows every mode — but it cannot supply the
+      // auth state.
+      if (
+        !producedPersisted &&
+        breakpointRun.status !== 'failed' &&
+        produces.length > 0
+      ) {
+        await persistProducedAuthState(context, config, produces);
+        producedPersisted = true;
+      }
+    } finally {
+      await context.close();
+    }
+  }
+
+  const finishedAt = new Date();
+  return {
+    story: story.story,
+    file,
+    status: storyStatus,
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs: finishedAt.getTime() - startedAt.getTime(),
+    actions: results,
+    tracePath: firstTracePath,
+  };
+}
+
+/**
+ * Picks the breakpoint(s) this story runs at:
+ *
+ *   - `story.breakpoints` set — run exactly those, REPLACING the project's
+ *     `config.breakpoints` (not intersected). The story's list stands alone:
+ *     it may name a mode the project does not, each selector resolved against
+ *     the registry, order preserved, duplicate names dropped (first wins). The
+ *     schema guarantees a non-empty list when the field is present.
+ *
+ *   - omitted — run the project's `config.breakpoints`, in order (the default).
+ */
+export function resolveRunSet(
+  story: Story,
+  config: ResolvedConfig,
+): ResolvedBreakpoint[] {
+  if (story.breakpoints && story.breakpoints.length > 0) {
+    return resolveSelectorList(story.breakpoints);
+  }
+  return config.breakpoints;
+}
+
+/**
+ * Folds one breakpoint's outcome into the running story status, keeping the
+ * worst: any `failed` wins; otherwise any `changed` wins; otherwise `pass`.
+ */
+export function mergeStoryStatus(
+  current: StoryStatus,
+  next: StoryStatus,
+): StoryStatus {
+  if (current === 'failed' || next === 'failed') {
+    return 'failed';
+  }
+  if (current === 'changed' || next === 'changed') {
+    return 'changed';
+  }
+  return 'pass';
+}
+
+interface BreakpointRun {
+  results: ActionResult[];
+  status: StoryStatus;
+}
+
+/**
+ * Runs every action of the story once, in order, against a single breakpoint's
+ * page. Preserves the existing within-breakpoint fail-fast: once an action
+ * fails (or names an unknown action), the remaining actions of THIS breakpoint
+ * are skipped — we never screenshot state that follows a broken step. The
+ * returned status is scoped to this breakpoint; the caller merges it into the
+ * story-wide status across all breakpoints.
+ */
+async function runActionsForBreakpoint(
+  page: Page,
+  breakpoint: ResolvedBreakpoint,
+  options: RunStoryOptions,
+): Promise<BreakpointRun> {
+  const { story, file, actions, config } = options;
+  const results: ActionResult[] = [];
+  let status: StoryStatus = 'pass';
 
   for (const storyStep of story.actions) {
     const action = actions.get(storyStep.action);
     if (!action) {
       results.push(
-        skipped(storyStep.action, 'unknown action', storyStep.parameters),
+        skipped(
+          storyStep.action,
+          breakpoint.name,
+          'unknown action',
+          storyStep.parameters,
+        ),
       );
-      storyStatus = 'failed';
+      status = 'failed';
       continue;
     }
-    if (storyStatus === 'failed') {
+    if (status === 'failed') {
       results.push(
         skipped(
           storyStep.action,
+          breakpoint.name,
           'earlier action failed',
           storyStep.parameters,
         ),
@@ -102,61 +266,52 @@ async function runStoryWithBrowser(
       parameters: storyStep.parameters ?? {},
       storyFile: file,
       config,
+      breakpoint: breakpoint.name,
     });
     results.push(result);
     if (result.status === 'failed') {
-      storyStatus = 'failed';
+      status = 'failed';
     } else if (result.status === 'changed' || result.status === 'new') {
-      if (storyStatus === 'pass') {
-        storyStatus = 'changed';
+      if (status === 'pass') {
+        status = 'changed';
       }
     }
   }
 
-  if (coverage) {
-    await coverage.stopForPage(page);
+  // Stamp the real capture dimensions onto every result so the reporter can
+  // label the group with the actual (possibly overridden) size rather than the
+  // registry default for `breakpoint.name`.
+  for (const result of results) {
+    result.breakpointWidth = breakpoint.width;
+    result.breakpointHeight = breakpoint.height;
   }
-  const tracePath = await stopTracing(context, config, file, storyStatus);
-  if (storyStatus !== 'failed' && produces.length > 0) {
-    await persistProducedAuthState(context, config, produces);
-  }
-  await context.close();
 
-  const finishedAt = new Date();
-  return {
-    story: story.story,
-    file,
-    status: storyStatus,
-    startedAt: startedAt.toISOString(),
-    finishedAt: finishedAt.toISOString(),
-    durationMs: finishedAt.getTime() - startedAt.getTime(),
-    actions: results,
-    tracePath,
-  };
+  return { results, status };
 }
 
 /**
- * Stops Playwright tracing. Writes the zip to `<report>/traces/<story>.zip`
- * when the story failed (debugging payload); discards on success to keep
- * the report directory small. Stories that need traces on every run can be
- * tweaked here later — for now failure-only is the cheap default.
+ * Stops Playwright tracing for one breakpoint's context. Writes the zip to
+ * `<report>/traces/<story>.<breakpoint>.zip` when that breakpoint failed
+ * (debugging payload); discards on success to keep the report directory small.
+ * The breakpoint is part of the filename so two breakpoints of the same story
+ * that both fail leave distinct zips instead of the second overwriting the
+ * first. Failure-only remains the cheap default.
  */
 async function stopTracing(
   context: BrowserContext,
   config: ResolvedConfig,
   storyFile: string,
-  storyStatus: StoryStatus,
+  breakpoint: string,
+  breakpointStatus: StoryStatus,
 ): Promise<string | undefined> {
-  if (storyStatus !== 'failed') {
+  if (breakpointStatus !== 'failed') {
     await context.tracing.stop();
     return undefined;
   }
   const traceDirectory = join(config.paths.report, TRACE_SUBDIR);
   await mkdir(traceDirectory, { recursive: true });
-  const tracePath = join(
-    traceDirectory,
-    `${storyFile.replace(/\.json$/i, '')}.zip`,
-  );
+  const slug = storyFile.replace(/\.json$/i, '');
+  const tracePath = join(traceDirectory, `${slug}.${breakpoint}.zip`);
   await context.tracing.stop({ path: tracePath });
   return tracePath;
 }
@@ -193,12 +348,14 @@ async function persistProducedAuthState(
 
 function skipped(
   actionName: string,
+  breakpoint: string,
   reason: string,
   parameters?: Record<string, string>,
 ): ActionResult {
   const now = new Date().toISOString();
   return {
     action: actionName,
+    breakpoint,
     status: 'skipped',
     parameters,
     startedAt: now,
