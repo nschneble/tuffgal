@@ -207,6 +207,9 @@ export default defineConfig({
 
 ### CLI
 
+> Historical scope sketch. The canonical, complete reference (every flag, exit
+> codes) lives in [cli.md](cli.md).
+
 ```bash
 npx tuffgal approve [--story <name>]  # accept changed baselines
 npx tuffgal approve --new-only        # accept only new baselines, skip changed

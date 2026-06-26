@@ -8,6 +8,12 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Added
 
+**CLI and reporting reference docs.** [`docs/cli.md`](docs/cli.md) documents
+every command, flag, and exit code in one place; [`docs/reporting.md`](docs/reporting.md)
+is the `results.json` contract for implementing apps (`totals`, `customCoverage`,
+the `stories[]`/`actions[]` shape, status enums, and the exit-code rule). Both
+are linked from the README.
+
 **`new` is a first-class status.** Stories that only wrote fresh baselines no
 longer roll up as `changed`. The report gets a `new` summary tier and a `new`
 story filter, `results.json` totals gain a `new` count, and the terminal
