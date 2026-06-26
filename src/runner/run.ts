@@ -175,6 +175,7 @@ function summarise(results: StoryResult[]): RunResult['totals'] {
     passed: results.filter((result) => result.status === 'pass').length,
     changed: results.filter((result) => result.status === 'changed').length,
     failed: results.filter((result) => result.status === 'failed').length,
+    new: results.filter((result) => result.status === 'new').length,
   };
 }
 
@@ -191,11 +192,18 @@ function writeRunSummary(
   totals: RunResult['totals'],
   reportPath: string,
 ): void {
+  const newStories = results.filter((result) => result.status === 'new');
   const changed = results.filter((result) => result.status === 'changed');
   const failed = results.filter((result) => result.status === 'failed');
 
-  if (changed.length > 0 || failed.length > 0) {
+  if (newStories.length > 0 || changed.length > 0 || failed.length > 0) {
     process.stdout.write('\n');
+    if (newStories.length > 0) {
+      process.stdout.write('New:\n');
+      for (const result of newStories) {
+        process.stdout.write(`  ${formatSummaryLine(result)}\n`);
+      }
+    }
     if (changed.length > 0) {
       process.stdout.write('Changed:\n');
       for (const result of changed) {
@@ -211,7 +219,7 @@ function writeRunSummary(
   }
 
   process.stdout.write(
-    `\nTotals: ${totals.passed} pass · ${totals.changed} changed · ${totals.failed} failed\n`,
+    `\nTotals: ${totals.passed} pass · ${totals.new} new · ${totals.changed} changed · ${totals.failed} failed\n`,
   );
   process.stdout.write(`Report: ${pathToFileURL(reportPath).href}\n`);
 }

@@ -8,10 +8,18 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Added
 
+**`new` is a first-class status.** Stories that only wrote fresh baselines no
+longer roll up as `changed`. The report gets a `new` summary tier and a `new`
+story filter, `results.json` totals gain a `new` count, and the terminal
+summary lists new stories separately. Rollup precedence is
+`failed` > `changed` > `new` > `pass`. The CI recipe in `docs/ci.md` now
+uploads the report and baselines on `new` runs too, so first-time baselines
+still surface for review.
+
 **`captureMode` config.** Choose how much of the page each screenshot
 captures: `viewport` (new default) crops to the breakpoint's `width x height`
 so snapshots reflect what the user sees above the fold, or `fullPage`
-composites the whole scrollable document — the previous behavior. A long page
+composites the whole scrollable document, the previous behavior. A long page
 no longer stretches its snapshot to full scroll height unless you opt back in.
 
 **Mismatch reason in the report.** When a screenshot can't be pixel-diffed

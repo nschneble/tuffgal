@@ -45,7 +45,7 @@ async function writeResults(stories: RunResult['stories']): Promise<void> {
     startedAt: '2026-06-11T12:00:00.000Z',
     finishedAt: '2026-06-11T12:00:01.000Z',
     durationMs: 1000,
-    totals: { stories: stories.length, passed: 0, changed: 0, failed: 0 },
+    totals: { stories: stories.length, passed: 0, changed: 0, failed: 0, new: 0 },
     customCoverage: {
       screens: { total: 0, covered: 0, ratio: 1, missing: [] },
       flows: { total: 0, covered: 0, ratio: 1, missing: [] },

@@ -211,19 +211,22 @@ export function resolveRunSet(
 
 /**
  * Folds one breakpoint's outcome into the running story status, keeping the
- * worst: any `failed` wins; otherwise any `changed` wins; otherwise `pass`.
+ * worst by precedence `failed` > `changed` > `new` > `pass`. So a story that is
+ * `new` at one breakpoint and `pass` at another reports `new`, but any `changed`
+ * or `failed` breakpoint outranks it.
  */
+const STORY_STATUS_RANK: Record<StoryStatus, number> = {
+  pass: 0,
+  new: 1,
+  changed: 2,
+  failed: 3,
+};
+
 export function mergeStoryStatus(
   current: StoryStatus,
   next: StoryStatus,
 ): StoryStatus {
-  if (current === 'failed' || next === 'failed') {
-    return 'failed';
-  }
-  if (current === 'changed' || next === 'changed') {
-    return 'changed';
-  }
-  return 'pass';
+  return STORY_STATUS_RANK[next] > STORY_STATUS_RANK[current] ? next : current;
 }
 
 interface BreakpointRun {
@@ -282,12 +285,15 @@ async function runActionsForBreakpoint(
       breakpoint: breakpoint.name,
     });
     results.push(result);
-    if (result.status === 'failed') {
-      status = 'failed';
-    } else if (result.status === 'changed' || result.status === 'new') {
-      if (status === 'pass') {
-        status = 'changed';
-      }
+    // `new`/`changed`/`failed` each fold in by precedence; `new` keeps its own
+    // status instead of being flattened into `changed` so first-run baselines
+    // read as new rather than as drift. `skipped`/`pass` leave the rollup alone.
+    if (
+      result.status === 'failed' ||
+      result.status === 'changed' ||
+      result.status === 'new'
+    ) {
+      status = mergeStoryStatus(status, result.status);
     }
   }
 

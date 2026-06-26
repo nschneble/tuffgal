@@ -68,6 +68,7 @@ function renderSummary(result: RunResult): string {
   <ul class="summary-list" aria-label="Run totals">
     ${summaryItem('stories', result.totals.stories)}
     ${summaryItem('passed', result.totals.passed, 'pass')}
+    ${summaryItem('new', result.totals.new, 'new')}
     ${summaryItem('changed', result.totals.changed, 'changed')}
     ${summaryItem('failed', result.totals.failed, 'failed')}
     ${coverageItem('screens', screens)}
@@ -115,6 +116,7 @@ function renderStories(result: RunResult, reportDir: string): string {
       <legend class="sr-only">filter</legend>
       ${storyFilterRadio('all', true)}
       ${storyFilterRadio('passed', false)}
+      ${storyFilterRadio('new', false)}
       ${storyFilterRadio('changed', false)}
       ${storyFilterRadio('failed', false)}
     </fieldset>

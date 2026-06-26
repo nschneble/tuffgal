@@ -135,6 +135,16 @@ describe('mergeStoryStatus', () => {
   it('stays pass only when every breakpoint passed', () => {
     assert.equal(mergeStoryStatus('pass', 'pass'), 'pass');
   });
+
+  it('ranks new above pass but below changed and failed', () => {
+    assert.equal(mergeStoryStatus('pass', 'new'), 'new');
+    assert.equal(mergeStoryStatus('new', 'pass'), 'new');
+    // changed/failed outrank new in either order.
+    assert.equal(mergeStoryStatus('new', 'changed'), 'changed');
+    assert.equal(mergeStoryStatus('changed', 'new'), 'changed');
+    assert.equal(mergeStoryStatus('new', 'failed'), 'failed');
+    assert.equal(mergeStoryStatus('failed', 'new'), 'failed');
+  });
 });
 
 /**

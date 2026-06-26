@@ -7,6 +7,8 @@
  * - `changed` — action succeeded but screenshot drifted past the threshold.
  *   The story does not fail. The user reviews and either approves the new
  *   baseline or files a bug.
+ * - `new` — no baseline existed; one was written this run. Informational, not a
+ *   regression — there is nothing to compare against yet.
  * - `failed` — a step threw. The story fails fast and skips any later actions.
  */
 export type ActionStatus = 'pass' | 'changed' | 'failed' | 'skipped' | 'new';
@@ -65,7 +67,13 @@ export interface ActionResult {
   a11yActualPath?: string;
 }
 
-export type StoryStatus = 'pass' | 'changed' | 'failed';
+/**
+ * Story-wide rollup of its action results. Precedence (worst wins):
+ * `failed` > `changed` > `new` > `pass`. A story is `new` only when it wrote at
+ * least one fresh baseline and had no `changed`/`failed` action — so a run of
+ * first-time stories no longer masquerades as `changed`.
+ */
+export type StoryStatus = 'pass' | 'changed' | 'failed' | 'new';
 
 export interface StoryResult {
   story: string;
@@ -124,6 +132,8 @@ export interface RunResult {
     passed: number;
     changed: number;
     failed: number;
+    /** Stories whose rollup status is `new` (wrote a fresh baseline, no drift). */
+    new: number;
   };
   /**
    * Custom coverage metrics layered on top of V8 line coverage:

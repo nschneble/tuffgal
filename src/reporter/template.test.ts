@@ -40,7 +40,7 @@ function makeRunResult(overrides: Partial<RunResult> = {}): RunResult {
     startedAt: '2026-06-11T12:00:00.000Z',
     finishedAt: '2026-06-11T12:00:01.000Z',
     durationMs: 1000,
-    totals: { stories: 0, passed: 0, changed: 0, failed: 0 },
+    totals: { stories: 0, passed: 0, changed: 0, failed: 0, new: 0 },
     customCoverage: {
       screens: { total: 10, covered: 5, ratio: 0.5, missing: [] },
       flows: { total: 4, covered: 2, ratio: 0.5, missing: [] },
@@ -63,7 +63,7 @@ function countOccurrences(haystack: string, needle: string): number {
 
 describe('renderReport — mixed pass/changed/failed fixture', () => {
   const result = makeRunResult({
-    totals: { stories: 3, passed: 1, changed: 1, failed: 1 },
+    totals: { stories: 3, passed: 1, changed: 1, failed: 1, new: 0 },
     stories: [
       makeStory({
         story: 'home page renders',
@@ -100,6 +100,7 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     );
     assert.ok(html.includes('value="all"'), 'all radio present');
     assert.ok(html.includes('value="pass"'), 'pass radio present');
+    assert.ok(html.includes('value="new"'), 'new radio present');
     assert.ok(html.includes('value="changed"'), 'changed radio present');
     assert.ok(html.includes('value="failed"'), 'failed radio present');
     assert.match(
@@ -234,7 +235,7 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
 describe('renderAction — whole row as screenshot disclosure', () => {
   it('wraps a shot-bearing action in <details class="shots"> with the full row as <summary class="action-row">', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 1, failed: 0 },
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'changed',
@@ -299,7 +300,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     // error must be a sibling after </details>, never nested inside it (a
     // nested error would hide behind the collapsed disclosure).
     const result = makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 0, failed: 1 },
+      totals: { stories: 1, passed: 0, changed: 0, failed: 1, new: 0 },
       stories: [
         makeStory({
           status: 'failed',
@@ -330,13 +331,42 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
   });
 
+  it('renders new as a first-class tier: summary total, filter radio, story row', () => {
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 0, failed: 0, new: 1 },
+      stories: [
+        makeStory({
+          status: 'new',
+          actions: [makeAction({ action: 'visit-home', status: 'new' })],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes(
+        '<li class="summary-item" data-status="new">\n  <span class="count">1</span>',
+      ),
+      'new tier total renders in the summary',
+    );
+    assert.match(
+      html,
+      /<input[^>]*value="new"[^>]*data-filter-name="new"/s,
+      'a new filter radio renders',
+    );
+    assert.ok(
+      html.includes('<li class="story" data-status="new">'),
+      'the new story carries data-status="new" so the filter matches it',
+    );
+  });
+
   it('shows the mismatch reason in the diff-stats slot when a changed action has no diff', () => {
     // A dimension mismatch yields status:changed with a failureMessage but no
     // diffRatio/diffPath. Without a note the row reads as a "changed" with an
     // empty stats slot and no diff tab — an unexplained no-op. The recorded
     // reason must fill the slot the "% differs" stat normally occupies.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 1, failed: 0 },
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'changed',
@@ -373,7 +403,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 
   it('emits no box-drawing branch glyphs (the CSS trunk line replaces them)', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'pass',
@@ -391,7 +421,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
   it('renders a screenshot-less action as a plain <div class="action-row"> with no <details>', () => {
     // The default makeAction fixture has no actualPath/baselinePath.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [makeStory({ status: 'pass', actions: [makeAction()] })],
     });
     const html = renderReport(result, REPORT_DIR);
@@ -414,7 +444,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 describe('renderStoryActions — per-breakpoint grouping', () => {
   it('groups tagged actions under labelled regions with mode name + dimensions', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'pass',
@@ -515,7 +545,7 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     // The common default `desktop` project ran at one mode: no caption, no
     // group wrapper — just the historical flat list.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'pass',
@@ -550,7 +580,7 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     // Two modes force grouping; the desktop group shows the recorded override
     // (1440×900), never a registry default for the name.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'pass',
@@ -629,7 +659,7 @@ describe('formatDate — friendly report-meta timestamp', () => {
 
 describe('renderStory — status marker + sr-only word per tier', () => {
   const result = makeRunResult({
-    totals: { stories: 3, passed: 1, changed: 1, failed: 1 },
+    totals: { stories: 3, passed: 1, changed: 1, failed: 1, new: 0 },
     stories: [
       makeStory({ status: 'pass' }),
       makeStory({ status: 'changed' }),

@@ -182,6 +182,10 @@ h2 {
   color: var(--pass);
 }
 
+.summary-item[data-status='new'] .indicator {
+  color: var(--new);
+}
+
 .summary-item[data-status='changed'] .indicator {
   color: var(--changed);
 }
@@ -331,6 +335,10 @@ h2 {
   box-shadow: inset 3px 0 0 var(--failed);
 }
 
+.story[data-status='new'] {
+  box-shadow: inset 3px 0 0 var(--new);
+}
+
 .story[data-status='changed'] {
   box-shadow: inset 3px 0 0 var(--changed);
 }
@@ -355,6 +363,11 @@ h2 {
 .story[data-status='pass'] .story-marker,
 .story[data-status='pass'] .story-file {
   color: var(--pass);
+}
+
+.story[data-status='new'] .story-marker,
+.story[data-status='new'] .story-file {
+  color: var(--new);
 }
 
 .story[data-status='changed'] .story-marker,
