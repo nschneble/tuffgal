@@ -14,6 +14,12 @@ so snapshots reflect what the user sees above the fold, or `fullPage`
 composites the whole scrollable document — the previous behavior. A long page
 no longer stretches its snapshot to full scroll height unless you opt back in.
 
+**Mismatch reason in the report.** When a screenshot can't be pixel-diffed
+because the baseline and actual images have different dimensions (e.g. a
+`fullPage` capture whose page grew taller), the report now writes the reason
+in the slot the "{x}% differs" stat normally fills. A "changed" row with no
+diff image no longer reads as an unexplained no-op.
+
 ### Changed
 
 **Screenshots default to viewport-only.** Captures were always full-page;

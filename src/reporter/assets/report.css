@@ -629,6 +629,13 @@ summary.action-row:focus-visible {
   color: var(--text-subtle);
 }
 
+/* No diff image to show (dimension mismatch). The note IS the primary content
+   of this slot, so it keeps full `--text` weight; italic alone marks the
+   "no data" state. */
+.diff-stats--unavailable .label {
+  font-style: italic;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
   summary.action-row::after,

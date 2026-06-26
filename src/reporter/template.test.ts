@@ -330,6 +330,47 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
   });
 
+  it('shows the mismatch reason in the diff-stats slot when a changed action has no diff', () => {
+    // A dimension mismatch yields status:changed with a failureMessage but no
+    // diffRatio/diffPath. Without a note the row reads as a "changed" with an
+    // empty stats slot and no diff tab — an unexplained no-op. The recorded
+    // reason must fill the slot the "% differs" stat normally occupies.
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0 },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              failureMessage:
+                'Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+              actualPath: '/fake/report/dir/shots/settings.actual.png',
+              baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes('diff-stats--unavailable'),
+      'the unavailable note variant renders',
+    );
+    assert.ok(
+      html.includes(
+        'No pixel diff. Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+      ),
+      'the recorded mismatch reason fills the diff-stats slot',
+    );
+    assert.ok(
+      !html.includes('differs</span>'),
+      'no "% differs" stat renders when there is no diffRatio',
+    );
+  });
+
   it('emits no box-drawing branch glyphs (the CSS trunk line replaces them)', () => {
     const result = makeRunResult({
       totals: { stories: 1, passed: 1, changed: 0, failed: 0 },

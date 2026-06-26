@@ -373,10 +373,18 @@ function renderScreenshots(
           (name) => available[name] !== undefined,
         );
   const diffStatsId = `${actionId}-diff-stats`;
+  // The pixel-diff overlay only exists when baseline and actual share
+  // dimensions. A mismatch (e.g. a fullPage capture whose document grew taller)
+  // throws before a diff is computed, so `diffRatio` is absent and there is no
+  // diff image to show — surface the recorded reason here, in the slot the
+  // "% differs" stat would normally occupy, so a "changed" row never reads as
+  // an unexplained no-op.
   const diffStats =
     action.diffRatio !== undefined
       ? `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`
-      : '';
+      : action.status === 'changed' && action.failureMessage
+        ? `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">No pixel diff. ${escapeHtml(action.failureMessage)}</span></p>`
+        : '';
   return `
 <fieldset class="shot-radio" data-default-tab="${defaultTab}">
   <legend class="sr-only">Screenshot to display</legend>
