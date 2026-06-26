@@ -26,19 +26,27 @@ its parse:
 
 ```ts
 import { type RunResult } from 'tuffgal';
-const result: RunResult = JSON.parse(await readFile('tuffgal/report/results.json', 'utf8'));
+const result: RunResult = JSON.parse(
+  await readFile('tuffgal/report/results.json', 'utf8'),
+);
 ```
 
 ## Top level: `RunResult`
 
 ```jsonc
 {
-  "startedAt": "2026-06-26T12:00:00.000Z",  // ISO 8601, run start
+  "startedAt": "2026-06-26T12:00:00.000Z", // ISO 8601, run start
   "finishedAt": "2026-06-26T12:00:35.490Z", // ISO 8601, run end
-  "durationMs": 35490,                       // wall-clock for the whole run
-  "totals": { /* see below */ },
-  "customCoverage": { /* see below */ },
-  "stories": [ /* StoryResult[], see below */ ]
+  "durationMs": 35490, // wall-clock for the whole run
+  "totals": {
+    /* see below */
+  },
+  "customCoverage": {
+    /* see below */
+  },
+  "stories": [
+    /* StoryResult[], see below */
+  ],
 }
 ```
 
@@ -48,13 +56,13 @@ One run-wide tally. Every count is **stories**, not actions. A story that runs
 at several breakpoints is counted once, under its worst-across-breakpoints
 status.
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `stories` | number | Total stories run (`= passed + new + changed + failed`). |
-| `passed` | number | Stories where every screenshot matched its baseline. |
-| `new` | number | Stories that wrote at least one fresh baseline and had no drift or failure. Nothing to compare against yet. |
-| `changed` | number | Stories where a screenshot drifted past threshold (and none failed). A review decision, not an error. |
-| `failed` | number | Stories where an action threw (or was skipped because an earlier action failed). |
+| Field     | Type   | Meaning                                                                                                     |
+| --------- | ------ | ----------------------------------------------------------------------------------------------------------- |
+| `stories` | number | Total stories run (`= passed + new + changed + failed`).                                                    |
+| `passed`  | number | Stories where every screenshot matched its baseline.                                                        |
+| `new`     | number | Stories that wrote at least one fresh baseline and had no drift or failure. Nothing to compare against yet. |
+| `changed` | number | Stories where a screenshot drifted past threshold (and none failed). A review decision, not an error.       |
+| `failed`  | number | Stories where an action threw (or was skipped because an earlier action failed).                            |
 
 `new + changed + failed` are the stories a human probably wants to look at;
 `passed` is the quiet majority.
@@ -63,12 +71,12 @@ status.
 
 Two ratios layered on top of V8 line coverage, each a `CoverageMetric`:
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `total` | number | Denominator (declared screens, or journeys in `flowInventory`). |
-| `covered` | number | Numerator (screens with a baseline, or stories tagged with a matching `flow`). |
-| `ratio` | number | `covered / total`, `0`–`1`. |
-| `missing` | string[] | The uncovered names. |
+| Field     | Type     | Meaning                                                                        |
+| --------- | -------- | ------------------------------------------------------------------------------ |
+| `total`   | number   | Denominator (declared screens, or journeys in `flowInventory`).                |
+| `covered` | number   | Numerator (screens with a baseline, or stories tagged with a matching `flow`). |
+| `ratio`   | number   | `covered / total`, `0`–`1`.                                                    |
+| `missing` | string[] | The uncovered names.                                                           |
 
 ```jsonc
 "customCoverage": {
@@ -84,40 +92,40 @@ carrying a `flow` tag / journeys listed in `config.flowInventory`.
 
 One entry per story run. Order is dependency/completion order.
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `story` | string | The story's prose title. |
-| `file` | string | Source story file name. |
-| `status` | `StoryStatus` | Rollup across breakpoints. `pass` \| `new` \| `changed` \| `failed` (worst wins, `failed` > `changed` > `new` > `pass`). |
-| `startedAt` / `finishedAt` | string | ISO 8601 window for the story. |
-| `durationMs` | number | Wall-clock for the story across its breakpoints. |
-| `actions` | `ActionResult[]` | One entry per action per breakpoint (see below). |
-| `tracePath` | string? | Absolute path to the Playwright trace zip; present only when the story failed. Open with `npx playwright show-trace <tracePath>`. |
+| Field                      | Type             | Meaning                                                                                                                           |
+| -------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `story`                    | string           | The story's prose title.                                                                                                          |
+| `file`                     | string           | Source story file name.                                                                                                           |
+| `status`                   | `StoryStatus`    | Rollup across breakpoints. `pass` \| `new` \| `changed` \| `failed` (worst wins, `failed` > `changed` > `new` > `pass`).          |
+| `startedAt` / `finishedAt` | string           | ISO 8601 window for the story.                                                                                                    |
+| `durationMs`               | number           | Wall-clock for the story across its breakpoints.                                                                                  |
+| `actions`                  | `ActionResult[]` | One entry per action per breakpoint (see below).                                                                                  |
+| `tracePath`                | string?          | Absolute path to the Playwright trace zip; present only when the story failed. Open with `npx playwright show-trace <tracePath>`. |
 
 ## `actions[]`: `ActionResult`
 
 One entry per action, per breakpoint it rendered at. A story run at two
 breakpoints contributes two entries per action, each tagged with its mode.
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `action` | string | Action name. |
-| `status` | `ActionStatus` | `pass` \| `new` \| `changed` \| `failed` \| `skipped`. `skipped` means an earlier action in this breakpoint failed. |
-| `breakpoint` | string? | Mode name (`mobile` / `desktop` / …). |
-| `breakpointWidth` / `breakpointHeight` | number? | The actual capture viewport, including per-story or per-config overrides. |
-| `parameters` | object? | Author-declared parameters, verbatim. |
-| `startedAt` / `finishedAt` | string | ISO 8601 window. |
-| `durationMs` | number | Wall-clock for the action. |
-| `baselinePath` | string? | Committed baseline PNG compared against. |
-| `actualPath` | string? | Screenshot captured this run. |
-| `diffPath` | string? | Pixel-diff overlay PNG. Present only on a `changed` action with matching dimensions. |
-| `diffPixels` | number? | Count of differing pixels. |
-| `diffRatio` | number? | `diffPixels / totalPixels`, `0`–`1`. Absent when dimensions mismatched (no diff could be computed). |
-| `ssimScore` | number? | Mean structural similarity, `0`–`1`. `1.0` = identical. This is the gate that drives `pass` vs `changed`. |
-| `failedStepIndex` | number? | 0-based index of the step that threw. |
-| `failureMessage` | string? | Error or mismatch message (also surfaced in the report). |
-| `a11yChanged` | boolean? | `true` when the captured accessibility tree differs from baseline. Informational; does not gate `pass`/`changed`. |
-| `a11yBaselinePath` / `a11yActualPath` | string? | Accessibility-tree snapshots (`a11y.yaml`). |
+| Field                                  | Type           | Meaning                                                                                                             |
+| -------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `action`                               | string         | Action name.                                                                                                        |
+| `status`                               | `ActionStatus` | `pass` \| `new` \| `changed` \| `failed` \| `skipped`. `skipped` means an earlier action in this breakpoint failed. |
+| `breakpoint`                           | string?        | Mode name (`mobile` / `desktop` / …).                                                                               |
+| `breakpointWidth` / `breakpointHeight` | number?        | The actual capture viewport, including per-story or per-config overrides.                                           |
+| `parameters`                           | object?        | Author-declared parameters, verbatim.                                                                               |
+| `startedAt` / `finishedAt`             | string         | ISO 8601 window.                                                                                                    |
+| `durationMs`                           | number         | Wall-clock for the action.                                                                                          |
+| `baselinePath`                         | string?        | Committed baseline PNG compared against.                                                                            |
+| `actualPath`                           | string?        | Screenshot captured this run.                                                                                       |
+| `diffPath`                             | string?        | Pixel-diff overlay PNG. Present only on a `changed` action with matching dimensions.                                |
+| `diffPixels`                           | number?        | Count of differing pixels.                                                                                          |
+| `diffRatio`                            | number?        | `diffPixels / totalPixels`, `0`–`1`. Absent when dimensions mismatched (no diff could be computed).                 |
+| `ssimScore`                            | number?        | Mean structural similarity, `0`–`1`. `1.0` = identical. This is the gate that drives `pass` vs `changed`.           |
+| `failedStepIndex`                      | number?        | 0-based index of the step that threw.                                                                               |
+| `failureMessage`                       | string?        | Error or mismatch message (also surfaced in the report).                                                            |
+| `a11yChanged`                          | boolean?       | `true` when the captured accessibility tree differs from baseline. Informational; does not gate `pass`/`changed`.   |
+| `a11yBaselinePath` / `a11yActualPath`  | string?        | Accessibility-tree snapshots (`a11y.yaml`).                                                                         |
 
 ## Exit code
 
