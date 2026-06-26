@@ -204,6 +204,25 @@ Individual stories can run their own modes via the story-level `breakpoints`
 field, which **replaces** this set for that story. See
 [authoring.md](authoring.md#per-story-breakpoint-selection).
 
+### `captureMode?: 'viewport' | 'fullPage'`
+
+How much of the page each screenshot captures. Default: `viewport`.
+
+- `viewport` — crops to the breakpoint's `width x height` box, so a snapshot
+  shows exactly what a user sees above the fold (e.g. `1280x800` for
+  `desktop`). A long page is _not_ stretched to its full scroll height.
+- `fullPage` — composites the entire scrollable document, however tall (a long
+  settings page might render at `1280x2500`). Catches below-the-fold
+  regressions at the cost of viewport fidelity.
+
+```ts
+captureMode: 'viewport',
+```
+
+This applies to every captured action across every breakpoint. Switching modes
+changes the image dimensions, so existing baselines stop matching and report
+`new` until you `approve` fresh ones.
+
 ### `defaultTimeoutMs?: number`
 
 Default Playwright locator and action timeout. Defaults to `10_000`.

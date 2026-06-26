@@ -6,7 +6,20 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing right now_
+### Added
+
+**`captureMode` config.** Choose how much of the page each screenshot
+captures: `viewport` (new default) crops to the breakpoint's `width x height`
+so snapshots reflect what the user sees above the fold, or `fullPage`
+composites the whole scrollable document — the previous behavior. A long page
+no longer stretches its snapshot to full scroll height unless you opt back in.
+
+### Changed
+
+**Screenshots default to viewport-only.** Captures were always full-page;
+they now crop to the viewport unless `captureMode: 'fullPage'` is set.
+Existing baselines change dimensions under the new default and report `new`
+until re-approved.
 
 ## [0.1.0-alpha.10] — 2026-06-22
 

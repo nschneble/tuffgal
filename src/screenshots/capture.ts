@@ -1,21 +1,28 @@
 import type { Locator, Page } from 'playwright';
+import type { CaptureMode } from '../config.ts';
 
 /**
- * Full-page screenshot with animations disabled, caret hidden, and any masks
- * applied so the same UI renders to bit-identical pixels across runs. Masks
- * are Playwright locators whose bounding boxes are blacked out before the
- * image is encoded — use them to neutralise randomised or time-based regions.
+ * Screenshot with animations disabled, caret hidden, and any masks applied so
+ * the same UI renders to bit-identical pixels across runs. Masks are Playwright
+ * locators whose bounding boxes are blacked out before the image is encoded —
+ * use them to neutralise randomised or time-based regions.
+ *
+ * `mode` controls scope: `viewport` (default) captures only the page's current
+ * viewport box — what the user sees above the fold — while `fullPage`
+ * composites the entire scrollable document however tall.
  */
 export async function capturePage(
   page: Page,
   masks: Locator[] = [],
+  mode: CaptureMode = 'viewport',
 ): Promise<Buffer> {
-  // A `fullPage` screenshot composites the whole document, but it does so at
-  // the page's current scroll offset. `position: sticky` / `fixed` elements
-  // resolve their offset against that scroll position, so a page captured
-  // mid-scroll renders its sticky chrome (sidebars, headers) shifted down by
-  // `scrollY` — the same UI produces a different image purely because an
-  // earlier step left the viewport scrolled. Resetting to the origin first
+  // Both capture modes shoot at the page's current scroll offset.
+  // `position: sticky` / `fixed` elements resolve their offset against that
+  // scroll position, so a page captured mid-scroll renders its sticky chrome
+  // (sidebars, headers) shifted down by `scrollY` — the same UI produces a
+  // different image purely because an earlier step left the viewport scrolled.
+  // (`fullPage` composites the whole document but inherits the same offset.)
+  // Resetting to the origin first
   // pins those elements to their static-baseline position so the capture is
   // deterministic. `instant` defeats any `scroll-behavior: smooth` the page
   // sets, which would otherwise animate and reintroduce a timing race.
@@ -25,7 +32,7 @@ export async function capturePage(
     `window.scrollTo({ top: 0, left: 0, behavior: 'instant' })`,
   );
   return page.screenshot({
-    fullPage: true,
+    fullPage: mode === 'fullPage',
     animations: 'disabled',
     caret: 'hide',
     mask: masks,

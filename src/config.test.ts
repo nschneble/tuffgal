@@ -116,6 +116,18 @@ describe('assertValidConfig', () => {
     };
     assert.throws(() => assertValidConfig(config, SOURCE), /width/);
   });
+
+  it('accepts a valid captureMode', () => {
+    for (const mode of ['viewport', 'fullPage']) {
+      const config = { ...validConfig(), captureMode: mode };
+      assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+    }
+  });
+
+  it('rejects an unknown captureMode', () => {
+    const config = { ...validConfig(), captureMode: 'full' };
+    assert.throws(() => assertValidConfig(config, SOURCE), /captureMode/);
+  });
 });
 
 describe('loadConfig breakpoint resolution', () => {
@@ -147,6 +159,16 @@ describe('loadConfig breakpoint resolution', () => {
     await writeFile(join(dir, 'tuffgal.config.js'), body, 'utf8');
     return loadConfig(dir);
   }
+
+  it('defaults captureMode to viewport when nothing is set', async () => {
+    const resolved = await load('');
+    assert.equal(resolved.captureMode, 'viewport');
+  });
+
+  it('resolves an explicit captureMode', async () => {
+    const resolved = await load("captureMode: 'fullPage',");
+    assert.equal(resolved.captureMode, 'fullPage');
+  });
 
   it('defaults to a single desktop breakpoint when nothing is set', async () => {
     const resolved = await load('');

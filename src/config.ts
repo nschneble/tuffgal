@@ -68,6 +68,16 @@ export const BREAKPOINTS = {
 export type BreakpointName = keyof typeof BREAKPOINTS;
 
 /**
+ * How much of the page each screenshot captures:
+ *   - `viewport` — only the breakpoint's `width x height` box, matching what a
+ *     real user sees above the fold. The default.
+ *   - `fullPage` — the whole scrollable document, however tall. Catches
+ *     below-the-fold regressions at the cost of viewport fidelity (a long page
+ *     renders at e.g. 1280x2500 instead of 1280x800).
+ */
+export type CaptureMode = 'viewport' | 'fullPage';
+
+/**
  * One resolved breakpoint mode: a name plus the viewport dimensions to render
  * at. Built from a {@link BreakpointSelector} (a registry entry, optionally
  * with a dimension override). Exported so the runner consumes the same shape
@@ -138,6 +148,13 @@ export interface TuffgalConfig {
    * the field to run a single `desktop` breakpoint (1280x800).
    */
   breakpoints?: BreakpointSelector[];
+  /**
+   * How much of the page each screenshot captures. `viewport` (default) crops
+   * to the breakpoint's `width x height` so diffs reflect what the user sees
+   * above the fold; `fullPage` composites the whole scrollable document. See
+   * {@link CaptureMode}.
+   */
+  captureMode?: CaptureMode;
   /** Default Playwright locator + action timeout. Defaults to 10_000. */
   defaultTimeoutMs?: number;
   /** Default navigation timeout. Defaults to 15_000. */
@@ -182,6 +199,8 @@ export interface ResolvedConfig {
    * noUncheckedIndexedAccess.
    */
   breakpoints: [ResolvedBreakpoint, ...ResolvedBreakpoint[]];
+  /** Resolved screenshot scope; defaults to `viewport`. */
+  captureMode: CaptureMode;
   defaultTimeoutMs: number;
   navigationTimeoutMs: number;
   frozenTime: string;
@@ -192,6 +211,7 @@ export interface ResolvedConfig {
 }
 
 const DEFAULTS = {
+  captureMode: 'viewport',
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',
@@ -290,6 +310,14 @@ export function assertValidConfig(input: unknown, source: string): void {
     }
   }
 
+  if (
+    config.captureMode !== undefined &&
+    config.captureMode !== 'viewport' &&
+    config.captureMode !== 'fullPage'
+  ) {
+    fail("`captureMode` must be 'viewport' or 'fullPage' when provided.");
+  }
+
   if (config.breakpoints !== undefined) {
     const validNames = Object.keys(BREAKPOINTS);
     const breakpoints = config.breakpoints;
@@ -346,6 +374,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     apiHost: input.apiHost,
     storageStatePins: input.storageStatePins ?? [],
     breakpoints,
+    captureMode: input.captureMode ?? DEFAULTS.captureMode,
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:
       input.navigationTimeoutMs ?? DEFAULTS.navigationTimeoutMs,
