@@ -28,6 +28,15 @@ because the baseline and actual images have different dimensions (e.g. a
 in the slot the "{x}% differs" stat normally fills. A "changed" row with no
 diff image no longer reads as an unexplained no-op.
 
+### Fixed
+
+**Report filter now prunes inside a story.** An active status filter hid
+non-matching stories but left every action inside a matching story visible, so
+"Expand all" under the `changed` filter opened pass screenshots too. The filter
+now cascades: a shown story reveals only its matching actions, breakpoint groups
+with no matching action are hidden, and "Expand all" opens only the surviving
+rows.
+
 ### Changed
 
 **Screenshots default to viewport-only.** Captures were always full-page;

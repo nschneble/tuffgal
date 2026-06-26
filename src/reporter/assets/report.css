@@ -57,6 +57,15 @@
   box-sizing: border-box;
 }
 
+/* The story filter prunes stories, breakpoint groups, and actions by toggling
+   the native `hidden` attribute. Those are layout containers, so a future
+   `display:` rule on `.action`/`.breakpoint-group` would outrank the UA
+   `[hidden]` default and silently resurrect filtered rows as visible and
+   keyboard-focusable. Pin it so `hidden` always wins. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -393,7 +402,9 @@ h2 {
   text-wrap: pretty;
 }
 
-.breakpoint-group + .breakpoint-group {
+/* `:not([hidden])` on both sides so a filter that hides the first group does
+   not strand its separator on the new first-visible group. */
+.breakpoint-group:not([hidden]) + .breakpoint-group:not([hidden]) {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px dashed var(--border);

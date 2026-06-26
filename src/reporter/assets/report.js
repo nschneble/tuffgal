@@ -143,16 +143,92 @@
       }
     }
 
+    function show(el) {
+      el.hidden = false;
+    }
+
+    // True when `container` holds at least one `.action` that is not hidden.
+    // Drives whether a breakpoint group / actions list earns its place under an
+    // active filter.
+    function hasVisibleAction(container) {
+      return Array.prototype.some.call(
+        container.querySelectorAll('.action'),
+        function (action) {
+          return !action.hidden;
+        },
+      );
+    }
+
+    // Apply the active filter top-down: story → breakpoint group → action. A
+    // non-"all" filter does more than hide whole stories — inside a matching
+    // story it also prunes the actions (and the now-empty breakpoint groups /
+    // actions lists) that don't match, so e.g. the "changed" view shows ONLY the
+    // changed rows of a changed story, never the pass rows that happen to share
+    // it. Expand-all then opens only those surviving rows.
+    function applyToStory(story, value) {
+      var actions = Array.prototype.slice.call(
+        story.querySelectorAll('.action'),
+      );
+      var groups = Array.prototype.slice.call(
+        story.querySelectorAll('.breakpoint-group'),
+      );
+      var lists = Array.prototype.slice.call(
+        story.querySelectorAll('ol.actions'),
+      );
+
+      // Story visibility keeps the worst-wins rollup semantics: a story shows
+      // only when its own status matches (or the filter is "all").
+      var storyMatches =
+        value === 'all' || story.getAttribute('data-status') === value;
+      if (!storyMatches) {
+        story.hidden = true;
+        // Clear inner pruning so switching back to a matching filter — or to
+        // "all" — starts from a clean slate rather than inheriting stale hides.
+        actions.forEach(show);
+        groups.forEach(show);
+        lists.forEach(show);
+        return false;
+      }
+
+      if (value === 'all') {
+        story.hidden = false;
+        actions.forEach(show);
+        groups.forEach(show);
+        lists.forEach(show);
+        return true;
+      }
+
+      // Matching story under a specific filter: compare each action's
+      // data-status against the radio VALUE token ("pass"), not the
+      // data-filter-name label ("passed"), so the "passed" filter matches the
+      // `pass` actions instead of silently emptying every story.
+      actions.forEach(function (action) {
+        action.hidden = action.getAttribute('data-status') !== value;
+      });
+      groups.forEach(function (group) {
+        group.hidden = !hasVisibleAction(group);
+      });
+      lists.forEach(function (listEl) {
+        listEl.hidden = !hasVisibleAction(listEl);
+      });
+
+      // A worst-wins rollup guarantees at least one matching action, but guard
+      // the invariant: a story that pruned to nothing is hidden and uncounted
+      // so the "N of M" announcement stays truthful.
+      var storyVisible = actions.some(function (action) {
+        return !action.hidden;
+      });
+      story.hidden = !storyVisible;
+      return storyVisible;
+    }
+
     function apply(radio) {
       var value = radio.value;
       var name = radio.getAttribute('data-filter-name') || value;
       relabelBulkToggle(name);
       var visible = 0;
       stories.forEach(function (story) {
-        var match =
-          value === 'all' || story.getAttribute('data-status') === value;
-        story.hidden = !match;
-        if (match) visible += 1;
+        if (applyToStory(story, value)) visible += 1;
       });
       var hasNone = visible === 0;
       list.hidden = hasNone;
@@ -214,8 +290,11 @@
         document.querySelectorAll('.story:not([hidden])'),
       );
       visibleStories.forEach(function (story) {
+        // Only the rows surviving the active filter — `.action:not([hidden])` —
+        // get toggled, so "Expand all" under e.g. the changed filter opens just
+        // the changed screenshots, not the pass rows sharing the same story.
         var panels = Array.prototype.slice.call(
-          story.querySelectorAll('details.shots'),
+          story.querySelectorAll('.action:not([hidden]) details.shots'),
         );
         panels.forEach(function (panel) {
           panel.open = shouldOpen;
