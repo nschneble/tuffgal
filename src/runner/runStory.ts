@@ -31,6 +31,13 @@ export interface RunStoryOptions {
   config: ResolvedConfig;
   headed: boolean;
   coverage?: CoverageCollector;
+  /**
+   * Render only this breakpoint. The run driver passes one breakpoint per
+   * invocation so each breakpoint is its own reset/seed pass (see
+   * {@link resolveRunSet}). Omitted only by direct callers/tests, which fall
+   * back to the story's full resolved run set.
+   */
+  breakpoint?: ResolvedBreakpoint;
 }
 
 const TRACE_SUBDIR = 'traces';
@@ -72,7 +79,11 @@ export async function runStoryWithBrowser(
   // Resolve the storage state once: it is viewport-independent, so every
   // breakpoint context loads the same `needs` auth payload.
   const storageStatePath = await resolveStorageStateForNeeds(config, needs);
-  const runSet = resolveRunSet(story, config);
+  // The run driver hands us a single breakpoint per call so each breakpoint is
+  // its own reset/seed pass (the database-isolation guarantee). Direct
+  // callers/tests that omit it fall back to the story's full run set, which
+  // keeps the in-loop behaviour exercisable without the outer driver.
+  const runSet = options.breakpoint ? [options.breakpoint] : resolveRunSet(story, config);
 
   const results: ActionResult[] = [];
   // The story's status is the worst outcome across every breakpoint it ran at:
@@ -91,17 +102,17 @@ export async function runStoryWithBrowser(
   let firstTracePath: string | undefined;
 
   for (const breakpoint of runSet) {
-    // Re-seed the database before EVERY breakpoint. alpha.9 isolated only the
-    // browser context per breakpoint (cookies, storage), but left the DB shared
-    // across the whole story, so a story that mutates server state — registers
-    // a user, marks a link read, empties read history — would pass at the first
-    // viewport and then run the next viewport against the mutated rows. Applying
-    // the story's own fixtures here resets that state to a known baseline for
-    // each mode. Fixtures are idempotent (each deletes its own rows before
-    // re-inserting), so non-mutating stories are unaffected beyond a cheap
-    // re-apply. State the test itself creates with no backing fixture (a
-    // freshly registered user) is handled by the `${breakpoint}` token, which
-    // lets the story author key that data per mode.
+    // Apply the story's own fixtures before the breakpoint context launches.
+    // The deeper cross-breakpoint isolation — a destructive story (change
+    // password, empty read history) mutating globally-seeded rows it does not
+    // own a fixture for — is handled one level up: the run driver executes each
+    // breakpoint as a separate pass behind a full `database.reset()`, so this
+    // call only owns the story-local seed. Fixtures stay idempotent (each
+    // deletes its own rows before re-inserting), so a non-mutating story pays
+    // just a cheap re-apply. When this loop runs multiple breakpoints itself
+    // (a direct caller that passed no single `breakpoint`), the fixture re-apply
+    // is the only reset between them — that path does not get the per-pass DB
+    // reset, so destructive multi-breakpoint stories must run through the driver.
     for (const fixture of story.fixtures ?? []) {
       await applyFixture(config, fixture);
     }

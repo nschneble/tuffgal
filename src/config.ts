@@ -10,7 +10,9 @@ import { access } from 'node:fs/promises';
 export interface DatabaseBridge {
   /**
    * Wipes the test database and reseeds the deterministic test user. Called
-   * once before the scheduler dispatches the first story.
+   * once per breakpoint pass, before that pass dispatches its first story — so
+   * a single-breakpoint run calls it once, and an N-breakpoint run calls it N
+   * times, giving each breakpoint a pristine database. Keep it fast.
    */
   reset?: () => Promise<void>;
   /**

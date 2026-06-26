@@ -30,6 +30,21 @@ diff image no longer reads as an unexplained no-op.
 
 ### Fixed
 
+**Terminal summary names the driving breakpoint.** The end-of-run
+`New:`/`Changed:`/`Failed:` lines now tag which breakpoints caused the status
+(e.g. `CHANGED user-saves-link.json — … [desktop]`) so a story that drifted at
+one mode but not another no longer reads as an undifferentiated change. The tag
+is omitted for single-breakpoint stories. Live pass banners (`▷ desktop
+1280×800`) already separated the streaming output.
+
+**Breakpoints no longer leak database state.** A multi-breakpoint run now
+executes one pass per breakpoint — a full `database.reset()` then the whole
+schedule at that single breakpoint — instead of looping breakpoints inside each
+story against a shared database. A destructive story (change password, empty
+read history) mutating seeded rows during the `mobile` pass can no longer poison
+the `desktop` pass. `database.reset()` now runs once per breakpoint instead of
+once per run; single-breakpoint runs are unchanged.
+
 **Report filter now prunes inside a story.** An active status filter hid
 non-matching stories but left every action inside a matching story visible, so
 "Expand all" under the `changed` filter opened pass screenshots too. The filter

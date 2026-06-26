@@ -72,7 +72,7 @@ export default defineConfig({
   workers: 4,
 
   // consumer DB bridge
-  // `reset` runs once before the first story
+  // `reset` runs once per breakpoint pass, before that pass's first story
   // each `fixtures[name]` runs before any story declaring it
   // fixtures must be idempotent
   database: {
@@ -264,7 +264,9 @@ database: {
 }
 ```
 
-- `reset` runs once before the scheduler dispatches the first story
+- `reset` runs once per breakpoint pass, before that pass dispatches its first
+  story (a single-breakpoint run is one pass, so `reset` runs once). See
+  [authoring.md](authoring.md#multiple-breakpoints-run-as-separate-passes).
 - `fixtures[name]` runs before any story that declares `fixtures: ["name"]`
 
 Fixtures must be idempotent. Tuffgal applies them per story without a

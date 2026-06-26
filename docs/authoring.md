@@ -363,6 +363,28 @@ Rules of thumb:
 When in doubt, run with `--workers 1` once. If a story flickers between
 runs with workers=1, the bug is in the action itself, not the schedule.
 
+## Multiple breakpoints run as separate passes
+
+A run with two or more breakpoints executes one **pass per breakpoint**: a full
+`database.reset()` (which reseeds your deterministic baseline), then the whole
+schedule rendered at that single breakpoint. Desktop runs start to finish, the
+database resets, then mobile runs start to finish. The report merges each
+story's passes back into one row grouped by mode.
+
+This is what keeps breakpoints isolated. A destructive story — change password,
+empty read history, delete account — mutates the seeded database during the
+mobile pass, but the desktop pass starts from a fresh reset and never sees it.
+You do **not** need a fixture to undo a destructive action between breakpoints;
+the per-pass reset handles it.
+
+Two consequences:
+
+- `database.reset()` runs once per breakpoint, not once per run. Keep it fast.
+- Cross-story races (the section above) are still per-pass: within one
+  breakpoint pass the database is shared and stories run in parallel, exactly as
+  a single-breakpoint run does. Serializing destructive stories that touch the
+  same row is still your job.
+
 ## Storage state + dependency graph
 
 Stories declare `needs` and `produces`. Labels are opaque strings. Tuffgal
