@@ -749,7 +749,7 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
     );
   });
 
-  it('commits to baseline when this run captured no actual', () => {
+  it('collapses to an image-only baseline when this run captured no actual', () => {
     const html = renderReport(
       interactiveResult({
         actualPath: undefined,
@@ -760,22 +760,71 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
       REPORT_DIR,
       true,
     );
-    assert.match(
-      html,
-      /<input[^>]*value="baseline"[^>]*checked/s,
-      'baseline is the checked default when no actual was captured',
+    // A single real variant offers no choice — the switcher fieldset and its lone
+    // radio collapse away, leaving just the committed image (the baseline here).
+    assert.ok(
+      !html.includes('class="shot-interactive"'),
+      'no radio switcher renders when only one variant is real',
     );
     assert.ok(
-      html.includes(
-        'Showing: <span class="shot-caption-variant">Baseline</span>',
-      ),
-      'caption shows Baseline when committed to baseline',
+      !html.includes('class="shot-caption"'),
+      'no "Showing" caption renders without a switcher',
     );
     const src = html.match(/class="shot-image"\s+src="([^"]+)"/s);
     assert.ok(src, 'the shared image carries a src');
     assert.ok(
       src[1].includes('settings.baseline.png'),
       'the shared image src is the (non-empty) baseline path',
+    );
+  });
+
+  it('suppresses the redundant baseline for a new row, collapsing to actual-only', () => {
+    // A `new` baseline is written from this run's actual, so its baselinePath
+    // points at a byte-identical copy. Surfacing it as a switchable variant
+    // implies a comparison that does not exist — suppress it. With no diff
+    // either, only `actual` remains, so the switcher collapses to image-only.
+    const newRow = interactiveResult({
+      status: 'new',
+      diffPath: undefined,
+      diffRatio: undefined,
+      diffPixels: undefined,
+    });
+    const html = renderReport(newRow, REPORT_DIR, true);
+    assert.ok(
+      !html.includes('class="shot-interactive"'),
+      'no switcher renders once the redundant baseline is suppressed',
+    );
+    assert.ok(
+      !html.includes('data-src-baseline'),
+      'the suppressed baseline is not wired as a preview source',
+    );
+    const src = html.match(/class="shot-image"\s+src="([^"]+)"/s);
+    assert.ok(src, 'the shared image carries a src');
+    assert.ok(
+      src[1].includes('settings.actual.png'),
+      'the committed image is the actual capture, not the redundant baseline',
+    );
+  });
+
+  it('drops the baseline radio + panel for a new row in the radio-tab render', () => {
+    const newRow = interactiveResult({
+      status: 'new',
+      diffPath: undefined,
+      diffRatio: undefined,
+      diffPixels: undefined,
+    });
+    const html = renderReport(newRow, REPORT_DIR, false);
+    assert.ok(
+      !/value="baseline"/.test(html),
+      'no baseline radio renders for a new row',
+    );
+    assert.ok(
+      !html.includes('baseline screenshot'),
+      'no baseline panel renders for a new row',
+    );
+    assert.ok(
+      html.includes('settings.actual.png'),
+      'the actual capture still renders',
     );
   });
 

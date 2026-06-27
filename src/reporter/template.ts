@@ -391,9 +391,14 @@ function renderScreenshots(
   if (interactiveMode) {
     return renderInteractiveScreenshots(action, actionId, reportDir);
   }
-  const baseline = action.baselinePath
-    ? toReportRelative(reportDir, action.baselinePath)
-    : undefined;
+  // A `new` baseline writes its baseline straight from this run's actual, so the
+  // two paths point at byte-identical PNGs. There is no prior state to compare
+  // against, so suppress the baseline variant for display — like the diff, it is
+  // not a real artifact here. The path stays in the data model for `approve`.
+  const baseline =
+    action.baselinePath && action.status !== 'new'
+      ? toReportRelative(reportDir, action.baselinePath)
+      : undefined;
   const actual = action.actualPath
     ? toReportRelative(reportDir, action.actualPath)
     : undefined;
@@ -410,6 +415,28 @@ function renderScreenshots(
         );
   const diffStatsId = `${actionId}-diff-stats`;
   const diffStats = renderDiffStats(action, diffStatsId);
+  // When only one variant is real (the common case for a `new` baseline, whose
+  // baseline is suppressed and has no diff), a radio group offering a single
+  // choice is noise to AT. Drop the controls and show the image alone; the row's
+  // status badge already announces "new baseline". Zero variants — a `new` row
+  // whose actual capture is somehow missing — collapses to nothing.
+  const soleVariant = (['baseline', 'actual', 'diff'] as const).filter(
+    (name) => available[name] !== undefined,
+  );
+  if (soleVariant.length <= 1) {
+    const only = soleVariant[0];
+    if (only === undefined) {
+      return '';
+    }
+    const lone = shotPanel(
+      actionId,
+      only,
+      available[only],
+      SHOT_ALT[only](action),
+      true,
+    );
+    return `${diffStats}${lone}`;
+  }
   return `
 <fieldset class="shot-radio" data-default-tab="${defaultTab}">
   <legend class="sr-only">Screenshot to display</legend>
@@ -418,11 +445,22 @@ function renderScreenshots(
   ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff')}
   ${diffStats}
 </fieldset>
-${shotPanel(actionId, 'baseline', baseline, `${action.action} baseline screenshot`, initialTab === 'baseline')}
-${shotPanel(actionId, 'actual', actual, `${action.action} actual screenshot from this run`, initialTab === 'actual')}
-${shotPanel(actionId, 'diff', diff, `Pixel diff overlay for ${action.action}; changed regions are highlighted`, initialTab === 'diff', action.diffRatio !== undefined ? diffStatsId : undefined)}
+${shotPanel(actionId, 'baseline', baseline, SHOT_ALT.baseline(action), initialTab === 'baseline')}
+${shotPanel(actionId, 'actual', actual, SHOT_ALT.actual(action), initialTab === 'actual')}
+${shotPanel(actionId, 'diff', diff, SHOT_ALT.diff(action), initialTab === 'diff', action.diffRatio !== undefined ? diffStatsId : undefined)}
 `;
 }
+
+/** Alt text per screenshot variant, shared by the radio-tab and collapsed render. */
+const SHOT_ALT: Record<
+  'baseline' | 'actual' | 'diff',
+  (action: ActionResult) => string
+> = {
+  baseline: (action) => `${action.action} baseline screenshot`,
+  actual: (action) => `${action.action} actual screenshot from this run`,
+  diff: (action) =>
+    `Pixel diff overlay for ${action.action}; changed regions are highlighted`,
+};
 
 /**
  * The pixel-diff overlay only exists when baseline and actual share dimensions.
@@ -456,9 +494,14 @@ function renderInteractiveScreenshots(
   actionId: string,
   reportDir: string,
 ): string {
-  const baseline = action.baselinePath
-    ? toReportRelative(reportDir, action.baselinePath)
-    : undefined;
+  // A `new` baseline writes its baseline straight from this run's actual, so the
+  // two paths point at byte-identical PNGs. There is no prior state to compare
+  // against, so suppress the baseline variant for display — like the diff, it is
+  // omitted (no radio, no image). The path stays in the data model for `approve`.
+  const baseline =
+    action.baselinePath && action.status !== 'new'
+      ? toReportRelative(reportDir, action.baselinePath)
+      : undefined;
   const actual = action.actualPath
     ? toReportRelative(reportDir, action.actualPath)
     : undefined;
@@ -473,6 +516,30 @@ function renderInteractiveScreenshots(
   const committed: 'actual' | 'baseline' =
     actual !== undefined ? 'actual' : 'baseline';
   const committedSrc = (committed === 'actual' ? actual : baseline) ?? '';
+
+  // When only one variant is real (the common case for a `new` baseline, whose
+  // baseline is suppressed and has no diff), the hover/press switcher has nothing
+  // to toggle to — a lone radio in a group is noise to AT. Render the image alone;
+  // the row's status badge already announces "new baseline". Zero variants — a
+  // `new` row whose actual capture is missing — collapses to nothing.
+  const variantCount = [baseline, actual, diff].filter(
+    (v) => v !== undefined,
+  ).length;
+  if (variantCount === 0) {
+    return '';
+  }
+  if (variantCount === 1) {
+    return `
+<div class="shot-stage">
+  <img
+    class="shot-image"
+    src="${escapeHtml(committedSrc)}"
+    alt="${escapeHtml(`Screenshot of ${action.action}`)}"
+    loading="lazy"
+  />
+</div>
+`;
+  }
 
   const diffStatsId = `${actionId}-diff-stats`;
   const diffStats = renderDiffStats(action, diffStatsId);

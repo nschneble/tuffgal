@@ -11,7 +11,11 @@ import {
   storyRendersAt,
 } from './breakpointPasses.ts';
 
-const DESKTOP: ResolvedBreakpoint = { name: 'desktop', width: 1280, height: 800 };
+const DESKTOP: ResolvedBreakpoint = {
+  name: 'desktop',
+  width: 1280,
+  height: 800,
+};
 const MOBILE: ResolvedBreakpoint = { name: 'mobile', width: 375, height: 667 };
 
 function config(breakpoints: ResolvedBreakpoint[]): ResolvedConfig {
@@ -50,7 +54,10 @@ function storyResult(overrides: Partial<StoryResult>): StoryResult {
 
 describe('resolveBreakpointPasses', () => {
   it('returns the single config breakpoint when nothing overrides', () => {
-    const passes = resolveBreakpointPasses([scheduled('a.json')], config([DESKTOP]));
+    const passes = resolveBreakpointPasses(
+      [scheduled('a.json')],
+      config([DESKTOP]),
+    );
     assert.deepEqual(passes, [DESKTOP]);
   });
 
@@ -86,7 +93,11 @@ describe('resolveBreakpointPasses', () => {
 
   it('treats a dimension override of the same name as its own pass', () => {
     const passes = resolveBreakpointPasses(
-      [scheduled('a.json', { breakpoints: [{ name: 'desktop', width: 1440 }] })],
+      [
+        scheduled('a.json', {
+          breakpoints: [{ name: 'desktop', width: 1440 }],
+        }),
+      ],
       config([DESKTOP]),
     );
     // desktop@1280x800 (config) + desktop@1440x800 (override) are distinct
@@ -102,14 +113,20 @@ describe('resolveBreakpointPasses', () => {
 describe('storyRendersAt', () => {
   it('matches a story with no override against any config breakpoint', () => {
     const item = scheduled('a.json');
-    assert.equal(storyRendersAt(item, config([DESKTOP, MOBILE]), DESKTOP), true);
+    assert.equal(
+      storyRendersAt(item, config([DESKTOP, MOBILE]), DESKTOP),
+      true,
+    );
     assert.equal(storyRendersAt(item, config([DESKTOP, MOBILE]), MOBILE), true);
   });
 
   it('restricts an overriding story to its own breakpoints', () => {
     const item = scheduled('a.json', { breakpoints: ['mobile'] });
     assert.equal(storyRendersAt(item, config([DESKTOP, MOBILE]), MOBILE), true);
-    assert.equal(storyRendersAt(item, config([DESKTOP, MOBILE]), DESKTOP), false);
+    assert.equal(
+      storyRendersAt(item, config([DESKTOP, MOBILE]), DESKTOP),
+      false,
+    );
   });
 });
 
@@ -149,7 +166,9 @@ describe('mergeStoryResults', () => {
       startedAt: '2026-01-01T00:00:00.000Z',
       finishedAt: '2026-01-01T00:00:02.000Z',
       durationMs: 2000,
-      actions: [{ action: 'a', status: 'pass', breakpoint: 'desktop' }] as never,
+      actions: [
+        { action: 'a', status: 'pass', breakpoint: 'desktop' },
+      ] as never,
     });
     const mobile = storyResult({
       status: 'changed',
@@ -157,7 +176,9 @@ describe('mergeStoryResults', () => {
       finishedAt: '2026-01-01T00:00:05.000Z',
       durationMs: 3000,
       tracePath: '/t/mobile.zip',
-      actions: [{ action: 'a', status: 'changed', breakpoint: 'mobile' }] as never,
+      actions: [
+        { action: 'a', status: 'changed', breakpoint: 'mobile' },
+      ] as never,
     });
     const merged = mergeStoryResults([desktop, mobile]);
     assert.equal(merged.status, 'changed');

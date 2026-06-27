@@ -51,7 +51,10 @@ describe('capturePage', () => {
 
     const scroll = calls.find((call) => call.startsWith('evaluate:'));
     assert.ok(scroll, 'expected a scroll evaluate call');
-    assert.match(scroll, /scrollTo\(\{ top: 0, left: 0, behavior: 'instant' \}\)/);
+    assert.match(
+      scroll,
+      /scrollTo\(\{ top: 0, left: 0, behavior: 'instant' \}\)/,
+    );
   });
 
   it('defaults to a viewport-only capture (fullPage: false)', async () => {

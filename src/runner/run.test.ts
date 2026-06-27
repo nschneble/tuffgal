@@ -4,7 +4,10 @@ import { describe, it } from 'node:test';
 import type { ActionResult, StoryResult } from '../schema/result.ts';
 import { drivingBreakpoints } from './run.ts';
 
-function action(breakpoint: string, status: ActionResult['status']): ActionResult {
+function action(
+  breakpoint: string,
+  status: ActionResult['status'],
+): ActionResult {
   return {
     action: 'a',
     breakpoint,

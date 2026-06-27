@@ -83,7 +83,9 @@ export async function runStoryWithBrowser(
   // its own reset/seed pass (the database-isolation guarantee). Direct
   // callers/tests that omit it fall back to the story's full run set, which
   // keeps the in-loop behaviour exercisable without the outer driver.
-  const runSet = options.breakpoint ? [options.breakpoint] : resolveRunSet(story, config);
+  const runSet = options.breakpoint
+    ? [options.breakpoint]
+    : resolveRunSet(story, config);
 
   const results: ActionResult[] = [];
   // The story's status is the worst outcome across every breakpoint it ran at:

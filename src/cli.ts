@@ -66,7 +66,10 @@ export function parseArguments(argv: string[]): ParsedArguments {
       index += 1;
     } else if (arg.startsWith('--breakpoint=')) {
       addBreakpoint(arg.slice('--breakpoint='.length));
-    } else if (arg.startsWith('--') && BREAKPOINT_FLAGS.includes(arg.slice(2))) {
+    } else if (
+      arg.startsWith('--') &&
+      BREAKPOINT_FLAGS.includes(arg.slice(2))
+    ) {
       addBreakpoint(arg.slice(2));
     } else if (!arg.startsWith('-')) {
       if (parsed.positional !== undefined) {
@@ -253,7 +256,10 @@ async function main(): Promise<void> {
 
 // Only drive the CLI when run as the entry point. Importing this module (e.g.
 // from a unit test exercising `parseArguments`) must not kick off a real run.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main().catch((error) => {
     process.stderr.write(
       `tuffgal error: ${error instanceof Error ? error.message : String(error)}\n`,

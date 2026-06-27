@@ -45,7 +45,13 @@ async function writeResults(stories: RunResult['stories']): Promise<void> {
     startedAt: '2026-06-11T12:00:00.000Z',
     finishedAt: '2026-06-11T12:00:01.000Z',
     durationMs: 1000,
-    totals: { stories: stories.length, passed: 0, changed: 0, failed: 0, new: 0 },
+    totals: {
+      stories: stories.length,
+      passed: 0,
+      changed: 0,
+      failed: 0,
+      new: 0,
+    },
     customCoverage: {
       screens: { total: 0, covered: 0, ratio: 1, missing: [] },
       flows: { total: 0, covered: 0, ratio: 1, missing: [] },
@@ -239,15 +245,38 @@ describe('approveAll — promotion', () => {
     const desktopChanged = await actual('d.changed');
     const desktopNewBaseline = join(report, 'baselines', 'dn', 'desktop.png');
     const mobileNewBaseline = join(report, 'baselines', 'mn', 'mobile.png');
-    const desktopChangedBaseline = join(report, 'baselines', 'dc', 'desktop.png');
+    const desktopChangedBaseline = join(
+      report,
+      'baselines',
+      'dc',
+      'desktop.png',
+    );
     await writeResults([
       story('s.json', [
         // desktop + new: clears both filters → approved
-        action({ action: 'dn', status: 'new', breakpoint: 'desktop', actualPath: desktopNew, baselinePath: desktopNewBaseline }),
+        action({
+          action: 'dn',
+          status: 'new',
+          breakpoint: 'desktop',
+          actualPath: desktopNew,
+          baselinePath: desktopNewBaseline,
+        }),
         // mobile + new: wrong breakpoint → skipped
-        action({ action: 'mn', status: 'new', breakpoint: 'mobile', actualPath: mobileNew, baselinePath: mobileNewBaseline }),
+        action({
+          action: 'mn',
+          status: 'new',
+          breakpoint: 'mobile',
+          actualPath: mobileNew,
+          baselinePath: mobileNewBaseline,
+        }),
         // desktop + changed: newOnly drops it → skipped
-        action({ action: 'dc', status: 'changed', breakpoint: 'desktop', actualPath: desktopChanged, baselinePath: desktopChangedBaseline }),
+        action({
+          action: 'dc',
+          status: 'changed',
+          breakpoint: 'desktop',
+          actualPath: desktopChanged,
+          baselinePath: desktopChangedBaseline,
+        }),
       ]),
     ]);
 
@@ -269,8 +298,20 @@ describe('approveAll — promotion', () => {
     const mobileBaseline = join(report, 'baselines', 'e', 'mobile.png');
     await writeResults([
       story('s.json', [
-        action({ action: 'e', status: 'changed', breakpoint: 'desktop', actualPath: desktopActual, baselinePath: desktopBaseline }),
-        action({ action: 'e', status: 'changed', breakpoint: 'mobile', actualPath: mobileActual, baselinePath: mobileBaseline }),
+        action({
+          action: 'e',
+          status: 'changed',
+          breakpoint: 'desktop',
+          actualPath: desktopActual,
+          baselinePath: desktopBaseline,
+        }),
+        action({
+          action: 'e',
+          status: 'changed',
+          breakpoint: 'mobile',
+          actualPath: mobileActual,
+          baselinePath: mobileBaseline,
+        }),
       ]),
     ]);
 
