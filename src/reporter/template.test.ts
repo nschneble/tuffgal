@@ -770,10 +770,10 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
       !html.includes('class="shot-caption"'),
       'no "Showing" caption renders without a switcher',
     );
-    const src = html.match(/class="shot-image"\s+src="([^"]+)"/s);
+    const src = html.match(/class="shot-image"\s+src="([^"]+)"/s)?.[1];
     assert.ok(src, 'the shared image carries a src');
     assert.ok(
-      src[1].includes('settings.baseline.png'),
+      src.includes('settings.baseline.png'),
       'the shared image src is the (non-empty) baseline path',
     );
   });
@@ -798,10 +798,10 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
       !html.includes('data-src-baseline'),
       'the suppressed baseline is not wired as a preview source',
     );
-    const src = html.match(/class="shot-image"\s+src="([^"]+)"/s);
+    const src = html.match(/class="shot-image"\s+src="([^"]+)"/s)?.[1];
     assert.ok(src, 'the shared image carries a src');
     assert.ok(
-      src[1].includes('settings.actual.png'),
+      src.includes('settings.actual.png'),
       'the committed image is the actual capture, not the redundant baseline',
     );
   });
