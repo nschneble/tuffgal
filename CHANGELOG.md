@@ -8,6 +8,16 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.1.0-alpha.12] — 2026-06-27
+
+### Fixed
+
+`tuffgal` did nothing when launched through the installed `.bin` symlink,
+e.g. `npm run`, `npx`, or a bare `tuffgal`. The entry-point check compared
+the unresolved symlink path against the symlink-resolved module URL, so
+`main()` never ran. The script now resolves `argv[1]` through realpath
+before the comparison.
+
 ## [0.1.0-alpha.11] — 2026-06-26
 
 ### Added
@@ -170,7 +180,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.11...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.12...HEAD
+[0.1.0-alpha.12]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.12
 [0.1.0-alpha.11]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.11
 [0.1.0-alpha.10]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.10
 [0.1.0-alpha.9]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.9

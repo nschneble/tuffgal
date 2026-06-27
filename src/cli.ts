@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { approveAll } from './runner/approve.ts';
 import { init } from './commands/init.ts';
@@ -256,10 +257,29 @@ async function main(): Promise<void> {
 
 // Only drive the CLI when run as the entry point. Importing this module (e.g.
 // from a unit test exercising `parseArguments`) must not kick off a real run.
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+//
+// `argv[1]` must be resolved through realpath before comparing: when installed,
+// the `tuffgal` command is a symlink (`node_modules/.bin/tuffgal` ->
+// `../tuffgal/dist/cli.js`). Node leaves that symlink unresolved in `argv[1]`
+// but resolves it in `import.meta.url`, so a raw comparison never matches and
+// `main()` silently never runs. Resolving both sides to the real file fixes it.
+export function isMainEntry(
+  moduleUrl: string,
+  scriptPath: string | undefined,
+): boolean {
+  if (!scriptPath) {
+    return false;
+  }
+  let resolvedPath: string;
+  try {
+    resolvedPath = realpathSync(scriptPath);
+  } catch {
+    resolvedPath = scriptPath;
+  }
+  return moduleUrl === pathToFileURL(resolvedPath).href;
+}
+
+if (isMainEntry(import.meta.url, process.argv[1])) {
   main().catch((error) => {
     process.stderr.write(
       `tuffgal error: ${error instanceof Error ? error.message : String(error)}\n`,
