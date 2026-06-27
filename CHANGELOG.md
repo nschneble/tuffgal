@@ -6,100 +6,38 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
+_Nothing just yet_
+
+## [0.1.0-alpha.11] — 2026-06-26
+
 ### Added
 
-**`approve` gains scoped selection.** Name a story positionally
-(`tuffgal approve user-logs-in`, `.json` optional, full paths accepted) instead
-of only `--story`, and limit approval to specific viewports with
-`--breakpoint <name>` (repeatable) or the `--desktop`/`--mobile`/`--tablet`/`--laptop`
-shorthands. The new filters compose with each other and `--new-only` as an AND,
-so `approve user-logs-in --desktop --new-only` promotes exactly the new desktop
-baselines for that one story.
-
-**CLI and reporting reference docs.** [`docs/cli.md`](docs/cli.md) documents
-every command, flag, and exit code in one place; [`docs/reporting.md`](docs/reporting.md)
-is the `results.json` contract for implementing apps (`totals`, `customCoverage`,
-the `stories[]`/`actions[]` shape, status enums, and the exit-code rule). Both
-are linked from the README.
-
-**`new` is a first-class status.** Stories that only wrote fresh baselines no
-longer roll up as `changed`. The report gets a `new` summary tier and a `new`
-story filter, `results.json` totals gain a `new` count, and the terminal
-summary lists new stories separately. Rollup precedence is
-`failed` > `changed` > `new` > `pass`. The CI recipe in `docs/ci.md` now
-uploads the report and baselines on `new` runs too, so first-time baselines
-still surface for review.
-
-**`captureMode` config.** Choose how much of the page each screenshot
-captures: `viewport` (new default) crops to the breakpoint's `width x height`
-so snapshots reflect what the user sees above the fold, or `fullPage`
-composites the whole scrollable document, the previous behavior. A long page
-no longer stretches its snapshot to full scroll height unless you opt back in.
-
-**`interactiveMode` config.** Opt into a single-image screenshot viewer: instead
-of radio tabs, each action renders one image you scrub with the mouse — hover
-previews the baseline, press previews the diff — layered over an accessible
-Baseline/Actual/Diff radio group so keyboard and touch users still switch
-variants directly. The image scales to fit the viewport height. Defaults to
-`false`, which keeps the existing radio-tab report.
-
-**Mismatch reason in the report.** When a screenshot can't be pixel-diffed
-because the baseline and actual images have different dimensions (e.g. a
-`fullPage` capture whose page grew taller), the report now writes the reason
-in the slot the "{x}% differs" stat normally fills. A "changed" row with no
-diff image no longer reads as an unexplained no-op.
-
-### Fixed
-
-**Terminal summary names the driving breakpoint.** The end-of-run
-`New:`/`Changed:`/`Failed:` lines now tag which breakpoints caused the status
-(e.g. `CHANGED user-saves-link.json — … [desktop]`) so a story that drifted at
-one mode but not another no longer reads as an undifferentiated change. The tag
-is omitted for single-breakpoint stories. Live pass banners (`▷ desktop
-1280×800`) already separated the streaming output.
-
-**Breakpoints no longer leak database state.** A multi-breakpoint run now
-executes one pass per breakpoint — a full `database.reset()` then the whole
-schedule at that single breakpoint — instead of looping breakpoints inside each
-story against a shared database. A destructive story (change password, empty
-read history) mutating seeded rows during the `mobile` pass can no longer poison
-the `desktop` pass. `database.reset()` now runs once per breakpoint instead of
-once per run; single-breakpoint runs are unchanged.
-
-**Report filter now prunes inside a story.** An active status filter hid
-non-matching stories but left every action inside a matching story visible, so
-"Expand all" under the `changed` filter opened pass screenshots too. The filter
-now cascades: a shown story reveals only its matching actions, breakpoint groups
-with no matching action are hidden, and "Expand all" opens only the surviving
-rows.
+- Approve by breakpoint (e.g. `approve --desktop`, `approve --breakpoint <name>`)
+- Approve by story (e.g. `approve user-logs-in`)
+- `captureMode` config to limit screenshots to viewport-only or full page
+- Documentation for CLI and reports
+- `interactiveMode` config to view baseline/actual/diffs in a single-image view
+- New baselines can now be filtered in the HTML report
+- New baselines are now listed in the terminal summary report
 
 ### Changed
 
-**Screenshots default to viewport-only.** Captures were always full-page;
-they now crop to the viewport unless `captureMode: 'fullPage'` is set.
-Existing baselines change dimensions under the new default and report `new`
-until re-approved.
+- Screenshots default to viewport-only (were previously full page)
+
+### Fixed
+
+- Multiple breakpoint runs no longer leak database state
+- Report filters now only show matching actions inside each story
 
 ## [0.1.0-alpha.10] — 2026-06-22
 
 ### Added
 
-**`${breakpoint}` interpolation token.** The current mode name is exposed
-to action interpolation as `${breakpoint}`, so a story can key data it
-creates through the app per mode. For example,
-`fresh+${breakpoint}@example.test` registers a distinct user at each
-viewport instead of colliding on a shared value. A story parameter
-literally named `breakpoint` overrides the injected value.
+- `${breakpoint}` interpolation token
 
 ### Fixed
 
-**Per-breakpoint database isolation.** alpha.9 ran each breakpoint in its
-own browser context but applied a story's fixtures only once, before the
-breakpoint loop. Any story that mutated server state passed at the first
-mode and then ran the next mode against the mutated rows. Fixtures are now
-re-applied before **every** breakpoint, resetting that state to a known
-baseline per mode. Fixtures are idempotent, so non-mutating stories are
-unaffected.
+- Per-breakpoint database isolation
 
 ## [0.1.0-alpha.9] — 2026-06-21
 
@@ -232,7 +170,9 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.9...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.11...HEAD
+[0.1.0-alpha.11]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.11
+[0.1.0-alpha.10]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.10
 [0.1.0-alpha.9]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.7
