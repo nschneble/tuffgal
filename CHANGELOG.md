@@ -36,6 +36,13 @@ so snapshots reflect what the user sees above the fold, or `fullPage`
 composites the whole scrollable document, the previous behavior. A long page
 no longer stretches its snapshot to full scroll height unless you opt back in.
 
+**`interactiveMode` config.** Opt into a single-image screenshot viewer: instead
+of radio tabs, each action renders one image you scrub with the mouse — hover
+previews the baseline, press previews the diff — layered over an accessible
+Baseline/Actual/Diff radio group so keyboard and touch users still switch
+variants directly. The image scales to fit the viewport height. Defaults to
+`false`, which keeps the existing radio-tab report.
+
 **Mismatch reason in the report.** When a screenshot can't be pixel-diffed
 because the baseline and actual images have different dimensions (e.g. a
 `fullPage` capture whose page grew taller), the report now writes the reason

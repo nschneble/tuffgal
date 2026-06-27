@@ -749,6 +749,36 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
     );
   });
 
+  it('commits to baseline when this run captured no actual', () => {
+    const html = renderReport(
+      interactiveResult({
+        actualPath: undefined,
+        diffPath: undefined,
+        diffRatio: undefined,
+        diffPixels: undefined,
+      }),
+      REPORT_DIR,
+      true,
+    );
+    assert.match(
+      html,
+      /<input[^>]*value="baseline"[^>]*checked/s,
+      'baseline is the checked default when no actual was captured',
+    );
+    assert.ok(
+      html.includes(
+        'Showing: <span class="shot-caption-variant">Baseline</span>',
+      ),
+      'caption shows Baseline when committed to baseline',
+    );
+    const src = html.match(/class="shot-image"\s+src="([^"]+)"/s);
+    assert.ok(src, 'the shared image carries a src');
+    assert.ok(
+      src[1].includes('settings.baseline.png'),
+      'the shared image src is the (non-empty) baseline path',
+    );
+  });
+
   it('keeps interactiveMode:false byte-identical to the default render', () => {
     const result = interactiveResult();
     assert.equal(

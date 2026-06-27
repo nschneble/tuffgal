@@ -506,7 +506,7 @@ function renderInteractiveScreenshots(
   ].join('');
 
   return `
-<fieldset class="shot-interactive" data-default-variant="${committed}">
+<fieldset class="shot-interactive">
   <legend class="sr-only">${escapeHtml(action.action)} screenshot</legend>
   ${radios}
   <p class="shot-caption" aria-hidden="true">Showing: <span class="shot-caption-variant">${captionLabel}</span></p>
