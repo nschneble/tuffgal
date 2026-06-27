@@ -660,6 +660,62 @@ summary.action-row:focus-visible {
   font-style: italic;
 }
 
+/* Interactive screenshot viewer (interactiveMode). The radio group + caption
+   sit in this fieldset, which lives OUTSIDE the clipped `.shot-stage`, so the
+   chip focus ring is never clipped by the stage overflow nor painted over
+   screenshot pixels. The chips reuse `.chip--toggle` (border `--border-bright`,
+   `--accent` focus ring), so no new focus tokens are introduced here. */
+.shot-interactive {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.5rem 2.2rem;
+  padding: 0;
+  border: 0;
+}
+
+/* Persistent caption naming the committed variant. Text on `--text` (≥4.5:1),
+   so the active variant is never conveyed by color alone — it pairs the checked
+   chip's accent border with this readable label. aria-hidden keeps it visual
+   only: the checked radio is the single accessible source of committed state. */
+.shot-caption {
+  margin: 0 0 0 0.25rem;
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.shot-caption-variant {
+  font-weight: 600;
+}
+
+/* The stage clips the screenshot to the viewport height. Its border uses
+   `--border-bright` (3:1 non-text contrast). overflow:hidden only ever clips
+   the image — the controls live in the sibling fieldset above. */
+.shot-stage {
+  margin-top: 0.5rem;
+  margin-left: 2.2rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border-bright);
+  background: var(--bg);
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Scale the screenshot to fit within the viewport height (and the panel width)
+   so a tall capture never forces the page to scroll. width/height:auto preserve
+   the aspect ratio while `max-height` caps it to the viewport. */
+.shot-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 85vh;
+  outline: 1px solid var(--img-outline);
+  outline-offset: -1px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
   summary.action-row::after,

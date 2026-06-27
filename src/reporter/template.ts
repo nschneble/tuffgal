@@ -385,12 +385,11 @@ function renderScreenshots(
   if (!action.actualPath && !action.baselinePath) {
     return '';
   }
-  // Wave 2 lands the interactive screenshot viewer in this branch. For now
-  // `interactiveMode` is threaded through but inert: both true and false fall
-  // through to the radio-tab output below, so an unset/false flag keeps the
-  // report byte-identical with the pre-interactiveMode render.
+  // interactiveMode swaps the radio-tab output for the single-image hover/press
+  // viewer. When it is false the function falls through to the radio-tab output
+  // below, byte-identical with the pre-interactiveMode render.
   if (interactiveMode) {
-    // TODO(wave-2): render the interactive viewer instead of the radio tabs.
+    return renderInteractiveScreenshots(action, actionId, reportDir);
   }
   const baseline = action.baselinePath
     ? toReportRelative(reportDir, action.baselinePath)
@@ -410,18 +409,7 @@ function renderScreenshots(
           (name) => available[name] !== undefined,
         );
   const diffStatsId = `${actionId}-diff-stats`;
-  // The pixel-diff overlay only exists when baseline and actual share
-  // dimensions. A mismatch (e.g. a fullPage capture whose document grew taller)
-  // throws before a diff is computed, so `diffRatio` is absent and there is no
-  // diff image to show — surface the recorded reason here, in the slot the
-  // "% differs" stat would normally occupy, so a "changed" row never reads as
-  // an unexplained no-op.
-  const diffStats =
-    action.diffRatio !== undefined
-      ? `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`
-      : action.status === 'changed' && action.failureMessage
-        ? `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">No pixel diff. ${escapeHtml(action.failureMessage)}</span></p>`
-        : '';
+  const diffStats = renderDiffStats(action, diffStatsId);
   return `
 <fieldset class="shot-radio" data-default-tab="${defaultTab}">
   <legend class="sr-only">Screenshot to display</legend>
@@ -436,13 +424,118 @@ ${shotPanel(actionId, 'diff', diff, `Pixel diff overlay for ${action.action}; ch
 `;
 }
 
+/**
+ * The pixel-diff overlay only exists when baseline and actual share dimensions.
+ * A mismatch (e.g. a fullPage capture whose document grew taller) throws before
+ * a diff is computed, so `diffRatio` is absent and there is no diff image to
+ * show — surface the recorded reason here, in the slot the "% differs" stat
+ * would normally occupy, so a "changed" row never reads as an unexplained no-op.
+ */
+function renderDiffStats(action: ActionResult, diffStatsId: string): string {
+  return action.diffRatio !== undefined
+    ? `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`
+    : action.status === 'changed' && action.failureMessage
+      ? `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">No pixel diff. ${escapeHtml(action.failureMessage)}</span></p>`
+      : '';
+}
+
+/**
+ * Interactive screenshot viewer (interactiveMode). One native radio group per
+ * action is the committed-state source of truth — keyboard, touch, and AT all
+ * operate the radios (reusing `name="${actionId}-shot"`). report.js layers a
+ * VISUAL-ONLY mouse preview (hover→baseline, press→diff, release→committed) on
+ * a SINGLE shared `<img>`; that gesture never mutates radio state, the img alt,
+ * or any ARIA. The controls + caption live OUTSIDE the clipped `.shot-stage` so
+ * the focus ring is never clipped or painted over screenshot pixels. The diff
+ * variant — and its radio — is omitted entirely (not disabled) when this action
+ * produced no diff image; the existing diff-stats association then rides on the
+ * diff radio control rather than the image, leaving no dangling describedby.
+ */
+function renderInteractiveScreenshots(
+  action: ActionResult,
+  actionId: string,
+  reportDir: string,
+): string {
+  const baseline = action.baselinePath
+    ? toReportRelative(reportDir, action.baselinePath)
+    : undefined;
+  const actual = action.actualPath
+    ? toReportRelative(reportDir, action.actualPath)
+    : undefined;
+  const diff = action.diffPath
+    ? toReportRelative(reportDir, action.diffPath)
+    : undefined;
+
+  // Default committed variant is `actual`; only a baseline-only row (no actual
+  // capture this run) commits to baseline instead. renderScreenshots' guard
+  // guarantees at least one of the two exists, so `committedSrc` is never empty
+  // at runtime — the `?? ''` only satisfies the optional types.
+  const committed: 'actual' | 'baseline' =
+    actual !== undefined ? 'actual' : 'baseline';
+  const committedSrc = (committed === 'actual' ? actual : baseline) ?? '';
+
+  const diffStatsId = `${actionId}-diff-stats`;
+  const diffStats = renderDiffStats(action, diffStatsId);
+
+  const radios = [
+    baseline !== undefined
+      ? shotRadio(actionId, 'baseline', false, committed === 'baseline', {
+          label: 'Baseline',
+        })
+      : '',
+    actual !== undefined
+      ? shotRadio(actionId, 'actual', false, committed === 'actual', {
+          label: 'Actual',
+        })
+      : '',
+    diff !== undefined
+      ? shotRadio(actionId, 'diff', false, false, {
+          label: 'Diff',
+          describedById: diffStats !== '' ? diffStatsId : undefined,
+        })
+      : '',
+  ].join('');
+
+  const captionLabel = committed === 'actual' ? 'Actual' : 'Baseline';
+  const dataSrc = [
+    baseline !== undefined
+      ? ` data-src-baseline="${escapeHtml(baseline)}"`
+      : '',
+    actual !== undefined ? ` data-src-actual="${escapeHtml(actual)}"` : '',
+    diff !== undefined ? ` data-src-diff="${escapeHtml(diff)}"` : '',
+  ].join('');
+
+  return `
+<fieldset class="shot-interactive" data-default-variant="${committed}">
+  <legend class="sr-only">${escapeHtml(action.action)} screenshot</legend>
+  ${radios}
+  <p class="shot-caption" aria-hidden="true">Showing: <span class="shot-caption-variant">${captionLabel}</span></p>
+  ${diffStats}
+</fieldset>
+<div class="shot-stage">
+  <img
+    class="shot-image"
+    src="${escapeHtml(committedSrc)}"
+    alt="${escapeHtml(`Screenshot of ${action.action}`)}"
+    loading="lazy"
+    ${dataSrc}
+  />
+</div>
+`;
+}
+
 function shotRadio(
   actionId: string,
   name: string,
   disabled: boolean,
   checked: boolean,
+  opts?: { label?: string; describedById?: string },
 ): string {
   const inputId = `${actionId}-radio-${name}`;
+  const label = opts?.label ?? name;
+  const describedBy = opts?.describedById
+    ? ` aria-describedby="${opts.describedById}"`
+    : '';
   return `
 <label for="${inputId}" class="chip chip--toggle shot-radio-label">
   <input
@@ -450,11 +543,11 @@ function shotRadio(
     name="${actionId}-shot"
     id="${inputId}"
     value="${name}"
-    data-tab="${name}"
+    data-tab="${name}"${describedBy}
     ${disabled ? 'disabled' : ''}
     ${checked ? 'checked' : ''}
   />
-  ${name}
+  ${label}
 </label>
 `;
 }

@@ -616,6 +616,154 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
   });
 });
 
+describe('renderScreenshots — interactive viewer (interactiveMode:true)', () => {
+  function interactiveResult(actionOverrides: Partial<ActionResult> = {}) {
+    return makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              actualPath: '/fake/report/dir/shots/settings.actual.png',
+              baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+              diffPath: '/fake/report/dir/shots/settings.diff.png',
+              diffPixels: 1234,
+              diffRatio: 0.012,
+              ...actionOverrides,
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it('renders a single shared <img>, not the per-variant shot-panels', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.equal(
+      countOccurrences(html, 'class="shot-image"'),
+      1,
+      'exactly one shared interactive image renders',
+    );
+    assert.ok(
+      !html.includes('class="shot-panel"'),
+      'no per-variant shot-panel divs in interactive mode',
+    );
+    assert.ok(
+      html.includes('<div class="shot-stage">'),
+      'the shared image sits in a .shot-stage wrapper',
+    );
+  });
+
+  it('renders one native radio group per action with available variants', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes('<fieldset class="shot-interactive"'),
+      'interactive fieldset renders',
+    );
+    assert.ok(
+      html.includes('name="s0-a0-shot"'),
+      'radio group reuses the actionId-shot name',
+    );
+    assert.ok(html.includes('value="baseline"'), 'baseline radio present');
+    assert.ok(html.includes('value="actual"'), 'actual radio present');
+    assert.ok(
+      html.includes('value="diff"'),
+      'diff radio present when a diff image exists',
+    );
+    assert.match(
+      html,
+      /<input[^>]*value="actual"[^>]*checked/s,
+      'actual is the default committed (checked) variant',
+    );
+  });
+
+  it('omits the diff radio entirely when there is no diff image', () => {
+    const html = renderReport(
+      interactiveResult({
+        diffPath: undefined,
+        diffRatio: undefined,
+        diffPixels: undefined,
+      }),
+      REPORT_DIR,
+      true,
+    );
+    assert.ok(
+      !html.includes('value="diff"'),
+      'no diff radio when diffPath is absent (omitted, not disabled)',
+    );
+    assert.ok(
+      !html.includes('data-src-diff'),
+      'no diff data-src on the shared image when diffPath is absent',
+    );
+    assert.ok(
+      !html.includes('aria-describedby="s0-a0-diff-stats"'),
+      'no dangling aria-describedby to an unrendered diff-stats id',
+    );
+  });
+
+  it('renders a stable, variant-neutral alt that never names a variant', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes('alt="Screenshot of visit-settings"'),
+      'alt is the neutral "Screenshot of <action>" string',
+    );
+    assert.ok(
+      !html.includes('actual screenshot from this run'),
+      'no per-variant alt text leaks into interactive mode',
+    );
+  });
+
+  it('renders the sr-only legend and the visible "Showing" caption', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes(
+        '<legend class="sr-only">visit-settings screenshot</legend>',
+      ),
+      'sr-only legend names the action',
+    );
+    assert.ok(
+      html.includes('class="shot-caption"'),
+      'a visible caption renders',
+    );
+    assert.ok(
+      html.includes(
+        'Showing: <span class="shot-caption-variant">Actual</span>',
+      ),
+      'caption shows the committed variant (Actual by default)',
+    );
+  });
+
+  it('moves the diff-stats association onto the diff radio control', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.match(
+      html,
+      /value="diff"[^>]*aria-describedby="s0-a0-diff-stats"/s,
+      'the diff radio (not the img) is described by the diff-stats',
+    );
+    assert.ok(
+      html.includes('id="s0-a0-diff-stats"'),
+      'the diff-stats element carries the referenced id',
+    );
+  });
+
+  it('keeps interactiveMode:false byte-identical to the default render', () => {
+    const result = interactiveResult();
+    assert.equal(
+      renderReport(result, REPORT_DIR, false),
+      renderReport(result, REPORT_DIR),
+      'explicit false equals the defaulted (absent) flag',
+    );
+    assert.notEqual(
+      renderReport(result, REPORT_DIR, true),
+      renderReport(result, REPORT_DIR, false),
+      'interactive output differs from the radio-tab output',
+    );
+  });
+});
+
 describe('formatDate — friendly report-meta timestamp', () => {
   // formatDate is module-private; assert through renderReport's rendered output
   // (the friendly text appears in the <title> and the report-meta <time>). TZ is

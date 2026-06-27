@@ -104,6 +104,116 @@
     });
   })();
 
+  // Interactive screenshot viewer (rendered when the report is built with
+  // interactiveMode). Each action shows ONE shared <img>. A native radio group
+  // is the committed-state source of truth — keyboard, touch, and AT operate it
+  // exactly like the radio-tab viewer. On top of that, the mouse gesture is a
+  // STATELESS visual preview layered on the same <img>:
+  //   hover  (mouseenter/mousemove) → baseline src
+  //   press  (mousedown)            → diff src (no-op when there is no diff)
+  //   release/leave (mouseup/mouseleave) → revert to the checked radio's variant
+  // The preview ONLY rewrites img.src. It never changes the checked radio, the
+  // img alt, any ARIA attribute, or any live region — so hovering announces
+  // nothing by construction. The mouse listeners live on the .shot-stage wrapper
+  // rather than the <img>, keeping the image itself handler-free and
+  // non-focusable. Non-interactive reports have no .shot-interactive nodes, so
+  // this block is a no-op there (and setupShots is a no-op on interactive ones).
+  (function () {
+    var VARIANT_LABELS = {
+      baseline: 'Baseline',
+      actual: 'Actual',
+      diff: 'Diff',
+    };
+
+    function setupInteractiveShots(fieldset) {
+      var root = fieldset.parentElement;
+      if (!root) return;
+      var stage = root.querySelector('.shot-stage');
+      var image = root.querySelector('.shot-image');
+      if (!stage || !image) return;
+      var captionVariant = fieldset.querySelector('.shot-caption-variant');
+      var radios = Array.prototype.slice.call(
+        fieldset.querySelectorAll('input[type="radio"]'),
+      );
+
+      // Map each AVAILABLE variant to its src, read off the shared <img>'s
+      // data-src-* attributes. Absent variants (e.g. diff on a clean pass) have
+      // no attribute, so they never enter the map and every lookup is a no-op.
+      var sources = {};
+      ['baseline', 'actual', 'diff'].forEach(function (variant) {
+        var src = image.getAttribute('data-src-' + variant);
+        if (src !== null) sources[variant] = src;
+      });
+
+      // `committed` mirrors the checked radio — the ONLY state the keyboard /
+      // touch / AT path mutates. Mouse preview reverts here on release/leave.
+      var committed = null;
+      var pressed = false;
+
+      function commit(variant) {
+        if (!(variant in sources)) return;
+        committed = variant;
+        image.src = sources[variant];
+        if (captionVariant) {
+          captionVariant.textContent = VARIANT_LABELS[variant] || variant;
+        }
+      }
+
+      // Show a variant WITHOUT committing (mouse preview). No-op when the variant
+      // has no src, so press-with-no-diff leaves the displayed image untouched.
+      function preview(variant) {
+        if (!(variant in sources)) return;
+        image.src = sources[variant];
+      }
+
+      function revert() {
+        if (committed && committed in sources) {
+          image.src = sources[committed];
+        }
+      }
+
+      var initial =
+        radios.find(function (radio) {
+          return radio.checked;
+        }) || radios[0];
+      if (initial) commit(initial.value);
+
+      radios.forEach(function (radio) {
+        radio.addEventListener('change', function () {
+          commit(radio.value);
+        });
+      });
+
+      function hoverPreview() {
+        // While not pressed, hovering previews the baseline for an in-place
+        // compare. The pressed guard keeps a held mousedown pinned to diff even
+        // as the pointer moves across the image.
+        if (!pressed) preview('baseline');
+      }
+
+      stage.addEventListener('mouseenter', hoverPreview);
+      stage.addEventListener('mousemove', hoverPreview);
+      stage.addEventListener('mousedown', function () {
+        pressed = true;
+        preview('diff');
+      });
+      stage.addEventListener('mouseup', function () {
+        pressed = false;
+        revert();
+      });
+      stage.addEventListener('mouseleave', function () {
+        pressed = false;
+        revert();
+      });
+    }
+
+    document
+      .querySelectorAll('.shot-interactive')
+      .forEach(function (fieldset) {
+        setupInteractiveShots(fieldset);
+      });
+  })();
+
   // Status filter for the stories list. Toggles `hidden` on each <li.story>
   // whose `data-status` doesn't match the chosen radio value ("all" disables
   // the filter). Live-region updates are debounced by ~150ms so arrow-key
