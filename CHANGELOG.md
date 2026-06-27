@@ -6,7 +6,13 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Fixed
+
+- `tuffgal` did nothing when launched through the installed `.bin` symlink
+  (`npm run`, `npx`, or a bare `tuffgal`): the entry-point check compared the
+  unresolved symlink path against the symlink-resolved module URL, so `main()`
+  never ran. The script now resolves `argv[1]` through realpath before the
+  comparison.
 
 ## [0.1.0-alpha.11] — 2026-06-26
 
