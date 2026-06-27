@@ -28,7 +28,11 @@ const STATUS_MARKERS: Record<ActionStatus, string> = {
  * default, monospace font for data, sharp borders, and minimal but
  * evocative icons + neon colors to indicate statuses.
  */
-export function renderReport(result: RunResult, reportDir: string): string {
+export function renderReport(
+  result: RunResult,
+  reportDir: string,
+  interactiveMode = false,
+): string {
   const dateLabel = formatDate(result.finishedAt);
   return `
 <!doctype html>
@@ -51,7 +55,7 @@ export function renderReport(result: RunResult, reportDir: string): string {
     </header>
     <main id="main" tabindex="-1">
       ${renderSummary(result)}
-      ${renderStories(result, reportDir)}
+      ${renderStories(result, reportDir, interactiveMode)}
     </main>
     <script src="assets/report.js"></script>
   </body>
@@ -68,6 +72,7 @@ function renderSummary(result: RunResult): string {
   <ul class="summary-list" aria-label="Run totals">
     ${summaryItem('stories', result.totals.stories)}
     ${summaryItem('passed', result.totals.passed, 'pass')}
+    ${summaryItem('new', result.totals.new, 'new')}
     ${summaryItem('changed', result.totals.changed, 'changed')}
     ${summaryItem('failed', result.totals.failed, 'failed')}
     ${coverageItem('screens', screens)}
@@ -102,9 +107,15 @@ function summaryItem(
 `;
 }
 
-function renderStories(result: RunResult, reportDir: string): string {
+function renderStories(
+  result: RunResult,
+  reportDir: string,
+  interactiveMode: boolean,
+): string {
   const items = result.stories
-    .map((story, index) => renderStory(story, index, reportDir))
+    .map((story, index) =>
+      renderStory(story, index, reportDir, interactiveMode),
+    )
     .join('\n');
   const total = result.stories.length;
   return `
@@ -115,6 +126,7 @@ function renderStories(result: RunResult, reportDir: string): string {
       <legend class="sr-only">filter</legend>
       ${storyFilterRadio('all', true)}
       ${storyFilterRadio('passed', false)}
+      ${storyFilterRadio('new', false)}
       ${storyFilterRadio('changed', false)}
       ${storyFilterRadio('failed', false)}
     </fieldset>
@@ -155,6 +167,7 @@ function renderStory(
   story: StoryResult,
   storyIndex: number,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
   return `
 <li class="story" data-status="${story.status}">
@@ -166,7 +179,7 @@ function renderStory(
   </div>
   <p class="story-prose">${escapeHtml(story.story)}</p>
   <br/>
-  ${renderStoryActions(story, storyIndex, reportDir)}
+  ${renderStoryActions(story, storyIndex, reportDir, interactiveMode)}
 </li>
 `;
 }
@@ -194,6 +207,7 @@ function renderStoryActions(
   story: StoryResult,
   storyIndex: number,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
   // Bucket actions by breakpoint, preserving first-seen order.
   const order: string[] = [];
@@ -215,7 +229,12 @@ function renderStoryActions(
   if (order.length <= 1) {
     const actions = story.actions
       .map((action, actionIndex) =>
-        renderAction(action, `s${storyIndex}-a${actionIndex}`, reportDir),
+        renderAction(
+          action,
+          `s${storyIndex}-a${actionIndex}`,
+          reportDir,
+          interactiveMode,
+        ),
       )
       .join('\n');
     return `<ol class="actions" aria-label="Actions">
@@ -230,6 +249,7 @@ function renderStoryActions(
         buckets.get(key)!,
         `s${storyIndex}-bp${groupIndex}`,
         reportDir,
+        interactiveMode,
       ),
     )
     .join('\n');
@@ -258,6 +278,7 @@ function renderBreakpointGroup(
   entries: Array<{ action: ActionResult; id: string }>,
   groupId: string,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
   const labelId = `${groupId}-label`;
   const name = key;
@@ -274,7 +295,9 @@ function renderBreakpointGroup(
     ? `<span class="breakpoint-dimensions" aria-hidden="true">${dimensions.width}×${dimensions.height}</span><span class="sr-only">${dimensions.width} by ${dimensions.height} pixels</span>`
     : '';
   const actions = entries
-    .map(({ action, id }) => renderAction(action, id, reportDir))
+    .map(({ action, id }) =>
+      renderAction(action, id, reportDir, interactiveMode),
+    )
     .join('\n');
   return `
 <div class="breakpoint-group">
@@ -294,8 +317,14 @@ function renderAction(
   action: ActionResult,
   actionId: string,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
-  const screenshots = renderScreenshots(action, actionId, reportDir);
+  const screenshots = renderScreenshots(
+    action,
+    actionId,
+    reportDir,
+    interactiveMode,
+  );
   const errorBlock =
     action.status === 'failed'
       ? `<pre class="action-error">${escapeHtml(action.failureMessage ?? 'unknown error')}</pre>`
@@ -351,13 +380,25 @@ function renderScreenshots(
   action: ActionResult,
   actionId: string,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
   if (!action.actualPath && !action.baselinePath) {
     return '';
   }
-  const baseline = action.baselinePath
-    ? toReportRelative(reportDir, action.baselinePath)
-    : undefined;
+  // interactiveMode swaps the radio-tab output for the single-image hover/press
+  // viewer. When it is false the function falls through to the radio-tab output
+  // below, byte-identical with the pre-interactiveMode render.
+  if (interactiveMode) {
+    return renderInteractiveScreenshots(action, actionId, reportDir);
+  }
+  // A `new` baseline writes its baseline straight from this run's actual, so the
+  // two paths point at byte-identical PNGs. There is no prior state to compare
+  // against, so suppress the baseline variant for display — like the diff, it is
+  // not a real artifact here. The path stays in the data model for `approve`.
+  const baseline =
+    action.baselinePath && action.status !== 'new'
+      ? toReportRelative(reportDir, action.baselinePath)
+      : undefined;
   const actual = action.actualPath
     ? toReportRelative(reportDir, action.actualPath)
     : undefined;
@@ -373,10 +414,29 @@ function renderScreenshots(
           (name) => available[name] !== undefined,
         );
   const diffStatsId = `${actionId}-diff-stats`;
-  const diffStats =
-    action.diffRatio !== undefined
-      ? `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`
-      : '';
+  const diffStats = renderDiffStats(action, diffStatsId);
+  // When only one variant is real (the common case for a `new` baseline, whose
+  // baseline is suppressed and has no diff), a radio group offering a single
+  // choice is noise to AT. Drop the controls and show the image alone; the row's
+  // status badge already announces "new baseline". Zero variants — a `new` row
+  // whose actual capture is somehow missing — collapses to nothing.
+  const soleVariant = (['baseline', 'actual', 'diff'] as const).filter(
+    (name) => available[name] !== undefined,
+  );
+  if (soleVariant.length <= 1) {
+    const only = soleVariant[0];
+    if (only === undefined) {
+      return '';
+    }
+    const lone = shotPanel(
+      actionId,
+      only,
+      available[only],
+      SHOT_ALT[only](action),
+      true,
+    );
+    return `${diffStats}${lone}`;
+  }
   return `
 <fieldset class="shot-radio" data-default-tab="${defaultTab}">
   <legend class="sr-only">Screenshot to display</legend>
@@ -385,9 +445,149 @@ function renderScreenshots(
   ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff')}
   ${diffStats}
 </fieldset>
-${shotPanel(actionId, 'baseline', baseline, `${action.action} baseline screenshot`, initialTab === 'baseline')}
-${shotPanel(actionId, 'actual', actual, `${action.action} actual screenshot from this run`, initialTab === 'actual')}
-${shotPanel(actionId, 'diff', diff, `Pixel diff overlay for ${action.action}; changed regions are highlighted`, initialTab === 'diff', action.diffRatio !== undefined ? diffStatsId : undefined)}
+${shotPanel(actionId, 'baseline', baseline, SHOT_ALT.baseline(action), initialTab === 'baseline')}
+${shotPanel(actionId, 'actual', actual, SHOT_ALT.actual(action), initialTab === 'actual')}
+${shotPanel(actionId, 'diff', diff, SHOT_ALT.diff(action), initialTab === 'diff', action.diffRatio !== undefined ? diffStatsId : undefined)}
+`;
+}
+
+/** Alt text per screenshot variant, shared by the radio-tab and collapsed render. */
+const SHOT_ALT: Record<
+  'baseline' | 'actual' | 'diff',
+  (action: ActionResult) => string
+> = {
+  baseline: (action) => `${action.action} baseline screenshot`,
+  actual: (action) => `${action.action} actual screenshot from this run`,
+  diff: (action) =>
+    `Pixel diff overlay for ${action.action}; changed regions are highlighted`,
+};
+
+/**
+ * The pixel-diff overlay only exists when baseline and actual share dimensions.
+ * A mismatch (e.g. a fullPage capture whose document grew taller) throws before
+ * a diff is computed, so `diffRatio` is absent and there is no diff image to
+ * show — surface the recorded reason here, in the slot the "% differs" stat
+ * would normally occupy, so a "changed" row never reads as an unexplained no-op.
+ */
+function renderDiffStats(action: ActionResult, diffStatsId: string): string {
+  return action.diffRatio !== undefined
+    ? `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`
+    : action.status === 'changed' && action.failureMessage
+      ? `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">No pixel diff. ${escapeHtml(action.failureMessage)}</span></p>`
+      : '';
+}
+
+/**
+ * Interactive screenshot viewer (interactiveMode). One native radio group per
+ * action is the committed-state source of truth — keyboard, touch, and AT all
+ * operate the radios (reusing `name="${actionId}-shot"`). report.js layers a
+ * VISUAL-ONLY mouse preview (hover→baseline, press→diff, release→committed) on
+ * a SINGLE shared `<img>`; that gesture never mutates radio state, the img alt,
+ * or any ARIA. The controls + caption live OUTSIDE the clipped `.shot-stage` so
+ * the focus ring is never clipped or painted over screenshot pixels. The diff
+ * variant — and its radio — is omitted entirely (not disabled) when this action
+ * produced no diff image; the existing diff-stats association then rides on the
+ * diff radio control rather than the image, leaving no dangling describedby.
+ */
+function renderInteractiveScreenshots(
+  action: ActionResult,
+  actionId: string,
+  reportDir: string,
+): string {
+  // A `new` baseline writes its baseline straight from this run's actual, so the
+  // two paths point at byte-identical PNGs. There is no prior state to compare
+  // against, so suppress the baseline variant for display — like the diff, it is
+  // omitted (no radio, no image). The path stays in the data model for `approve`.
+  const baseline =
+    action.baselinePath && action.status !== 'new'
+      ? toReportRelative(reportDir, action.baselinePath)
+      : undefined;
+  const actual = action.actualPath
+    ? toReportRelative(reportDir, action.actualPath)
+    : undefined;
+  const diff = action.diffPath
+    ? toReportRelative(reportDir, action.diffPath)
+    : undefined;
+
+  // Default committed variant is `actual`; only a baseline-only row (no actual
+  // capture this run) commits to baseline instead. renderScreenshots' guard
+  // guarantees at least one of the two exists, so `committedSrc` is never empty
+  // at runtime — the `?? ''` only satisfies the optional types.
+  const committed: 'actual' | 'baseline' =
+    actual !== undefined ? 'actual' : 'baseline';
+  const committedSrc = (committed === 'actual' ? actual : baseline) ?? '';
+
+  // When only one variant is real (the common case for a `new` baseline, whose
+  // baseline is suppressed and has no diff), the hover/press switcher has nothing
+  // to toggle to — a lone radio in a group is noise to AT. Render the image alone;
+  // the row's status badge already announces "new baseline". Zero variants — a
+  // `new` row whose actual capture is missing — collapses to nothing.
+  const variantCount = [baseline, actual, diff].filter(
+    (v) => v !== undefined,
+  ).length;
+  if (variantCount === 0) {
+    return '';
+  }
+  if (variantCount === 1) {
+    return `
+<div class="shot-stage">
+  <img
+    class="shot-image"
+    src="${escapeHtml(committedSrc)}"
+    alt="${escapeHtml(`Screenshot of ${action.action}`)}"
+    loading="lazy"
+  />
+</div>
+`;
+  }
+
+  const diffStatsId = `${actionId}-diff-stats`;
+  const diffStats = renderDiffStats(action, diffStatsId);
+
+  const radios = [
+    baseline !== undefined
+      ? shotRadio(actionId, 'baseline', false, committed === 'baseline', {
+          label: 'Baseline',
+        })
+      : '',
+    actual !== undefined
+      ? shotRadio(actionId, 'actual', false, committed === 'actual', {
+          label: 'Actual',
+        })
+      : '',
+    diff !== undefined
+      ? shotRadio(actionId, 'diff', false, false, {
+          label: 'Diff',
+          describedById: diffStats !== '' ? diffStatsId : undefined,
+        })
+      : '',
+  ].join('');
+
+  const captionLabel = committed === 'actual' ? 'Actual' : 'Baseline';
+  const dataSrc = [
+    baseline !== undefined
+      ? ` data-src-baseline="${escapeHtml(baseline)}"`
+      : '',
+    actual !== undefined ? ` data-src-actual="${escapeHtml(actual)}"` : '',
+    diff !== undefined ? ` data-src-diff="${escapeHtml(diff)}"` : '',
+  ].join('');
+
+  return `
+<fieldset class="shot-interactive">
+  <legend class="sr-only">${escapeHtml(action.action)} screenshot</legend>
+  ${radios}
+  <p class="shot-caption" aria-hidden="true">Showing: <span class="shot-caption-variant">${captionLabel}</span></p>
+  ${diffStats}
+</fieldset>
+<div class="shot-stage">
+  <img
+    class="shot-image"
+    src="${escapeHtml(committedSrc)}"
+    alt="${escapeHtml(`Screenshot of ${action.action}`)}"
+    loading="lazy"
+    ${dataSrc}
+  />
+</div>
 `;
 }
 
@@ -396,8 +596,13 @@ function shotRadio(
   name: string,
   disabled: boolean,
   checked: boolean,
+  opts?: { label?: string; describedById?: string },
 ): string {
   const inputId = `${actionId}-radio-${name}`;
+  const label = opts?.label ?? name;
+  const describedBy = opts?.describedById
+    ? ` aria-describedby="${opts.describedById}"`
+    : '';
   return `
 <label for="${inputId}" class="chip chip--toggle shot-radio-label">
   <input
@@ -405,11 +610,11 @@ function shotRadio(
     name="${actionId}-shot"
     id="${inputId}"
     value="${name}"
-    data-tab="${name}"
+    data-tab="${name}"${describedBy}
     ${disabled ? 'disabled' : ''}
     ${checked ? 'checked' : ''}
   />
-  ${name}
+  ${label}
 </label>
 `;
 }

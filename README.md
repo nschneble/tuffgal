@@ -67,10 +67,12 @@ composite action.
 - [Authoring guide](docs/authoring.md)
 - [Changelog](CHANGELOG.md)
 - [CI integration](docs/ci.md)
+- [CLI reference](docs/cli.md)
 - [Config reference](docs/config.md)
 - [Migrating from Cypress](docs/migration-cypress.md)
 - [Migrating from Playwright](docs/migration-playwright.md)
 - [Product requirements](docs/prd-v1.md)
+- [Reporting data (results.json)](docs/reporting.md)
 - [Supervisor](docs/supervisor.md)
 
 ## License

@@ -1,9 +1,10 @@
 import type { ResolvedConfig } from '../../config.ts';
 
 /**
- * Invokes the consumer-supplied database reset. Called once at the start of
- * a run, before any story dispatches. No-op when the consumer did not supply
- * a `database.reset` function (e.g., a static site with no backend).
+ * Invokes the consumer-supplied database reset. Called once per breakpoint
+ * pass, before that pass's stories dispatch, so each breakpoint renders against
+ * a freshly seeded database. No-op when the consumer did not supply a
+ * `database.reset` function (e.g., a static site with no backend).
  */
 export async function resetDatabase(config: ResolvedConfig): Promise<void> {
   const reset = config.database?.reset;

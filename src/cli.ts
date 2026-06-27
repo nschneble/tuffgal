@@ -1,12 +1,17 @@
 #!/usr/bin/env node
+import { pathToFileURL } from 'node:url';
 import { approveAll } from './runner/approve.ts';
 import { init } from './commands/init.ts';
-import { loadConfig } from './config.ts';
+import { BREAKPOINTS, loadConfig } from './config.ts';
 import { runAll } from './runner/run.ts';
+import { normaliseStoryArg } from './runner/storyFilter.ts';
 import { supervise } from './commands/supervise.ts';
 
 const COMMANDS = ['approve', 'help', 'init', 'run', 'supervise'] as const;
 type Command = (typeof COMMANDS)[number];
+
+/** Registry breakpoint names that double as `--<name>` approve shorthands. */
+const BREAKPOINT_FLAGS = Object.keys(BREAKPOINTS);
 
 interface ParsedArguments {
   command: Command;
@@ -19,10 +24,14 @@ interface ParsedArguments {
   maxRuntimeMs?: number;
   newOnly: boolean;
   storyFilter?: string;
+  /** Bare positional argument (e.g. `approve user-logs-in`). */
+  positional?: string;
+  /** `--breakpoint <name>` (repeatable) plus `--<name>` shorthands. */
+  breakpoints: string[];
   workers?: number;
 }
 
-function parseArguments(argv: string[]): ParsedArguments {
+export function parseArguments(argv: string[]): ParsedArguments {
   const [command, ...rest] = argv;
   const parsed: ParsedArguments = {
     command: COMMANDS.includes(command as Command)
@@ -32,6 +41,14 @@ function parseArguments(argv: string[]): ParsedArguments {
     manageServers: false,
     coverage: false,
     newOnly: false,
+    breakpoints: [],
+  };
+
+  const addBreakpoint = (name: string | undefined): void => {
+    if (name === undefined || name === '') {
+      throw new Error('--breakpoint requires a mode name (e.g. desktop)');
+    }
+    if (!parsed.breakpoints.includes(name)) parsed.breakpoints.push(name);
   };
 
   for (let index = 0; index < rest.length; index += 1) {
@@ -44,6 +61,23 @@ function parseArguments(argv: string[]): ParsedArguments {
       index += 1;
     } else if (arg.startsWith('--story=')) {
       parsed.storyFilter = arg.slice('--story='.length);
+    } else if (arg === '--breakpoint') {
+      addBreakpoint(rest[index + 1]);
+      index += 1;
+    } else if (arg.startsWith('--breakpoint=')) {
+      addBreakpoint(arg.slice('--breakpoint='.length));
+    } else if (
+      arg.startsWith('--') &&
+      BREAKPOINT_FLAGS.includes(arg.slice(2))
+    ) {
+      addBreakpoint(arg.slice(2));
+    } else if (!arg.startsWith('-')) {
+      if (parsed.positional !== undefined) {
+        throw new Error(
+          `unexpected extra argument "${arg}" (already got "${parsed.positional}")`,
+        );
+      }
+      parsed.positional = arg;
     } else if (arg === '--workers') {
       parsed.workers = numericFlag('--workers', rest[index + 1]);
       index += 1;
@@ -135,7 +169,9 @@ function printHelp(): void {
       '  --coverage                 Capture V8 JS + CSS coverage and emit a monocart report.',
       '',
       'Approve options:',
+      '  <story>                    Positional story to approve (name or path); same as --story.',
       '  --new-only                 Only promote new baselines; skip changed.',
+      '  --breakpoint <name>        Only approve this mode; repeatable. Also --desktop/--mobile/etc.',
       '',
       'Supervise options:',
       '  --healthcheck-interval N   Probe interval in ms (default 30_000).',
@@ -146,19 +182,30 @@ function printHelp(): void {
   );
 }
 
+function failExit(message: string): never {
+  process.stderr.write(`tuffgal error: ${message}\n`);
+  process.exit(1);
+}
+
 async function main(): Promise<void> {
   const args = parseArguments(process.argv.slice(2));
-  if (
-    args.newOnly &&
-    (args.command === 'run' ||
-      args.command === 'supervise' ||
-      args.command === 'init')
-  ) {
-    process.stderr.write(
-      'tuffgal error: --new-only is only valid with the `approve` subcommand\n',
-    );
-    process.exit(1);
+
+  // `--new-only` and the breakpoint filters narrow an approval set; they have no
+  // meaning on the other subcommands.
+  if (args.command !== 'approve') {
+    if (args.newOnly) {
+      failExit('--new-only is only valid with the `approve` subcommand');
+    }
+    if (args.breakpoints.length > 0) {
+      failExit(
+        '--breakpoint (and --desktop/--mobile/…) is only valid with the `approve` subcommand',
+      );
+    }
+    if (args.positional !== undefined) {
+      failExit(`unexpected argument "${args.positional}"`);
+    }
   }
+
   if (args.command === 'help') {
     printHelp();
     return;
@@ -179,9 +226,19 @@ async function main(): Promise<void> {
     process.exit(result.totals.failed > 0 ? 1 : 0);
   }
   if (args.command === 'approve') {
+    // A story may be named positionally (`approve user-logs-in`) or via
+    // `--story`, but not both.
+    if (args.positional !== undefined && args.storyFilter !== undefined) {
+      failExit('name a story positionally or with --story, not both');
+    }
+    const storyFilter =
+      args.positional !== undefined
+        ? normaliseStoryArg(args.positional)
+        : args.storyFilter;
     const summary = await approveAll(config, {
-      storyFilter: args.storyFilter,
+      storyFilter,
       newOnly: args.newOnly,
+      breakpoints: args.breakpoints,
     });
     process.stdout.write(
       `\nApproved ${summary.approved} baselines; skipped ${summary.skipped} actions.\n`,
@@ -197,9 +254,16 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  process.stderr.write(
-    `tuffgal error: ${error instanceof Error ? error.message : String(error)}\n`,
-  );
-  process.exit(1);
-});
+// Only drive the CLI when run as the entry point. Importing this module (e.g.
+// from a unit test exercising `parseArguments`) must not kick off a real run.
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((error) => {
+    process.stderr.write(
+      `tuffgal error: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    process.exit(1);
+  });
+}

@@ -10,7 +10,9 @@ import { access } from 'node:fs/promises';
 export interface DatabaseBridge {
   /**
    * Wipes the test database and reseeds the deterministic test user. Called
-   * once before the scheduler dispatches the first story.
+   * once per breakpoint pass, before that pass dispatches its first story — so
+   * a single-breakpoint run calls it once, and an N-breakpoint run calls it N
+   * times, giving each breakpoint a pristine database. Keep it fast.
    */
   reset?: () => Promise<void>;
   /**
@@ -66,6 +68,16 @@ export const BREAKPOINTS = {
 
 /** A built-in breakpoint name. Other modules reuse this for per-mode work. */
 export type BreakpointName = keyof typeof BREAKPOINTS;
+
+/**
+ * How much of the page each screenshot captures:
+ *   - `viewport` — only the breakpoint's `width x height` box, matching what a
+ *     real user sees above the fold. The default.
+ *   - `fullPage` — the whole scrollable document, however tall. Catches
+ *     below-the-fold regressions at the cost of viewport fidelity (a long page
+ *     renders at e.g. 1280x2500 instead of 1280x800).
+ */
+export type CaptureMode = 'viewport' | 'fullPage';
 
 /**
  * One resolved breakpoint mode: a name plus the viewport dimensions to render
@@ -138,6 +150,13 @@ export interface TuffgalConfig {
    * the field to run a single `desktop` breakpoint (1280x800).
    */
   breakpoints?: BreakpointSelector[];
+  /**
+   * How much of the page each screenshot captures. `viewport` (default) crops
+   * to the breakpoint's `width x height` so diffs reflect what the user sees
+   * above the fold; `fullPage` composites the whole scrollable document. See
+   * {@link CaptureMode}.
+   */
+  captureMode?: CaptureMode;
   /** Default Playwright locator + action timeout. Defaults to 10_000. */
   defaultTimeoutMs?: number;
   /** Default navigation timeout. Defaults to 15_000. */
@@ -161,6 +180,12 @@ export interface TuffgalConfig {
    * `customCoverage.flows` in the report.
    */
   flowInventory?: string;
+  /**
+   * Render the interactive screenshot viewer instead of the static radio-tab
+   * report. Defaults to `false`, so the report keeps its historical radio-tab
+   * output unless a project explicitly opts in.
+   */
+  interactiveMode?: boolean;
 }
 
 /**
@@ -182,6 +207,8 @@ export interface ResolvedConfig {
    * noUncheckedIndexedAccess.
    */
   breakpoints: [ResolvedBreakpoint, ...ResolvedBreakpoint[]];
+  /** Resolved screenshot scope; defaults to `viewport`. */
+  captureMode: CaptureMode;
   defaultTimeoutMs: number;
   navigationTimeoutMs: number;
   frozenTime: string;
@@ -189,13 +216,17 @@ export interface ResolvedConfig {
   database: DatabaseBridge | undefined;
   devServers: DevServerBridge | undefined;
   flowInventory: string | undefined;
+  /** Resolved interactive-viewer flag; defaults to `false`. */
+  interactiveMode: boolean;
 }
 
 const DEFAULTS = {
+  captureMode: 'viewport',
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',
   authStateRelative: '.auth',
+  interactiveMode: false,
 } as const;
 
 /**
@@ -290,6 +321,21 @@ export function assertValidConfig(input: unknown, source: string): void {
     }
   }
 
+  if (
+    config.interactiveMode !== undefined &&
+    typeof config.interactiveMode !== 'boolean'
+  ) {
+    fail('`interactiveMode` must be a boolean when provided.');
+  }
+
+  if (
+    config.captureMode !== undefined &&
+    config.captureMode !== 'viewport' &&
+    config.captureMode !== 'fullPage'
+  ) {
+    fail("`captureMode` must be 'viewport' or 'fullPage' when provided.");
+  }
+
   if (config.breakpoints !== undefined) {
     const validNames = Object.keys(BREAKPOINTS);
     const breakpoints = config.breakpoints;
@@ -316,7 +362,8 @@ export function assertValidConfig(input: unknown, source: string): void {
         for (const dim of ['width', 'height'] as const) {
           if (
             override[dim] !== undefined &&
-            (typeof override[dim] !== 'number' || (override[dim] as number) <= 0)
+            (typeof override[dim] !== 'number' ||
+              (override[dim] as number) <= 0)
           ) {
             fail(
               `\`breakpoints[].${dim}\` must be a positive number when provided.`,
@@ -346,6 +393,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     apiHost: input.apiHost,
     storageStatePins: input.storageStatePins ?? [],
     breakpoints,
+    captureMode: input.captureMode ?? DEFAULTS.captureMode,
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:
       input.navigationTimeoutMs ?? DEFAULTS.navigationTimeoutMs,
@@ -356,6 +404,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     flowInventory: input.flowInventory
       ? resolve(rootDir, input.flowInventory)
       : undefined,
+    interactiveMode: input.interactiveMode ?? DEFAULTS.interactiveMode,
   };
 }
 

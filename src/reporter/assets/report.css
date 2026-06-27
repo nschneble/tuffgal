@@ -57,6 +57,15 @@
   box-sizing: border-box;
 }
 
+/* The story filter prunes stories, breakpoint groups, and actions by toggling
+   the native `hidden` attribute. Those are layout containers, so a future
+   `display:` rule on `.action`/`.breakpoint-group` would outrank the UA
+   `[hidden]` default and silently resurrect filtered rows as visible and
+   keyboard-focusable. Pin it so `hidden` always wins. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -180,6 +189,10 @@ h2 {
 
 .summary-item[data-status='pass'] .indicator {
   color: var(--pass);
+}
+
+.summary-item[data-status='new'] .indicator {
+  color: var(--new);
 }
 
 .summary-item[data-status='changed'] .indicator {
@@ -331,6 +344,10 @@ h2 {
   box-shadow: inset 3px 0 0 var(--failed);
 }
 
+.story[data-status='new'] {
+  box-shadow: inset 3px 0 0 var(--new);
+}
+
 .story[data-status='changed'] {
   box-shadow: inset 3px 0 0 var(--changed);
 }
@@ -357,6 +374,11 @@ h2 {
   color: var(--pass);
 }
 
+.story[data-status='new'] .story-marker,
+.story[data-status='new'] .story-file {
+  color: var(--new);
+}
+
 .story[data-status='changed'] .story-marker,
 .story[data-status='changed'] .story-file {
   color: var(--changed);
@@ -380,7 +402,9 @@ h2 {
   text-wrap: pretty;
 }
 
-.breakpoint-group + .breakpoint-group {
+/* `:not([hidden])` on both sides so a filter that hides the first group does
+   not strand its separator on the new first-visible group. */
+.breakpoint-group:not([hidden]) + .breakpoint-group:not([hidden]) {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px dashed var(--border);
@@ -627,6 +651,69 @@ summary.action-row:focus-visible {
 
 .diff-stats .coverage-detail {
   color: var(--text-subtle);
+}
+
+/* No diff image to show (dimension mismatch). The note IS the primary content
+   of this slot, so it keeps full `--text` weight; italic alone marks the
+   "no data" state. */
+.diff-stats--unavailable .label {
+  font-style: italic;
+}
+
+/* Interactive screenshot viewer (interactiveMode). The radio group + caption
+   sit in this fieldset, which lives OUTSIDE the clipped `.shot-stage`, so the
+   chip focus ring is never clipped by the stage overflow nor painted over
+   screenshot pixels. The chips reuse `.chip--toggle` (border `--border-bright`,
+   `--accent` focus ring), so no new focus tokens are introduced here. */
+.shot-interactive {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.5rem 2.2rem;
+  padding: 0;
+  border: 0;
+}
+
+/* Persistent caption naming the committed variant. Text on `--text` (≥4.5:1),
+   so the active variant is never conveyed by color alone — it pairs the checked
+   chip's accent border with this readable label. aria-hidden keeps it visual
+   only: the checked radio is the single accessible source of committed state. */
+.shot-caption {
+  margin: 0 0 0 0.25rem;
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.shot-caption-variant {
+  font-weight: 600;
+}
+
+/* The stage clips the screenshot to the viewport height. Its border uses
+   `--border-bright` (3:1 non-text contrast). overflow:hidden only ever clips
+   the image — the controls live in the sibling fieldset above. */
+.shot-stage {
+  margin-top: 0.5rem;
+  margin-left: 2.2rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border-bright);
+  background: var(--bg);
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Scale the screenshot to fit within the viewport height (and the panel width)
+   so a tall capture never forces the page to scroll. width/height:auto preserve
+   the aspect ratio while `max-height` caps it to the viewport. */
+.shot-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 85vh;
+  outline: 1px solid var(--img-outline);
+  outline-offset: -1px;
 }
 
 @media (prefers-reduced-motion: reduce) {

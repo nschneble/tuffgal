@@ -6,28 +6,38 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing right now_
+_Nothing just yet_
+
+## [0.1.0-alpha.11] — 2026-06-26
+
+### Added
+
+- Approve by breakpoint (e.g. `approve --desktop`, `approve --breakpoint <name>`)
+- Approve by story (e.g. `approve user-logs-in`)
+- `captureMode` config to limit screenshots to viewport-only or full page
+- Documentation for CLI and reports
+- `interactiveMode` config to view baseline/actual/diffs in a single-image view
+- New baselines can now be filtered in the HTML report
+- New baselines are now listed in the terminal summary report
+
+### Changed
+
+- Screenshots default to viewport-only (were previously full page)
+
+### Fixed
+
+- Multiple breakpoint runs no longer leak database state
+- Report filters now only show matching actions inside each story
 
 ## [0.1.0-alpha.10] — 2026-06-22
 
 ### Added
 
-**`${breakpoint}` interpolation token.** The current mode name is exposed
-to action interpolation as `${breakpoint}`, so a story can key data it
-creates through the app per mode. For example,
-`fresh+${breakpoint}@example.test` registers a distinct user at each
-viewport instead of colliding on a shared value. A story parameter
-literally named `breakpoint` overrides the injected value.
+- `${breakpoint}` interpolation token
 
 ### Fixed
 
-**Per-breakpoint database isolation.** alpha.9 ran each breakpoint in its
-own browser context but applied a story's fixtures only once, before the
-breakpoint loop. Any story that mutated server state passed at the first
-mode and then ran the next mode against the mutated rows. Fixtures are now
-re-applied before **every** breakpoint, resetting that state to a known
-baseline per mode. Fixtures are idempotent, so non-mutating stories are
-unaffected.
+- Per-breakpoint database isolation
 
 ## [0.1.0-alpha.9] — 2026-06-21
 
@@ -160,7 +170,9 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.9...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.11...HEAD
+[0.1.0-alpha.11]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.11
+[0.1.0-alpha.10]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.10
 [0.1.0-alpha.9]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.7

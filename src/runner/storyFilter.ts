@@ -14,3 +14,15 @@ export function storyMatchesFilter(
     candidate.storyName === filter
   );
 }
+
+/**
+ * Normalises a positional story argument (`tuffgal approve user-logs-in`) into
+ * the form `storyMatchesFilter` expects. A path-shaped argument
+ * (`tuffgal/stories/user-logs-in.json`) reduces to its basename so it matches
+ * `story.file`; a bare name passes through untouched (the `.json` suffix stays
+ * optional, since `storyMatchesFilter` accepts the name with or without it).
+ */
+export function normaliseStoryArg(arg: string): string {
+  const slash = Math.max(arg.lastIndexOf('/'), arg.lastIndexOf('\\'));
+  return slash === -1 ? arg : arg.slice(slash + 1);
+}

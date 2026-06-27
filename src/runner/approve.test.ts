@@ -45,7 +45,13 @@ async function writeResults(stories: RunResult['stories']): Promise<void> {
     startedAt: '2026-06-11T12:00:00.000Z',
     finishedAt: '2026-06-11T12:00:01.000Z',
     durationMs: 1000,
-    totals: { stories: stories.length, passed: 0, changed: 0, failed: 0 },
+    totals: {
+      stories: stories.length,
+      passed: 0,
+      changed: 0,
+      failed: 0,
+      new: 0,
+    },
     customCoverage: {
       screens: { total: 0, covered: 0, ratio: 1, missing: [] },
       flows: { total: 0, covered: 0, ratio: 1, missing: [] },
@@ -200,6 +206,117 @@ describe('approveAll — promotion', () => {
     );
     assert.equal(await readFile(desktopA11yBaseline, 'utf8'), 'tree-desktop');
     assert.equal(await readFile(mobileA11yBaseline, 'utf8'), 'tree-mobile');
+  });
+
+  it('breakpoints filter promotes only the named modes', async () => {
+    const desktopActual = await actual('submit.desktop');
+    const mobileActual = await actual('submit.mobile');
+    const desktopBaseline = join(report, 'baselines', 'submit', 'desktop.png');
+    const mobileBaseline = join(report, 'baselines', 'submit', 'mobile.png');
+    await writeResults([
+      story('s.json', [
+        action({
+          action: 'submit',
+          status: 'changed',
+          breakpoint: 'desktop',
+          actualPath: desktopActual,
+          baselinePath: desktopBaseline,
+        }),
+        action({
+          action: 'submit',
+          status: 'changed',
+          breakpoint: 'mobile',
+          actualPath: mobileActual,
+          baselinePath: mobileBaseline,
+        }),
+      ]),
+    ]);
+
+    const summary = await approveAll(config(), { breakpoints: ['desktop'] });
+    assert.equal(summary.approved, 1);
+    assert.equal(summary.skipped, 1);
+    assert.equal(await pathExists(desktopBaseline), true);
+    assert.equal(await pathExists(mobileBaseline), false);
+  });
+
+  it('breakpoints filter composes with newOnly as an AND', async () => {
+    const desktopNew = await actual('d.new');
+    const mobileNew = await actual('m.new');
+    const desktopChanged = await actual('d.changed');
+    const desktopNewBaseline = join(report, 'baselines', 'dn', 'desktop.png');
+    const mobileNewBaseline = join(report, 'baselines', 'mn', 'mobile.png');
+    const desktopChangedBaseline = join(
+      report,
+      'baselines',
+      'dc',
+      'desktop.png',
+    );
+    await writeResults([
+      story('s.json', [
+        // desktop + new: clears both filters → approved
+        action({
+          action: 'dn',
+          status: 'new',
+          breakpoint: 'desktop',
+          actualPath: desktopNew,
+          baselinePath: desktopNewBaseline,
+        }),
+        // mobile + new: wrong breakpoint → skipped
+        action({
+          action: 'mn',
+          status: 'new',
+          breakpoint: 'mobile',
+          actualPath: mobileNew,
+          baselinePath: mobileNewBaseline,
+        }),
+        // desktop + changed: newOnly drops it → skipped
+        action({
+          action: 'dc',
+          status: 'changed',
+          breakpoint: 'desktop',
+          actualPath: desktopChanged,
+          baselinePath: desktopChangedBaseline,
+        }),
+      ]),
+    ]);
+
+    const summary = await approveAll(config(), {
+      breakpoints: ['desktop'],
+      newOnly: true,
+    });
+    assert.equal(summary.approved, 1);
+    assert.equal(summary.skipped, 2);
+    assert.equal(await pathExists(desktopNewBaseline), true);
+    assert.equal(await pathExists(mobileNewBaseline), false);
+    assert.equal(await pathExists(desktopChangedBaseline), false);
+  });
+
+  it('an empty breakpoints list approves every mode', async () => {
+    const desktopActual = await actual('e.desktop');
+    const mobileActual = await actual('e.mobile');
+    const desktopBaseline = join(report, 'baselines', 'e', 'desktop.png');
+    const mobileBaseline = join(report, 'baselines', 'e', 'mobile.png');
+    await writeResults([
+      story('s.json', [
+        action({
+          action: 'e',
+          status: 'changed',
+          breakpoint: 'desktop',
+          actualPath: desktopActual,
+          baselinePath: desktopBaseline,
+        }),
+        action({
+          action: 'e',
+          status: 'changed',
+          breakpoint: 'mobile',
+          actualPath: mobileActual,
+          baselinePath: mobileBaseline,
+        }),
+      ]),
+    ]);
+
+    const summary = await approveAll(config(), { breakpoints: [] });
+    assert.equal(summary.approved, 2);
   });
 
   it('storyFilter limits promotion to the matched story', async () => {

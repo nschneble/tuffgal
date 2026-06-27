@@ -2,7 +2,7 @@
  * Renders a sample report so you can eyeball the HTML report without
  * running a real suite, which needs Playwright + a dev server.
  *
- * Builds a fixture `RunResult` covering passed, changed, and failed
+ * Builds a fixture `RunResult` covering passed, new, changed, and failed
  * stories, each run at both the `mobile` and `desktop` breakpoints, and
  * opens the report in your web browser.
  *
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
     startedAt: '2026-06-19T13:58:17.000Z',
     finishedAt: '2026-06-19T13:58:52.490Z',
     durationMs: 35490,
-    totals: { stories: 3, passed: 1, changed: 1, failed: 1 },
+    totals: { stories: 4, passed: 1, changed: 1, failed: 1, new: 1 },
     customCoverage: {
       screens: { total: 12, covered: 9, ratio: 0.75, missing: [] },
       flows: { total: 5, covered: 3, ratio: 0.6, missing: [] },
@@ -186,6 +186,45 @@ async function main(): Promise<void> {
             durationMs: 700,
             baselinePath: shot('home-desktop-base', BP.desktop),
             actualPath: shot('home-desktop-actual', BP.desktop),
+          },
+        ],
+      },
+      {
+        story: 'A new pricing page is captured for the first time.',
+        file: 'user-views-pricing.json',
+        status: 'new',
+        startedAt: '2026-06-19T13:58:25.200Z',
+        finishedAt: '2026-06-19T13:58:29.000Z',
+        durationMs: 3800,
+        actions: [
+          {
+            ...BP.mobile,
+            action: 'navigate',
+            parameters: { url: '/pricing' },
+            status: 'pass',
+            startedAt: '2026-06-19T13:58:25.200Z',
+            finishedAt: '2026-06-19T13:58:26.200Z',
+            durationMs: 1000,
+          },
+          {
+            ...BP.mobile,
+            action: 'screenshot',
+            status: 'new',
+            startedAt: '2026-06-19T13:58:26.200Z',
+            finishedAt: '2026-06-19T13:58:27.000Z',
+            durationMs: 800,
+            baselinePath: shot('pricing-mobile-base', BP.mobile),
+            actualPath: shot('pricing-mobile-actual', BP.mobile),
+          },
+          {
+            ...BP.desktop,
+            action: 'screenshot',
+            status: 'new',
+            startedAt: '2026-06-19T13:58:27.000Z',
+            finishedAt: '2026-06-19T13:58:29.000Z',
+            durationMs: 2000,
+            baselinePath: shot('pricing-desktop-base', BP.desktop),
+            actualPath: shot('pricing-desktop-actual', BP.desktop),
           },
         ],
       },

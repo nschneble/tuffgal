@@ -72,7 +72,7 @@ export default defineConfig({
   workers: 4,
 
   // consumer DB bridge
-  // `reset` runs once before the first story
+  // `reset` runs once per breakpoint pass, before that pass's first story
   // each `fixtures[name]` runs before any story declaring it
   // fixtures must be idempotent
   database: {
@@ -105,6 +105,10 @@ export default defineConfig({
   // Markdown file listing user journeys
   // Tuffgal reports the ratio of stories w/ matching flows
   flowInventory: 'docs/flows.md',
+
+  // render captured actions as a single image with a hover/press mouse preview
+  // layered over a Baseline/Actual/Diff radio group, instead of radio tabs
+  interactiveMode: false,
 });
 ```
 
@@ -204,6 +208,44 @@ Individual stories can run their own modes via the story-level `breakpoints`
 field, which **replaces** this set for that story. See
 [authoring.md](authoring.md#per-story-breakpoint-selection).
 
+### `captureMode?: 'viewport' | 'fullPage'`
+
+How much of the page each screenshot captures. Default: `viewport`.
+
+- `viewport` — crops to the breakpoint's `width x height` box, so a snapshot
+  shows exactly what a user sees above the fold (e.g. `1280x800` for
+  `desktop`). A long page is _not_ stretched to its full scroll height.
+- `fullPage` — composites the entire scrollable document, however tall (a long
+  settings page might render at `1280x2500`). Catches below-the-fold
+  regressions at the cost of viewport fidelity.
+
+```ts
+captureMode: 'viewport',
+```
+
+This applies to every captured action across every breakpoint. Switching modes
+changes the image dimensions, so existing baselines stop matching and report
+`new` until you `approve` fresh ones.
+
+### `interactiveMode?: boolean`
+
+How each captured action's screenshots are presented in the report. Default:
+`false`.
+
+- `false` — the report renders the radio-tab viewer: Baseline, Actual, and Diff
+  each sit in their own panel and you switch between them with the tabs.
+- `true` — the report renders a single screenshot per action with a mouse
+  preview layered over it. By default it shows the `actual` capture; hovering
+  the image previews the `baseline` and pressing (mouse down) previews the
+  `diff`, so you can scrub between the three without leaving the image. The
+  visual preview sits on top of an accessible Baseline/Actual/Diff radio group,
+  so keyboard and touch users switch variants through the radios rather than the
+  mouse gesture. The image is scaled to fit the viewport height.
+
+```ts
+interactiveMode: false,
+```
+
 ### `defaultTimeoutMs?: number`
 
 Default Playwright locator and action timeout. Defaults to `10_000`.
@@ -245,7 +287,9 @@ database: {
 }
 ```
 
-- `reset` runs once before the scheduler dispatches the first story
+- `reset` runs once per breakpoint pass, before that pass dispatches its first
+  story (a single-breakpoint run is one pass, so `reset` runs once). See
+  [authoring.md](authoring.md#multiple-breakpoints-run-as-separate-passes).
 - `fixtures[name]` runs before any story that declares `fixtures: ["name"]`
 
 Fixtures must be idempotent. Tuffgal applies them per story without a

@@ -35,14 +35,11 @@ const validAction = JSON.stringify({
 describe('loadStories', () => {
   it('throws LoadError with the file path on malformed JSON', async () => {
     await write('broken.json', '{ not valid json');
-    await assert.rejects(
-      loadStories(dir),
-      (error: unknown) => {
-        assert.ok(error instanceof LoadError);
-        assert.match(error.path, /broken\.json$/);
-        return true;
-      },
-    );
+    await assert.rejects(loadStories(dir), (error: unknown) => {
+      assert.ok(error instanceof LoadError);
+      assert.match(error.path, /broken\.json$/);
+      return true;
+    });
   });
 
   it('throws LoadError when a story fails schema validation', async () => {
@@ -53,14 +50,11 @@ describe('loadStories', () => {
   it('throws LoadError on a duplicate story basename across subdirectories', async () => {
     await write('home.json', validStory);
     await write('nested/home.json', validStory);
-    await assert.rejects(
-      loadStories(dir),
-      (error: unknown) => {
-        assert.ok(error instanceof LoadError);
-        assert.match(error.reason, /duplicate story filename/);
-        return true;
-      },
-    );
+    await assert.rejects(loadStories(dir), (error: unknown) => {
+      assert.ok(error instanceof LoadError);
+      assert.match(error.reason, /duplicate story filename/);
+      return true;
+    });
   });
 
   it('loads stories from nested subdirectories', async () => {
@@ -104,14 +98,11 @@ describe('loadActions', () => {
   it('throws LoadError on a duplicate action name', async () => {
     await write('one.json', validAction);
     await write('two.json', validAction);
-    await assert.rejects(
-      loadActions(dir),
-      (error: unknown) => {
-        assert.ok(error instanceof LoadError);
-        assert.match(error.reason, /duplicate action name/);
-        return true;
-      },
-    );
+    await assert.rejects(loadActions(dir), (error: unknown) => {
+      assert.ok(error instanceof LoadError);
+      assert.match(error.reason, /duplicate action name/);
+      return true;
+    });
   });
 
   it('returns a name-keyed map for valid actions', async () => {

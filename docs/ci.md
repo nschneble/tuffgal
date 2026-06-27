@@ -3,7 +3,7 @@
 Tuffgal runs cleanly in CI without anything Tuffgal-specific: install Node,
 install dependencies, install Chromium, and then invoke
 `tuffgal run --manage-servers`. The harness produces a `results.json` you
-can parse for the actual pass/changed/failed counts and a static HTML
+can parse for the actual pass/new/changed/failed counts and a static HTML
 report you can upload as a build artifact for reviewers.
 
 This page documents the recipe for GitHub Actions. The same shape works for
@@ -85,9 +85,10 @@ jobs:
         run: npm run test:ui -- --manage-servers
 
       # Read results.json so the upload steps below can fork on the actual
-      # outcome rather than just the harness exit code. `changed` includes
-      # new baselines a reviewer probably wants to inspect, whereas
-      # `failed` is the debugging case
+      # outcome rather than just the harness exit code. `changed` is drifted
+      # baselines, `new` is first-run baselines that have nothing to diff
+      # against yet — both are PNGs a reviewer wants to inspect and commit,
+      # whereas `failed` is the debugging case.
       - name: Parse harness outcome
         id: outcome
         if: always()
@@ -96,16 +97,19 @@ jobs:
           if [ ! -f "$results" ]; then
             echo "failed=true" >> "$GITHUB_OUTPUT"
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "new=false" >> "$GITHUB_OUTPUT"
             echo "Harness produced no results.json. Treating as failed." >&2
             exit 0
           fi
           failed=$(jq -r '.totals.failed' "$results")
           changed=$(jq -r '.totals.changed' "$results")
+          new=$(jq -r '.totals.new' "$results")
           echo "failed=$([ "$failed" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "changed=$([ "$changed" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "new=$([ "$new" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
       - name: Upload report (on failure or visual change)
-        if: always() && (steps.outcome.outputs.failed == 'true' || steps.outcome.outputs.changed == 'true')
+        if: always() && (steps.outcome.outputs.failed == 'true' || steps.outcome.outputs.changed == 'true' || steps.outcome.outputs.new == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: tuffgal-report
@@ -113,9 +117,10 @@ jobs:
           retention-days: 14
 
       # Baselines upload separately so reviewers approving an intentional
-      # visual change can download just the new PNGs and commit them
+      # visual change — or accepting a brand-new baseline — can download just
+      # the new PNGs and commit them
       - name: Upload updated baselines (on visual change)
-        if: always() && steps.outcome.outputs.changed == 'true'
+        if: always() && (steps.outcome.outputs.changed == 'true' || steps.outcome.outputs.new == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: tuffgal-baselines

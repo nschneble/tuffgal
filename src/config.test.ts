@@ -116,6 +116,30 @@ describe('assertValidConfig', () => {
     };
     assert.throws(() => assertValidConfig(config, SOURCE), /width/);
   });
+
+  it('accepts a valid captureMode', () => {
+    for (const mode of ['viewport', 'fullPage']) {
+      const config = { ...validConfig(), captureMode: mode };
+      assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+    }
+  });
+
+  it('rejects an unknown captureMode', () => {
+    const config = { ...validConfig(), captureMode: 'full' };
+    assert.throws(() => assertValidConfig(config, SOURCE), /captureMode/);
+  });
+
+  it('accepts a boolean interactiveMode', () => {
+    for (const value of [true, false]) {
+      const config = { ...validConfig(), interactiveMode: value };
+      assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+    }
+  });
+
+  it('rejects a non-boolean interactiveMode', () => {
+    const config = { ...validConfig(), interactiveMode: 'yes' };
+    assert.throws(() => assertValidConfig(config, SOURCE), /interactiveMode/);
+  });
 });
 
 describe('loadConfig breakpoint resolution', () => {
@@ -147,6 +171,26 @@ describe('loadConfig breakpoint resolution', () => {
     await writeFile(join(dir, 'tuffgal.config.js'), body, 'utf8');
     return loadConfig(dir);
   }
+
+  it('defaults captureMode to viewport when nothing is set', async () => {
+    const resolved = await load('');
+    assert.equal(resolved.captureMode, 'viewport');
+  });
+
+  it('resolves an explicit captureMode', async () => {
+    const resolved = await load("captureMode: 'fullPage',");
+    assert.equal(resolved.captureMode, 'fullPage');
+  });
+
+  it('defaults interactiveMode to false when nothing is set', async () => {
+    const resolved = await load('');
+    assert.equal(resolved.interactiveMode, false);
+  });
+
+  it('resolves an explicit interactiveMode', async () => {
+    const resolved = await load('interactiveMode: true,');
+    assert.equal(resolved.interactiveMode, true);
+  });
 
   it('defaults to a single desktop breakpoint when nothing is set', async () => {
     const resolved = await load('');
@@ -196,7 +240,9 @@ describe('loadConfig breakpoint resolution', () => {
   });
 
   it('inherits the registry dimension for an axis an override omits', async () => {
-    const resolved = await load("breakpoints: [{ name: 'desktop', width: 1440 }],");
+    const resolved = await load(
+      "breakpoints: [{ name: 'desktop', width: 1440 }],",
+    );
     assert.deepEqual(resolved.breakpoints, [
       { name: 'desktop', width: 1440, height: 800 },
     ]);

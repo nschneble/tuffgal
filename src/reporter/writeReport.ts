@@ -15,9 +15,10 @@ const ASSETS_SOURCE_DIR = join(moduleDir, 'assets');
 export async function writeReport(
   reportDir: string,
   result: RunResult,
+  interactiveMode: boolean,
 ): Promise<string> {
   await mkdir(join(reportDir, 'assets'), { recursive: true });
-  const html = renderReport(result, reportDir);
+  const html = renderReport(result, reportDir, interactiveMode);
   const htmlPath = join(reportDir, 'index.html');
   await writeFile(htmlPath, html, 'utf8');
   await writeFile(

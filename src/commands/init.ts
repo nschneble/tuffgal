@@ -40,6 +40,11 @@ export default defineConfig({
   // modes via its own \`breakpoints\` field, which replace these for that story.
   // breakpoints: ['mobile', 'tablet', 'laptop', 'desktop'],
 
+  // Screenshot scope. 'viewport' (default) crops to each breakpoint's
+  // width x height — what the user sees above the fold. 'fullPage' composites
+  // the whole scrollable document, however tall.
+  // captureMode: 'viewport',
+
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',

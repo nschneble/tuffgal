@@ -2,9 +2,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { ResolvedConfig } from '../config.ts';
+import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
 import type { Action } from '../schema/action.ts';
-import type { RunResult, StoryResult } from '../schema/result.ts';
+import type { RunResult, StoryResult, StoryStatus } from '../schema/result.ts';
 import { loadActions, loadStories } from '../schema/load.ts';
 import { writeReport } from '../reporter/writeReport.ts';
 import { computeFlowCoverage } from '../coverage/flows.ts';
@@ -15,12 +15,18 @@ import {
   type ManagedDevServers,
 } from './bridges/devServers.ts';
 import { CoverageCollector } from './coverage.ts';
-import { runStory } from './runStory.ts';
+import { mergeStoryStatus, runStory } from './runStory.ts';
 import {
   buildSchedule,
   drainSchedule,
   type ScheduledStory,
 } from './scheduler.ts';
+import {
+  adaptNeedsForPass,
+  mergeStoryResults,
+  resolveBreakpointPasses,
+  storyRendersAt,
+} from './breakpointPasses.ts';
 import { storyMatchesFilter } from './storyFilter.ts';
 
 export interface RunCliOptions {
@@ -56,10 +62,6 @@ export async function runAll(
     ? new CoverageCollector(config.paths.report)
     : undefined;
   try {
-    if (config.database?.reset) {
-      process.stdout.write('Resetting test database…\n');
-      await resetDatabase(config);
-    }
     const actions = await loadActions(config.paths.actions);
     const allStories = await loadStories(config.paths.stories);
     const scheduled = buildSchedule(allStories);
@@ -72,20 +74,65 @@ export async function runAll(
     }
 
     const workerCount = resolveWorkerCount(config, options.workers);
+    const passes = resolveBreakpointPasses(subset, config);
+    const multiPass = passes.length > 1;
     process.stdout.write(
-      `Scheduling ${subset.length} stories on ${workerCount} worker${workerCount === 1 ? '' : 's'}.\n`,
+      `Scheduling ${subset.length} stories on ${workerCount} worker${workerCount === 1 ? '' : 's'}` +
+        (multiPass ? ` across ${passes.length} breakpoint passes` : '') +
+        '.\n',
     );
 
-    const results = await drainSchedule(
-      subset,
-      workerCount,
-      (item) =>
-        runScheduledStory(item, actions, config, options.headed, coverage),
-      (item) => process.stdout.write(`▶ ${item.file}\n`),
-      (item, result) =>
+    // Run each breakpoint as its own pass: a full reset/seed, then the whole
+    // schedule rendered at that one breakpoint. This is what keeps breakpoints
+    // isolated — a destructive story can mutate the seeded database in the
+    // `mobile` pass without the `desktop` pass ever seeing it, because the next
+    // pass starts from a fresh reset. Results are merged back per story below.
+    const partsByFile = new Map<string, StoryResult[]>();
+    const order: string[] = [];
+    for (const breakpoint of passes) {
+      const participating = subset.filter((item) =>
+        storyRendersAt(item, config, breakpoint),
+      );
+      if (participating.length === 0) continue;
+      if (config.database?.reset) {
+        process.stdout.write('Resetting test database…\n');
+        await resetDatabase(config);
+      }
+      if (multiPass) {
         process.stdout.write(
-          `  ${result.status.toUpperCase()} ${item.file} (${result.actions.length} actions, ${result.durationMs} ms)\n`,
-        ),
+          `▷ ${breakpoint.name} ${breakpoint.width}×${breakpoint.height}\n`,
+        );
+      }
+      const passResults = await drainSchedule(
+        adaptNeedsForPass(participating),
+        workerCount,
+        (item) =>
+          runScheduledStory(
+            item,
+            actions,
+            config,
+            options.headed,
+            coverage,
+            breakpoint,
+          ),
+        (item) => process.stdout.write(`▶ ${item.file}\n`),
+        (item, result) =>
+          process.stdout.write(
+            `  ${result.status.toUpperCase()} ${item.file} (${result.actions.length} actions, ${result.durationMs} ms)\n`,
+          ),
+      );
+      for (const result of passResults) {
+        let parts = partsByFile.get(result.file);
+        if (!parts) {
+          parts = [];
+          partsByFile.set(result.file, parts);
+          order.push(result.file);
+        }
+        parts.push(result);
+      }
+    }
+    const results = order.map((file) =>
+      mergeStoryResults(partsByFile.get(file)!),
     );
 
     const finishedAt = new Date();
@@ -101,7 +148,11 @@ export async function runAll(
       customCoverage: { screens, flows },
       stories: results,
     };
-    const reportPath = await writeReport(config.paths.report, runResult);
+    const reportPath = await writeReport(
+      config.paths.report,
+      runResult,
+      config.interactiveMode,
+    );
     writeRunSummary(results, runResult.totals, reportPath);
     if (coverage) {
       const coveragePath = await coverage.generate();
@@ -121,6 +172,7 @@ function runScheduledStory(
   config: ResolvedConfig,
   headed: boolean,
   coverage: CoverageCollector | undefined,
+  breakpoint: ResolvedBreakpoint,
 ): Promise<StoryResult> {
   return runStory({
     story: item.story,
@@ -131,6 +183,7 @@ function runScheduledStory(
     config,
     headed,
     coverage,
+    breakpoint,
   });
 }
 
@@ -175,6 +228,7 @@ function summarise(results: StoryResult[]): RunResult['totals'] {
     passed: results.filter((result) => result.status === 'pass').length,
     changed: results.filter((result) => result.status === 'changed').length,
     failed: results.filter((result) => result.status === 'failed').length,
+    new: results.filter((result) => result.status === 'new').length,
   };
 }
 
@@ -191,11 +245,18 @@ function writeRunSummary(
   totals: RunResult['totals'],
   reportPath: string,
 ): void {
+  const newStories = results.filter((result) => result.status === 'new');
   const changed = results.filter((result) => result.status === 'changed');
   const failed = results.filter((result) => result.status === 'failed');
 
-  if (changed.length > 0 || failed.length > 0) {
+  if (newStories.length > 0 || changed.length > 0 || failed.length > 0) {
     process.stdout.write('\n');
+    if (newStories.length > 0) {
+      process.stdout.write('New:\n');
+      for (const result of newStories) {
+        process.stdout.write(`  ${formatSummaryLine(result)}\n`);
+      }
+    }
     if (changed.length > 0) {
       process.stdout.write('Changed:\n');
       for (const result of changed) {
@@ -211,11 +272,46 @@ function writeRunSummary(
   }
 
   process.stdout.write(
-    `\nTotals: ${totals.passed} pass · ${totals.changed} changed · ${totals.failed} failed\n`,
+    `\nTotals: ${totals.passed} pass · ${totals.new} new · ${totals.changed} changed · ${totals.failed} failed\n`,
   );
   process.stdout.write(`Report: ${pathToFileURL(reportPath).href}\n`);
 }
 
 function formatSummaryLine(result: StoryResult): string {
-  return `${result.status.toUpperCase()} ${result.file} — ${result.story} (${result.actions.length} actions, ${result.durationMs} ms)`;
+  const base = `${result.status.toUpperCase()} ${result.file} — ${result.story} (${result.actions.length} actions, ${result.durationMs} ms)`;
+  const driving = drivingBreakpoints(result);
+  return driving.length > 0 ? `${base} [${driving.join(' · ')}]` : base;
+}
+
+/**
+ * The breakpoint names that drove a merged story to its status — the modes the
+ * reader actually needs to inspect. A `changed` story that drifted only at
+ * `desktop` tags `[desktop]`, not the `mobile` pass that stayed clean. Returns
+ * empty (no tag) when the story spans a single breakpoint, since there is
+ * nothing to disambiguate. The merged actions still carry their `breakpoint`
+ * tag, so this is derived, not separately tracked.
+ */
+export function drivingBreakpoints(result: StoryResult): string[] {
+  const order: string[] = [];
+  const perBreakpoint = new Map<string, StoryStatus>();
+  for (const action of result.actions) {
+    const breakpoint = action.breakpoint;
+    if (!breakpoint) continue;
+    if (!perBreakpoint.has(breakpoint)) {
+      perBreakpoint.set(breakpoint, 'pass');
+      order.push(breakpoint);
+    }
+    perBreakpoint.set(
+      breakpoint,
+      mergeStoryStatus(
+        perBreakpoint.get(breakpoint)!,
+        // A skipped action means an earlier action in that breakpoint failed.
+        action.status === 'skipped' ? 'failed' : action.status,
+      ),
+    );
+  }
+  if (order.length <= 1) return [];
+  return order.filter(
+    (breakpoint) => perBreakpoint.get(breakpoint) === result.status,
+  );
 }

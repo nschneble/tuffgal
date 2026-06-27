@@ -40,7 +40,7 @@ function makeRunResult(overrides: Partial<RunResult> = {}): RunResult {
     startedAt: '2026-06-11T12:00:00.000Z',
     finishedAt: '2026-06-11T12:00:01.000Z',
     durationMs: 1000,
-    totals: { stories: 0, passed: 0, changed: 0, failed: 0 },
+    totals: { stories: 0, passed: 0, changed: 0, failed: 0, new: 0 },
     customCoverage: {
       screens: { total: 10, covered: 5, ratio: 0.5, missing: [] },
       flows: { total: 4, covered: 2, ratio: 0.5, missing: [] },
@@ -63,7 +63,7 @@ function countOccurrences(haystack: string, needle: string): number {
 
 describe('renderReport — mixed pass/changed/failed fixture', () => {
   const result = makeRunResult({
-    totals: { stories: 3, passed: 1, changed: 1, failed: 1 },
+    totals: { stories: 3, passed: 1, changed: 1, failed: 1, new: 0 },
     stories: [
       makeStory({
         story: 'home page renders',
@@ -100,6 +100,7 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     );
     assert.ok(html.includes('value="all"'), 'all radio present');
     assert.ok(html.includes('value="pass"'), 'pass radio present');
+    assert.ok(html.includes('value="new"'), 'new radio present');
     assert.ok(html.includes('value="changed"'), 'changed radio present');
     assert.ok(html.includes('value="failed"'), 'failed radio present');
     assert.match(
@@ -234,7 +235,7 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
 describe('renderAction — whole row as screenshot disclosure', () => {
   it('wraps a shot-bearing action in <details class="shots"> with the full row as <summary class="action-row">', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 1, failed: 0 },
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'changed',
@@ -299,7 +300,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     // error must be a sibling after </details>, never nested inside it (a
     // nested error would hide behind the collapsed disclosure).
     const result = makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 0, failed: 1 },
+      totals: { stories: 1, passed: 0, changed: 0, failed: 1, new: 0 },
       stories: [
         makeStory({
           status: 'failed',
@@ -330,9 +331,79 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
   });
 
+  it('renders new as a first-class tier: summary total, filter radio, story row', () => {
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 0, failed: 0, new: 1 },
+      stories: [
+        makeStory({
+          status: 'new',
+          actions: [makeAction({ action: 'visit-home', status: 'new' })],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes(
+        '<li class="summary-item" data-status="new">\n  <span class="count">1</span>',
+      ),
+      'new tier total renders in the summary',
+    );
+    assert.match(
+      html,
+      /<input[^>]*value="new"[^>]*data-filter-name="new"/s,
+      'a new filter radio renders',
+    );
+    assert.ok(
+      html.includes('<li class="story" data-status="new">'),
+      'the new story carries data-status="new" so the filter matches it',
+    );
+  });
+
+  it('shows the mismatch reason in the diff-stats slot when a changed action has no diff', () => {
+    // A dimension mismatch yields status:changed with a failureMessage but no
+    // diffRatio/diffPath. Without a note the row reads as a "changed" with an
+    // empty stats slot and no diff tab — an unexplained no-op. The recorded
+    // reason must fill the slot the "% differs" stat normally occupies.
+    const result = makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              failureMessage:
+                'Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+              actualPath: '/fake/report/dir/shots/settings.actual.png',
+              baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes('diff-stats--unavailable'),
+      'the unavailable note variant renders',
+    );
+    assert.ok(
+      html.includes(
+        'No pixel diff. Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+      ),
+      'the recorded mismatch reason fills the diff-stats slot',
+    );
+    assert.ok(
+      !html.includes('differs</span>'),
+      'no "% differs" stat renders when there is no diffRatio',
+    );
+  });
+
   it('emits no box-drawing branch glyphs (the CSS trunk line replaces them)', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'pass',
@@ -350,7 +421,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
   it('renders a screenshot-less action as a plain <div class="action-row"> with no <details>', () => {
     // The default makeAction fixture has no actualPath/baselinePath.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [makeStory({ status: 'pass', actions: [makeAction()] })],
     });
     const html = renderReport(result, REPORT_DIR);
@@ -373,7 +444,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 describe('renderStoryActions — per-breakpoint grouping', () => {
   it('groups tagged actions under labelled regions with mode name + dimensions', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'pass',
@@ -474,7 +545,7 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     // The common default `desktop` project ran at one mode: no caption, no
     // group wrapper — just the historical flat list.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'pass',
@@ -509,7 +580,7 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     // Two modes force grouping; the desktop group shows the recorded override
     // (1440×900), never a registry default for the name.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0 },
+      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
       stories: [
         makeStory({
           status: 'pass',
@@ -541,6 +612,233 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     assert.ok(
       !html.includes('1280×800'),
       'the registry default for the overridden mode does not leak into the label',
+    );
+  });
+});
+
+describe('renderScreenshots — interactive viewer (interactiveMode:true)', () => {
+  function interactiveResult(actionOverrides: Partial<ActionResult> = {}) {
+    return makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              actualPath: '/fake/report/dir/shots/settings.actual.png',
+              baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+              diffPath: '/fake/report/dir/shots/settings.diff.png',
+              diffPixels: 1234,
+              diffRatio: 0.012,
+              ...actionOverrides,
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it('renders a single shared <img>, not the per-variant shot-panels', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.equal(
+      countOccurrences(html, 'class="shot-image"'),
+      1,
+      'exactly one shared interactive image renders',
+    );
+    assert.ok(
+      !html.includes('class="shot-panel"'),
+      'no per-variant shot-panel divs in interactive mode',
+    );
+    assert.ok(
+      html.includes('<div class="shot-stage">'),
+      'the shared image sits in a .shot-stage wrapper',
+    );
+  });
+
+  it('renders one native radio group per action with available variants', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes('<fieldset class="shot-interactive"'),
+      'interactive fieldset renders',
+    );
+    assert.ok(
+      html.includes('name="s0-a0-shot"'),
+      'radio group reuses the actionId-shot name',
+    );
+    assert.ok(html.includes('value="baseline"'), 'baseline radio present');
+    assert.ok(html.includes('value="actual"'), 'actual radio present');
+    assert.ok(
+      html.includes('value="diff"'),
+      'diff radio present when a diff image exists',
+    );
+    assert.match(
+      html,
+      /<input[^>]*value="actual"[^>]*checked/s,
+      'actual is the default committed (checked) variant',
+    );
+  });
+
+  it('omits the diff radio entirely when there is no diff image', () => {
+    const html = renderReport(
+      interactiveResult({
+        diffPath: undefined,
+        diffRatio: undefined,
+        diffPixels: undefined,
+      }),
+      REPORT_DIR,
+      true,
+    );
+    assert.ok(
+      !html.includes('value="diff"'),
+      'no diff radio when diffPath is absent (omitted, not disabled)',
+    );
+    assert.ok(
+      !html.includes('data-src-diff'),
+      'no diff data-src on the shared image when diffPath is absent',
+    );
+    assert.ok(
+      !html.includes('aria-describedby="s0-a0-diff-stats"'),
+      'no dangling aria-describedby to an unrendered diff-stats id',
+    );
+  });
+
+  it('renders a stable, variant-neutral alt that never names a variant', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes('alt="Screenshot of visit-settings"'),
+      'alt is the neutral "Screenshot of <action>" string',
+    );
+    assert.ok(
+      !html.includes('actual screenshot from this run'),
+      'no per-variant alt text leaks into interactive mode',
+    );
+  });
+
+  it('renders the sr-only legend and the visible "Showing" caption', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes(
+        '<legend class="sr-only">visit-settings screenshot</legend>',
+      ),
+      'sr-only legend names the action',
+    );
+    assert.ok(
+      html.includes('class="shot-caption"'),
+      'a visible caption renders',
+    );
+    assert.ok(
+      html.includes(
+        'Showing: <span class="shot-caption-variant">Actual</span>',
+      ),
+      'caption shows the committed variant (Actual by default)',
+    );
+  });
+
+  it('moves the diff-stats association onto the diff radio control', () => {
+    const html = renderReport(interactiveResult(), REPORT_DIR, true);
+    assert.match(
+      html,
+      /value="diff"[^>]*aria-describedby="s0-a0-diff-stats"/s,
+      'the diff radio (not the img) is described by the diff-stats',
+    );
+    assert.ok(
+      html.includes('id="s0-a0-diff-stats"'),
+      'the diff-stats element carries the referenced id',
+    );
+  });
+
+  it('collapses to an image-only baseline when this run captured no actual', () => {
+    const html = renderReport(
+      interactiveResult({
+        actualPath: undefined,
+        diffPath: undefined,
+        diffRatio: undefined,
+        diffPixels: undefined,
+      }),
+      REPORT_DIR,
+      true,
+    );
+    // A single real variant offers no choice — the switcher fieldset and its lone
+    // radio collapse away, leaving just the committed image (the baseline here).
+    assert.ok(
+      !html.includes('class="shot-interactive"'),
+      'no radio switcher renders when only one variant is real',
+    );
+    assert.ok(
+      !html.includes('class="shot-caption"'),
+      'no "Showing" caption renders without a switcher',
+    );
+    const src = html.match(/class="shot-image"\s+src="([^"]+)"/s)?.[1];
+    assert.ok(src, 'the shared image carries a src');
+    assert.ok(
+      src.includes('settings.baseline.png'),
+      'the shared image src is the (non-empty) baseline path',
+    );
+  });
+
+  it('suppresses the redundant baseline for a new row, collapsing to actual-only', () => {
+    // A `new` baseline is written from this run's actual, so its baselinePath
+    // points at a byte-identical copy. Surfacing it as a switchable variant
+    // implies a comparison that does not exist — suppress it. With no diff
+    // either, only `actual` remains, so the switcher collapses to image-only.
+    const newRow = interactiveResult({
+      status: 'new',
+      diffPath: undefined,
+      diffRatio: undefined,
+      diffPixels: undefined,
+    });
+    const html = renderReport(newRow, REPORT_DIR, true);
+    assert.ok(
+      !html.includes('class="shot-interactive"'),
+      'no switcher renders once the redundant baseline is suppressed',
+    );
+    assert.ok(
+      !html.includes('data-src-baseline'),
+      'the suppressed baseline is not wired as a preview source',
+    );
+    const src = html.match(/class="shot-image"\s+src="([^"]+)"/s)?.[1];
+    assert.ok(src, 'the shared image carries a src');
+    assert.ok(
+      src.includes('settings.actual.png'),
+      'the committed image is the actual capture, not the redundant baseline',
+    );
+  });
+
+  it('drops the baseline radio + panel for a new row in the radio-tab render', () => {
+    const newRow = interactiveResult({
+      status: 'new',
+      diffPath: undefined,
+      diffRatio: undefined,
+      diffPixels: undefined,
+    });
+    const html = renderReport(newRow, REPORT_DIR, false);
+    assert.ok(
+      !/value="baseline"/.test(html),
+      'no baseline radio renders for a new row',
+    );
+    assert.ok(
+      !html.includes('baseline screenshot'),
+      'no baseline panel renders for a new row',
+    );
+    assert.ok(
+      html.includes('settings.actual.png'),
+      'the actual capture still renders',
+    );
+  });
+
+  it('keeps interactiveMode:false byte-identical to the default render', () => {
+    const result = interactiveResult();
+    assert.equal(
+      renderReport(result, REPORT_DIR, false),
+      renderReport(result, REPORT_DIR),
+      'explicit false equals the defaulted (absent) flag',
+    );
+    assert.notEqual(
+      renderReport(result, REPORT_DIR, true),
+      renderReport(result, REPORT_DIR, false),
+      'interactive output differs from the radio-tab output',
     );
   });
 });
@@ -588,7 +886,7 @@ describe('formatDate — friendly report-meta timestamp', () => {
 
 describe('renderStory — status marker + sr-only word per tier', () => {
   const result = makeRunResult({
-    totals: { stories: 3, passed: 1, changed: 1, failed: 1 },
+    totals: { stories: 3, passed: 1, changed: 1, failed: 1, new: 0 },
     stories: [
       makeStory({ status: 'pass' }),
       makeStory({ status: 'changed' }),

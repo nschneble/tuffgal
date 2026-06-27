@@ -284,7 +284,7 @@ async function captureAndCompare(
     breakpoint,
   });
   const masks = resolveMasks(page, action.mask, interpolationParameters);
-  const actualPng = await capturePage(page, masks);
+  const actualPng = await capturePage(page, masks, config.captureMode);
   await writePng(paths.actual, actualPng);
   const a11yJson = await captureA11yTree(page);
   await writeText(paths.a11yActual, a11yJson);
