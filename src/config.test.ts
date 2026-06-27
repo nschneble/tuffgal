@@ -218,7 +218,9 @@ describe('loadConfig breakpoint resolution', () => {
   });
 
   it('inherits the registry dimension for an axis an override omits', async () => {
-    const resolved = await load("breakpoints: [{ name: 'desktop', width: 1440 }],");
+    const resolved = await load(
+      "breakpoints: [{ name: 'desktop', width: 1440 }],",
+    );
     assert.deepEqual(resolved.breakpoints, [
       { name: 'desktop', width: 1440, height: 800 },
     ]);
@@ -246,5 +248,54 @@ describe('loadConfig breakpoint resolution', () => {
       width: 1024,
       height: 768,
     });
+  });
+});
+
+describe('interactiveMode config', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'tuffgal-config-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  async function load(extra: string): Promise<ResolvedConfig> {
+    const body = `export default {
+      paths: {
+        actions: 'tuffgal/actions',
+        stories: 'tuffgal/stories',
+        baselines: 'tuffgal/baselines',
+        report: 'tuffgal/report',
+      },
+      baseUrl: 'http://localhost:3000',
+      ${extra}
+    };`;
+    await writeFile(join(dir, 'tuffgal.config.js'), body, 'utf8');
+    return loadConfig(dir);
+  }
+
+  it('accepts a boolean interactiveMode', () => {
+    for (const value of [true, false]) {
+      const config = { ...validConfig(), interactiveMode: value };
+      assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+    }
+  });
+
+  it('rejects a non-boolean interactiveMode', () => {
+    const config = { ...validConfig(), interactiveMode: 'yes' };
+    assert.throws(() => assertValidConfig(config, SOURCE), /interactiveMode/);
+  });
+
+  it('defaults interactiveMode to false when nothing is set', async () => {
+    const resolved = await load('');
+    assert.equal(resolved.interactiveMode, false);
+  });
+
+  it('resolves an explicit interactiveMode', async () => {
+    const resolved = await load('interactiveMode: true,');
+    assert.equal(resolved.interactiveMode, true);
   });
 });

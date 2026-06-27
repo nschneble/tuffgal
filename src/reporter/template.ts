@@ -28,7 +28,11 @@ const STATUS_MARKERS: Record<ActionStatus, string> = {
  * default, monospace font for data, sharp borders, and minimal but
  * evocative icons + neon colors to indicate statuses.
  */
-export function renderReport(result: RunResult, reportDir: string): string {
+export function renderReport(
+  result: RunResult,
+  reportDir: string,
+  interactiveMode = false,
+): string {
   const dateLabel = formatDate(result.finishedAt);
   return `
 <!doctype html>
@@ -51,7 +55,7 @@ export function renderReport(result: RunResult, reportDir: string): string {
     </header>
     <main id="main" tabindex="-1">
       ${renderSummary(result)}
-      ${renderStories(result, reportDir)}
+      ${renderStories(result, reportDir, interactiveMode)}
     </main>
     <script src="assets/report.js"></script>
   </body>
@@ -103,9 +107,15 @@ function summaryItem(
 `;
 }
 
-function renderStories(result: RunResult, reportDir: string): string {
+function renderStories(
+  result: RunResult,
+  reportDir: string,
+  interactiveMode: boolean,
+): string {
   const items = result.stories
-    .map((story, index) => renderStory(story, index, reportDir))
+    .map((story, index) =>
+      renderStory(story, index, reportDir, interactiveMode),
+    )
     .join('\n');
   const total = result.stories.length;
   return `
@@ -157,6 +167,7 @@ function renderStory(
   story: StoryResult,
   storyIndex: number,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
   return `
 <li class="story" data-status="${story.status}">
@@ -168,7 +179,7 @@ function renderStory(
   </div>
   <p class="story-prose">${escapeHtml(story.story)}</p>
   <br/>
-  ${renderStoryActions(story, storyIndex, reportDir)}
+  ${renderStoryActions(story, storyIndex, reportDir, interactiveMode)}
 </li>
 `;
 }
@@ -196,6 +207,7 @@ function renderStoryActions(
   story: StoryResult,
   storyIndex: number,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
   // Bucket actions by breakpoint, preserving first-seen order.
   const order: string[] = [];
@@ -217,7 +229,12 @@ function renderStoryActions(
   if (order.length <= 1) {
     const actions = story.actions
       .map((action, actionIndex) =>
-        renderAction(action, `s${storyIndex}-a${actionIndex}`, reportDir),
+        renderAction(
+          action,
+          `s${storyIndex}-a${actionIndex}`,
+          reportDir,
+          interactiveMode,
+        ),
       )
       .join('\n');
     return `<ol class="actions" aria-label="Actions">
@@ -232,6 +249,7 @@ function renderStoryActions(
         buckets.get(key)!,
         `s${storyIndex}-bp${groupIndex}`,
         reportDir,
+        interactiveMode,
       ),
     )
     .join('\n');
@@ -260,6 +278,7 @@ function renderBreakpointGroup(
   entries: Array<{ action: ActionResult; id: string }>,
   groupId: string,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
   const labelId = `${groupId}-label`;
   const name = key;
@@ -276,7 +295,9 @@ function renderBreakpointGroup(
     ? `<span class="breakpoint-dimensions" aria-hidden="true">${dimensions.width}×${dimensions.height}</span><span class="sr-only">${dimensions.width} by ${dimensions.height} pixels</span>`
     : '';
   const actions = entries
-    .map(({ action, id }) => renderAction(action, id, reportDir))
+    .map(({ action, id }) =>
+      renderAction(action, id, reportDir, interactiveMode),
+    )
     .join('\n');
   return `
 <div class="breakpoint-group">
@@ -296,8 +317,14 @@ function renderAction(
   action: ActionResult,
   actionId: string,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
-  const screenshots = renderScreenshots(action, actionId, reportDir);
+  const screenshots = renderScreenshots(
+    action,
+    actionId,
+    reportDir,
+    interactiveMode,
+  );
   const errorBlock =
     action.status === 'failed'
       ? `<pre class="action-error">${escapeHtml(action.failureMessage ?? 'unknown error')}</pre>`
@@ -353,9 +380,17 @@ function renderScreenshots(
   action: ActionResult,
   actionId: string,
   reportDir: string,
+  interactiveMode: boolean,
 ): string {
   if (!action.actualPath && !action.baselinePath) {
     return '';
+  }
+  // Wave 2 lands the interactive screenshot viewer in this branch. For now
+  // `interactiveMode` is threaded through but inert: both true and false fall
+  // through to the radio-tab output below, so an unset/false flag keeps the
+  // report byte-identical with the pre-interactiveMode render.
+  if (interactiveMode) {
+    // TODO(wave-2): render the interactive viewer instead of the radio tabs.
   }
   const baseline = action.baselinePath
     ? toReportRelative(reportDir, action.baselinePath)

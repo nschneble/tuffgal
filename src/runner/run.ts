@@ -148,7 +148,11 @@ export async function runAll(
       customCoverage: { screens, flows },
       stories: results,
     };
-    const reportPath = await writeReport(config.paths.report, runResult);
+    const reportPath = await writeReport(
+      config.paths.report,
+      runResult,
+      config.interactiveMode,
+    );
     writeRunSummary(results, runResult.totals, reportPath);
     if (coverage) {
       const coveragePath = await coverage.generate();
@@ -307,5 +311,7 @@ export function drivingBreakpoints(result: StoryResult): string[] {
     );
   }
   if (order.length <= 1) return [];
-  return order.filter((breakpoint) => perBreakpoint.get(breakpoint) === result.status);
+  return order.filter(
+    (breakpoint) => perBreakpoint.get(breakpoint) === result.status,
+  );
 }

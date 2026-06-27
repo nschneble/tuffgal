@@ -180,6 +180,12 @@ export interface TuffgalConfig {
    * `customCoverage.flows` in the report.
    */
   flowInventory?: string;
+  /**
+   * Render the interactive screenshot viewer instead of the static radio-tab
+   * report. Defaults to `false`, so the report keeps its historical radio-tab
+   * output unless a project explicitly opts in.
+   */
+  interactiveMode?: boolean;
 }
 
 /**
@@ -210,6 +216,8 @@ export interface ResolvedConfig {
   database: DatabaseBridge | undefined;
   devServers: DevServerBridge | undefined;
   flowInventory: string | undefined;
+  /** Resolved interactive-viewer flag; defaults to `false`. */
+  interactiveMode: boolean;
 }
 
 const DEFAULTS = {
@@ -218,6 +226,7 @@ const DEFAULTS = {
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',
   authStateRelative: '.auth',
+  interactiveMode: false,
 } as const;
 
 /**
@@ -313,6 +322,13 @@ export function assertValidConfig(input: unknown, source: string): void {
   }
 
   if (
+    config.interactiveMode !== undefined &&
+    typeof config.interactiveMode !== 'boolean'
+  ) {
+    fail('`interactiveMode` must be a boolean when provided.');
+  }
+
+  if (
     config.captureMode !== undefined &&
     config.captureMode !== 'viewport' &&
     config.captureMode !== 'fullPage'
@@ -346,7 +362,8 @@ export function assertValidConfig(input: unknown, source: string): void {
         for (const dim of ['width', 'height'] as const) {
           if (
             override[dim] !== undefined &&
-            (typeof override[dim] !== 'number' || (override[dim] as number) <= 0)
+            (typeof override[dim] !== 'number' ||
+              (override[dim] as number) <= 0)
           ) {
             fail(
               `\`breakpoints[].${dim}\` must be a positive number when provided.`,
@@ -387,6 +404,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     flowInventory: input.flowInventory
       ? resolve(rootDir, input.flowInventory)
       : undefined,
+    interactiveMode: input.interactiveMode ?? DEFAULTS.interactiveMode,
   };
 }
 
