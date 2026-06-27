@@ -49,20 +49,28 @@ contract CI forks on. See [reporting.md](reporting.md#exit-code).
 ## `approve`
 
 ```bash
-npx tuffgal approve [options]
+npx tuffgal approve [story] [options]
 ```
 
 Re-reads the previous run's `results.json` and promotes each captured actual to
 its committed baseline, so the next run compares against the accepted image.
 Prints `Approved N baselines; skipped M actions.`
 
-| Flag             | Default         | Meaning                                                                                                                                        |
-| ---------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--story <name>` | all changed/new | Limit approval to one story file or story text. Also `--story=<name>`.                                                                         |
-| `--new-only`     | off             | Promote only `new` baselines; leave `changed` actuals untouched. Lets you baseline brand-new stories without accepting drift on existing ones. |
+The optional filters narrow the set as an **AND**: an action is promoted only
+when it clears every filter you pass. With none, every `changed` and `new`
+action is approved.
 
-`--new-only` is valid only on `approve`. Passing it to `run`, `supervise`, or
-`init` exits `1` with an error on stderr.
+| Argument / Flag                                    | Default     | Meaning                                                                                                                                                                                                     |
+| -------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[story]`                                          | all stories | Positional story to approve: a name (`user-logs-in`, `.json` optional), a prose title, or a path (`tuffgal/stories/user-logs-in.json`, reduced to its file name). Sugar for `--story`; passing both errors. |
+| `--story <name>`                                   | all stories | Same selection as the positional, in flag form. Also `--story=<name>`.                                                                                                                                      |
+| `--breakpoint <name>`                              | all modes   | Approve only this breakpoint (matched by mode name). Repeatable: `--breakpoint desktop --breakpoint mobile`. Also `--breakpoint=<name>`.                                                                    |
+| `--desktop` / `--mobile` / `--tablet` / `--laptop` | —           | Shorthand for `--breakpoint <name>` on the four registry modes. Combine freely.                                                                                                                             |
+| `--new-only`                                       | off         | Promote only `new` baselines; leave `changed` actuals untouched. Baseline brand-new stories without accepting drift on existing ones.                                                                       |
+
+`--new-only` and the breakpoint filters are valid only on `approve`. Passing
+them (or a stray positional) to `run`, `supervise`, or `init` exits `1` with an
+error on stderr.
 
 ## `init`
 
@@ -95,13 +103,13 @@ an error on stderr rather than silently coercing to `0`.
 
 ## Exit codes
 
-| Command     | `0`                                   | non-zero                                                                                                    |
-| ----------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `run`       | no failed stories                     | `1` when `totals.failed > 0`                                                                                |
-| `approve`   | approval completed                    | `1` on a thrown error (e.g. missing/stale `results.json`)                                                   |
-| `init`      | config written                        | `1` on a thrown error                                                                                       |
-| `supervise` | clean shutdown (idle, cap, or signal) | `1` on a thrown error                                                                                       |
-| any         | —                                     | `1` on `--new-only` outside `approve`, or any uncaught error (message on stderr, prefixed `tuffgal error:`) |
+| Command     | `0`                                   | non-zero                                                                                                                                                                         |
+| ----------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run`       | no failed stories                     | `1` when `totals.failed > 0`                                                                                                                                                     |
+| `approve`   | approval completed                    | `1` on a thrown error (e.g. missing/stale `results.json`)                                                                                                                        |
+| `init`      | config written                        | `1` on a thrown error                                                                                                                                                            |
+| `supervise` | clean shutdown (idle, cap, or signal) | `1` on a thrown error                                                                                                                                                            |
+| any         | —                                     | `1` on an approve-only flag (`--new-only`, `--breakpoint`/`--desktop`/…) or a positional outside `approve`, or any uncaught error (message on stderr, prefixed `tuffgal error:`) |
 
 ## Examples
 
@@ -114,6 +122,12 @@ npx tuffgal run --manage-servers
 
 # Accept the new baselines a first run produced, but not drift
 npx tuffgal approve --new-only
+
+# Accept just the desktop drift on one story
+npx tuffgal approve user-logs-in --desktop
+
+# New desktop baselines for one story, leaving its changed mobile shots alone
+npx tuffgal approve user-logs-in --desktop --new-only
 
 # Coverage run with a wider worker pool
 npx tuffgal run --coverage --workers 8

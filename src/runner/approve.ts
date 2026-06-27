@@ -16,6 +16,13 @@ export interface ApproveOptions {
    * drift on existing baselines.
    */
   newOnly?: boolean;
+  /**
+   * When non-empty, only promote actions whose `breakpoint` is in this set
+   * (matched by mode name, e.g. `desktop`). Lets a reviewer accept a drift at
+   * one viewport without touching the others. Empty/undefined approves every
+   * breakpoint. Composes with `storyFilter` and `newOnly` as an AND filter.
+   */
+  breakpoints?: string[];
 }
 
 export interface ApproveSummary {
@@ -27,9 +34,10 @@ export interface ApproveSummary {
  * Reads `<report>/results.json` from the previous run and promotes every
  * `changed` or `new` action's actual screenshot to its baseline. The
  * accessibility-tree snapshot (`a11y.yaml`) is promoted alongside the PNG
- * so the a11y baseline stays in lock-step with the visual one. Optional
- * `storyFilter` limits the approval to one story file. Optional `newOnly`
- * limits promotion to `new` actions, leaving `changed` baselines untouched.
+ * so the a11y baseline stays in lock-step with the visual one. The optional
+ * filters — `storyFilter` (one story), `breakpoints` (named modes), and
+ * `newOnly` (new not changed) — compose as an AND: an action is promoted only
+ * when it clears every filter that was supplied.
  */
 export async function approveAll(
   config: ResolvedConfig,
@@ -42,6 +50,12 @@ export async function approveAll(
     );
   });
   const result = parseRunResult(raw, resultsPath);
+  // An empty/undefined breakpoint list means "every breakpoint"; otherwise only
+  // actions tagged with one of these mode names are eligible.
+  const breakpointFilter =
+    options.breakpoints && options.breakpoints.length > 0
+      ? new Set(options.breakpoints)
+      : undefined;
   let approved = 0;
   let skipped = 0;
   for (const story of result.stories) {
@@ -55,6 +69,14 @@ export async function approveAll(
       continue;
     }
     for (const action of story.actions) {
+      if (
+        breakpointFilter &&
+        (action.breakpoint === undefined ||
+          !breakpointFilter.has(action.breakpoint))
+      ) {
+        skipped += 1;
+        continue;
+      }
       if (!isApprovable(action, options.newOnly === true)) {
         skipped += 1;
         continue;

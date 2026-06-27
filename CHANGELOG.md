@@ -8,6 +8,14 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Added
 
+**`approve` gains scoped selection.** Name a story positionally
+(`tuffgal approve user-logs-in`, `.json` optional, full paths accepted) instead
+of only `--story`, and limit approval to specific viewports with
+`--breakpoint <name>` (repeatable) or the `--desktop`/`--mobile`/`--tablet`/`--laptop`
+shorthands. The new filters compose with each other and `--new-only` as an AND,
+so `approve user-logs-in --desktop --new-only` promotes exactly the new desktop
+baselines for that one story.
+
 **CLI and reporting reference docs.** [`docs/cli.md`](docs/cli.md) documents
 every command, flag, and exit code in one place; [`docs/reporting.md`](docs/reporting.md)
 is the `results.json` contract for implementing apps (`totals`, `customCoverage`,
