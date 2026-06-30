@@ -497,4 +497,38 @@
       });
     });
   })();
+
+  // Scroll a user-opened screenshot disclosure to the top of the viewport so the
+  // tall screenshot below the summary row is immediately visible. Fires ONLY on a
+  // user single-open:
+  //   - The bulk-toggle sets `details.open` directly, which fires `toggle` but NO
+  //     `click`, so a summary `click` listener never catches a bulk op (no
+  //     scroll-thrash to the last-opened panel).
+  //   - Native <summary> activation by mouse, Enter, or Space all dispatch one
+  //     `click`, so a single listener covers every input mode.
+  //   - The open-state flip is the click's DEFAULT action, run AFTER this handler,
+  //     so `details.open` here is the PRE-toggle state. `if (open) return` means
+  //     this click is closing the panel: never scroll on close.
+  //   - Deferred to rAF so it runs after the flip + content layout. scrollIntoView
+  //     does not move focus, so focus stays on the <summary>, which sits flush at
+  //     the viewport top with its focus indicator visible.
+  (function () {
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+    document.addEventListener('click', function (event) {
+      var target = event.target;
+      var summary = target && target.closest ? target.closest('summary') : null;
+      if (!summary) return;
+      var details = summary.parentElement;
+      if (!details || !details.matches('details.shots')) return;
+      // Pre-toggle state: open === "this click will close it" → do not scroll.
+      if (details.open) return;
+      requestAnimationFrame(function () {
+        details.scrollIntoView({
+          behavior: reduce.matches ? 'instant' : 'smooth',
+          block: 'start',
+          inline: 'nearest',
+        });
+      });
+    });
+  })();
 })();
