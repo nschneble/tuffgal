@@ -179,10 +179,6 @@ h2 {
   font-weight: 600;
 }
 
-.summary-item .label {
-  color: var(--text-muted);
-}
-
 /* Each status total is a single-select filter styled as a plain text link. The
    word ("passed") is the only underlined link; its sibling count precedes it
    outside the button. Resting is plain --text (1.4.3 text contrast, not the
@@ -208,10 +204,6 @@ h2 {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 4.5px;
-}
-
-.summary-filter .indicator {
-  color: inherit;
 }
 
 /* Hover + pressed tint the word its status color. The "all" total stays --text

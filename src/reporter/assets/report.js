@@ -350,7 +350,7 @@
       return storyVisible;
     }
 
-    function apply(value, button, trigger) {
+    function apply(value, trigger) {
       var visible = 0;
       stories.forEach(function (story) {
         if (applyToStory(story, value)) visible += 1;
@@ -407,13 +407,13 @@
         // its own action.
         if (isActive && token !== 'all') {
           setPressed(allButton);
-          apply('all', allButton, button);
+          apply('all', button);
           return;
         }
         // Re-clicking the already-active "all" button is a no-op.
         if (isActive) return;
         setPressed(button);
-        apply(token, button, button);
+        apply(token, button);
       });
     });
   })();
@@ -482,10 +482,12 @@
       // keeps the logic simple.
       var count = visibleStories.length;
       var verb = shouldOpen ? 'Expanded' : 'Collapsed';
-      // Echo the active filter scope so the announcement matches the
-      // filter-aware button label (e.g. "Expanded passed in 3 stories"). Read
-      // the pressed filter button at click time via the shared filterLabel
-      // helper. No pressed button falls back to "all".
+      // Echo the active filter scope so the announcement carries context for
+      // what was toggled (e.g. "Expanded passed in 3 stories"). The button
+      // label itself is static ("Expand all screenshots"); only this live
+      // announcement reflects the filter. Read the pressed filter button at
+      // click time via the shared filterLabel helper. No pressed button falls
+      // back to "all".
       var pressed = document.querySelector('.summary-filter[aria-pressed="true"]');
       var name = filterLabel(pressed);
       bulkRegion.write(verb + ' ' + name + ' in ' + count + ' stories');

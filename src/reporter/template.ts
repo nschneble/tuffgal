@@ -358,6 +358,21 @@ function renderParameters(
   return `<dl class="action-parameters">${entries}</dl>`;
 }
 
+/**
+ * A "changed" row whose diff could not be computed: baseline and actual differ
+ * in dimensions, so pixelmatch throws before producing a diffRatio or diff
+ * image, leaving only the recorded failureMessage. Centralizes the predicate
+ * shared by the radio fallback, the diff radio's describedby wiring, and
+ * renderDiffStats' unavailable note.
+ */
+function isDiffUnavailable(action: ActionResult): boolean {
+  return (
+    action.diffRatio === undefined &&
+    action.status === 'changed' &&
+    !!action.failureMessage
+  );
+}
+
 function renderScreenshots(
   action: ActionResult,
   actionId: string,
@@ -371,18 +386,15 @@ function renderScreenshots(
   // viewer. When it is false the function falls through to the radio-tab output
   // below, byte-identical with the pre-interactiveMode render.
   //
-  // Request 7: when the baseline and actual differ in dimensions the diff is
-  // uncomputable (renderDiffStats' unavailable branch — both paths present,
-  // `changed` status, a recorded failureMessage, no diffRatio). The hover/press
-  // gesture has no diff image to reveal, so fall back to the radio-tab render:
-  // visible chips, baseline + actual, and the disabled diff option carrying the
-  // mismatch reason.
+  // When the baseline and actual differ in dimensions the diff is uncomputable
+  // (renderDiffStats' unavailable branch — both paths present, `changed` status,
+  // a recorded failureMessage, no diffRatio). The hover/press gesture has no diff
+  // image to reveal, so fall back to the radio-tab render: visible chips,
+  // baseline + actual, and the disabled diff option carrying the mismatch reason.
   const diffUncomputable =
     action.baselinePath !== undefined &&
     action.actualPath !== undefined &&
-    action.diffRatio === undefined &&
-    action.status === 'changed' &&
-    action.failureMessage !== undefined;
+    isDiffUnavailable(action);
   if (interactiveMode && !diffUncomputable) {
     return renderInteractiveScreenshots(action, actionId, reportDir);
   }
@@ -415,10 +427,7 @@ function renderScreenshots(
   // its aria-describedby to the note — a keyboard/AT user reaching the disabled
   // diff option then hears why no diff exists. (The diff PANEL only takes the
   // association when a real diff image renders, below.)
-  const diffNoteUnavailable =
-    action.diffRatio === undefined &&
-    action.status === 'changed' &&
-    action.failureMessage !== undefined;
+  const diffNoteUnavailable = isDiffUnavailable(action);
   // When only one variant is real (the common case for a `new` baseline, whose
   // baseline is suppressed and has no diff), a radio group offering a single
   // choice is noise to AT. Drop the controls and show the image alone; the row's
@@ -492,6 +501,9 @@ function renderDiffStats(action: ActionResult, diffStatsId: string): string {
  * variant — and its radio — is omitted entirely (not disabled) when this action
  * produced no diff image; the existing diff-stats association then rides on the
  * diff radio control rather than the image, leaving no dangling describedby.
+ * (Distinct from the dimension-mismatch case, where the diff is uncomputable:
+ * renderScreenshots never reaches this viewer and instead falls back to the
+ * radio-tab render with a disabled — not omitted — diff radio.)
  */
 function renderInteractiveScreenshots(
   action: ActionResult,

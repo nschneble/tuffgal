@@ -918,7 +918,7 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
   });
 });
 
-describe('renderScreenshots — interactiveMode dimension-mismatch fallback (Request 7)', () => {
+describe('renderScreenshots — interactiveMode dimension-mismatch fallback', () => {
   // A baseline/actual dimension mismatch yields status:changed + failureMessage
   // but no diffRatio/diffPath: the diff is uncomputable, so the hover/press
   // viewer has no diff to reveal. interactiveMode must fall back to the radio-tab
@@ -975,6 +975,11 @@ describe('renderScreenshots — interactiveMode dimension-mismatch fallback (Req
       html,
       /value="diff"[^>]*aria-describedby="s0-a0-diff-stats"/s,
       'the disabled diff radio is described by the unavailable note so AT hears the reason',
+    );
+    assert.match(
+      html,
+      /value="diff"[^>]*\bdisabled\b/s,
+      'the diff radio is disabled when the mismatch leaves no diff image',
     );
   });
 
