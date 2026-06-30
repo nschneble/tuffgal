@@ -2,7 +2,6 @@ import { relative } from 'node:path';
 import type {
   ActionResult,
   ActionStatus,
-  CoverageMetric,
   RunResult,
   StoryResult,
 } from '../schema/result.ts';
@@ -63,46 +62,55 @@ export function renderReport(
 `;
 }
 
+/**
+ * The status totals double as the report's filter controls: each is a native
+ * `<button aria-pressed>` single-select filter, with the "stories" total acting
+ * as the "show all / clear" control (pressed by default). The expand-all /
+ * collapse-all pair sits at the right end of the same row — the slot the old
+ * coverage stats used to occupy. The `<ul>` stays a plain list (no composite
+ * role): a non-filter total and the bulk-toggle group share it, so a
+ * radiogroup/fieldset could not cleanly scope just the filters.
+ */
 function renderSummary(result: RunResult): string {
-  const screens = result.customCoverage.screens;
-  const flows = result.customCoverage.flows;
   return `
 <section class="summary" aria-labelledby="summary-heading">
   <h2 id="summary-heading">summary</h2>
   <ul class="summary-list" aria-label="Run totals">
-    ${summaryItem('stories', result.totals.stories)}
-    ${summaryItem('passed', result.totals.passed, 'pass')}
-    ${summaryItem('new', result.totals.new, 'new')}
-    ${summaryItem('changed', result.totals.changed, 'changed')}
-    ${summaryItem('failed', result.totals.failed, 'failed')}
-    ${coverageItem('screens', screens)}
-    ${coverageItem('flows', flows)}
+    ${summaryFilter('stories', result.totals.stories, 'all', true, ' — show all stories')}
+    ${summaryFilter('passed', result.totals.passed, 'pass', false, ', show only passed stories')}
+    ${summaryFilter('new', result.totals.new, 'new', false, ', show only new stories')}
+    ${summaryFilter('changed', result.totals.changed, 'changed', false, ', show only changed stories')}
+    ${summaryFilter('failed', result.totals.failed, 'failed', false, ', show only failed stories')}
+    <li class="story-bulk-toggle">
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all</button>
+      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">Collapse all</button>
+    </li>
   </ul>
 </section>
 `;
 }
 
-function coverageItem(label: string, metric: CoverageMetric): string {
-  const pct = `${(metric.ratio * 100).toFixed(0)}%`;
-  return `
-<li class="summary-item coverage">
-  <span class="count">${pct}</span>
-  <span class="label">${label}</span>
-  <span class="coverage-detail" aria-hidden="true">· ${metric.covered}/${metric.total}</span>
-  <span class="sr-only">${metric.covered} of ${metric.total} ${label} covered</span>
-</li>
-`;
-}
-
-function summaryItem(
+/**
+ * One status total rendered as a single-select filter button. The accessible
+ * name leads with the visible "<count> <label>" and appends a visually-hidden
+ * action suffix (e.g. ", show only passed stories"), composed from contents so
+ * the visible text is never dropped (WCAG 2.5.3 — never an aria-label). The
+ * `data-filter` token ("pass") is kept distinct from the visible label
+ * ("passed") so report.js matches `story[data-status="pass"]`.
+ */
+function summaryFilter(
   label: string,
   value: number,
-  statusKey?: ActionStatus,
+  filter: 'all' | ActionStatus,
+  pressed: boolean,
+  actionSuffix: string,
 ): string {
   return `
-<li class="summary-item"${statusKey ? ` data-status="${statusKey}"` : ''}>
-  <span class="count">${value}</span>
-  <span class="indicator label">${label}</span>
+<li class="summary-item" data-status="${filter}">
+  <button type="button" class="summary-filter" data-filter="${filter}" aria-pressed="${pressed}" aria-controls="stories-list">
+    <span class="count">${value}</span><span class="indicator label">${label}</span>
+    <span class="sr-only">${actionSuffix}</span>
+  </button>
 </li>
 `;
 }
@@ -118,48 +126,20 @@ function renderStories(
     )
     .join('\n');
   const total = result.stories.length;
+  // The interactive controls now live in the summary row; this section keeps
+  // only the two live regions (both server-rendered between the heading and the
+  // list so a screen reader announces filter/bulk changes reliably) and the
+  // list itself, whose id the summary filter buttons target via aria-controls.
   return `
 <section aria-labelledby="stories-heading">
   <h2 id="stories-heading">stories</h2>
-  <div class="stories-toolbar">
-    <fieldset class="story-filter">
-      <legend class="sr-only">filter</legend>
-      ${storyFilterRadio('all', true)}
-      ${storyFilterRadio('passed', false)}
-      ${storyFilterRadio('new', false)}
-      ${storyFilterRadio('changed', false)}
-      ${storyFilterRadio('failed', false)}
-    </fieldset>
-    <p class="story-filter-status" role="status" aria-live="polite">Showing all ${total} stories</p>
-    <div class="story-bulk-toggle">
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all</button>
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">Collapse all</button>
-    </div>
-    <p class="bulk-toggle-status sr-only" role="status" aria-live="polite"></p>
-  </div>
-  <ol class="stories" aria-label="Stories executed in dependency order">
+  <p class="story-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all ${total} stories</p>
+  <p class="bulk-toggle-status sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+  <ol class="stories" id="stories-list" aria-label="Stories executed in dependency order">
     ${items}
   </ol>
   <p class="stories-empty" hidden>No matching stories</p>
 </section>
-`;
-}
-
-function storyFilterRadio(status: string, checked: boolean): string {
-  const inputId = `story-filter-${status}`;
-  const value = status === 'passed' ? 'pass' : status;
-  return `
-<label for="${inputId}" class="chip chip--toggle story-filter-label">
-  <input
-    type="radio"
-    name="story-filter"
-    id="${inputId}"
-    value="${value}"
-    data-filter-name="${status}"
-    ${checked ? 'checked' : ''}
-  />
-  ${status}
-</label>
 `;
 }
 

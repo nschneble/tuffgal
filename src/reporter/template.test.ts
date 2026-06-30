@@ -93,72 +93,129 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
   });
   const html = renderReport(result, REPORT_DIR);
 
-  it('renders the stories toolbar with filter radios and bulk-toggle buttons', () => {
+  it('renders each status total as a single-select aria-pressed filter button', () => {
     assert.ok(
-      html.includes('<fieldset class="story-filter">'),
-      'story-filter fieldset present',
-    );
-    assert.ok(html.includes('value="all"'), 'all radio present');
-    assert.ok(html.includes('value="pass"'), 'pass radio present');
-    assert.ok(html.includes('value="new"'), 'new radio present');
-    assert.ok(html.includes('value="changed"'), 'changed radio present');
-    assert.ok(html.includes('value="failed"'), 'failed radio present');
-    assert.match(
-      html,
-      /<input[^>]*value="all"[^>]*checked/s,
-      'all radio is the default-checked radio',
+      !html.includes('<fieldset class="story-filter">'),
+      'the old radio filter fieldset is gone',
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand"',
+        '<button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list">',
       ),
-      'expand-all bulk-toggle button present',
+      'the stories total is the default-pressed "show all" filter button',
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse"',
+        '<button type="button" class="summary-filter" data-filter="pass" aria-pressed="false" aria-controls="stories-list">',
       ),
-      'collapse-all bulk-toggle button present',
+      'passed total is an unpressed filter button keyed to the pass token',
     );
     assert.ok(
-      html.includes('data-bulk-toggle="expand">Expand all</button>'),
-      'expand button has filter-agnostic "Expand all" initial text',
+      html.includes(
+        '<button type="button" class="summary-filter" data-filter="new" aria-pressed="false" aria-controls="stories-list">',
+      ),
+      'new filter button present',
     );
     assert.ok(
-      html.includes('data-bulk-toggle="collapse">Collapse all</button>'),
-      'collapse button has filter-agnostic "Collapse all" initial text',
+      html.includes(
+        '<button type="button" class="summary-filter" data-filter="changed" aria-pressed="false" aria-controls="stories-list">',
+      ),
+      'changed filter button present',
+    );
+    assert.ok(
+      html.includes(
+        '<button type="button" class="summary-filter" data-filter="failed" aria-pressed="false" aria-controls="stories-list">',
+      ),
+      'failed filter button present',
+    );
+    // Exactly one button is pressed by default: the "all" total.
+    assert.equal(
+      countOccurrences(html, 'aria-pressed="true"'),
+      1,
+      'exactly one filter button is pressed at load',
     );
   });
 
-  it('orders the toolbar DOM filters → status → bulk-toggle buttons', () => {
-    const fieldsetIndex = html.indexOf('<fieldset class="story-filter">');
-    const statusIndex = html.indexOf('<p class="story-filter-status"');
-    const bulkToggleIndex = html.indexOf('<div class="story-bulk-toggle">');
-    assert.ok(fieldsetIndex !== -1, 'filter fieldset present');
-    assert.ok(statusIndex !== -1, 'status region present');
-    assert.ok(bulkToggleIndex !== -1, 'bulk-toggle group present');
+  it('composes the filter accessible name from visible text + an sr-only action suffix', () => {
     assert.ok(
-      fieldsetIndex < statusIndex && statusIndex < bulkToggleIndex,
-      'reading order is filters, then status, then buttons (status sits between)',
+      html.includes(
+        '<span class="count">3</span><span class="indicator label">stories</span>\n    <span class="sr-only"> — show all stories</span>',
+      ),
+      'all button name leads with "3 stories" then " — show all stories"',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="count">1</span><span class="indicator label">passed</span>\n    <span class="sr-only">, show only passed stories</span>',
+      ),
+      'passed button name leads with "1 passed" then ", show only passed stories"',
+    );
+    // Never an aria-label on the filter buttons (would drop the visible count).
+    assert.ok(
+      !/class="summary-filter"[^>]*aria-label/.test(html),
+      'filter buttons never carry an aria-label',
     );
   });
 
-  it('renders the live region with initial story count and empty-state placeholder', () => {
+  it('keeps the bulk-toggle buttons as the last items in the summary row', () => {
     assert.ok(
       html.includes(
-        '<p class="story-filter-status" role="status" aria-live="polite">Showing all 3 stories</p>',
+        '<button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all</button>',
       ),
-      'live region carries default "Showing all 3 stories" text',
+      'expand-all bulk-toggle button present with initial "Expand all" text',
     );
     assert.ok(
       html.includes(
-        '<p class="bulk-toggle-status sr-only" role="status" aria-live="polite"></p>',
+        '<button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">Collapse all</button>',
       ),
-      'separate bulk-toggle live region present',
+      'collapse-all bulk-toggle button present with initial "Collapse all" text',
+    );
+    // Bulk-toggle group comes AFTER every filter button in the summary list.
+    const lastFilterIndex = html.lastIndexOf('class="summary-filter"');
+    const bulkIndex = html.indexOf('<li class="story-bulk-toggle">');
+    assert.ok(lastFilterIndex !== -1, 'filter buttons present');
+    assert.ok(bulkIndex !== -1, 'bulk-toggle list item present');
+    assert.ok(
+      lastFilterIndex < bulkIndex,
+      'the bulk-toggle pair sits after the filters (last in DOM order)',
+    );
+  });
+
+  it('relocates both live regions into the stories section between the heading and the list', () => {
+    assert.ok(
+      html.includes(
+        '<p class="story-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 3 stories</p>',
+      ),
+      'filter status region carries default text + aria-atomic',
+    );
+    assert.ok(
+      html.includes(
+        '<p class="bulk-toggle-status sr-only" role="status" aria-live="polite" aria-atomic="true"></p>',
+      ),
+      'separate sr-only bulk-toggle region present with aria-atomic',
+    );
+    // Both regions are server-rendered between the stories <h2> and the <ol>.
+    const headingIndex = html.indexOf('<h2 id="stories-heading">stories</h2>');
+    const filterStatusIndex = html.indexOf('<p class="story-filter-status"');
+    const bulkStatusIndex = html.indexOf('<p class="bulk-toggle-status');
+    const listIndex = html.indexOf('<ol class="stories" id="stories-list"');
+    assert.ok(
+      headingIndex !== -1 && listIndex !== -1,
+      'stories heading and list present',
+    );
+    assert.ok(
+      headingIndex < filterStatusIndex &&
+        filterStatusIndex < bulkStatusIndex &&
+        bulkStatusIndex < listIndex,
+      'order is heading → filter status → bulk status → list',
     );
     assert.ok(
       html.includes('<p class="stories-empty" hidden>No matching stories</p>'),
       'empty-state paragraph present and hidden by default',
+    );
+    // The old toolbar wrapper is gone entirely.
+    assert.ok(
+      !html.includes('class="stories-toolbar"'),
+      'the .stories-toolbar wrapper is removed',
     );
   });
 
@@ -189,32 +246,38 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item">\n  <span class="count">3</span>',
+        '<li class="summary-item" data-status="all">\n  <button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list">\n    <span class="count">3</span>',
       ),
       'stories total is 3',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="pass">\n  <span class="count">1</span>',
+        '<li class="summary-item" data-status="pass">\n  <button type="button" class="summary-filter" data-filter="pass" aria-pressed="false" aria-controls="stories-list">\n    <span class="count">1</span>',
       ),
       'pass tier total is 1',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="changed">\n  <span class="count">1</span>',
+        '<li class="summary-item" data-status="changed">\n  <button type="button" class="summary-filter" data-filter="changed" aria-pressed="false" aria-controls="stories-list">\n    <span class="count">1</span>',
       ),
       'changed tier total is 1',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="failed">\n  <span class="count">1</span>',
+        '<li class="summary-item" data-status="failed">\n  <button type="button" class="summary-filter" data-filter="failed" aria-pressed="false" aria-controls="stories-list">\n    <span class="count">1</span>',
       ),
       'failed tier total is 1',
     );
-    assert.equal(
-      countOccurrences(html, '<li class="summary-item coverage">'),
-      2,
-      'customCoverage renders one summary-item coverage <li> per metric (screens + flows)',
+    // The screens/flows coverage stats were dropped entirely. (`.coverage-detail`
+    // is intentionally NOT asserted here — it is also reused by the diff-stats
+    // pixel-count markup, so its presence/absence is unrelated to this change.)
+    assert.ok(
+      !html.includes('summary-item coverage'),
+      'no coverage stat items render in the summary row',
+    );
+    assert.ok(
+      !/ (?:screens|flows) covered</.test(html),
+      'no coverage sr-only "<n> of <m> screens/flows covered" text leaks',
     );
   });
 
@@ -331,7 +394,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
   });
 
-  it('renders new as a first-class tier: summary total, filter radio, story row', () => {
+  it('renders new as a first-class tier: summary total, filter button, story row', () => {
     const result = makeRunResult({
       totals: { stories: 1, passed: 0, changed: 0, failed: 0, new: 1 },
       stories: [
@@ -345,14 +408,13 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="new">\n  <span class="count">1</span>',
+        '<li class="summary-item" data-status="new">\n  <button type="button" class="summary-filter" data-filter="new" aria-pressed="false" aria-controls="stories-list">\n    <span class="count">1</span>',
       ),
-      'new tier total renders in the summary',
+      'new tier total renders as a filter button in the summary',
     );
-    assert.match(
-      html,
-      /<input[^>]*value="new"[^>]*data-filter-name="new"/s,
-      'a new filter radio renders',
+    assert.ok(
+      html.includes('<span class="indicator label">new</span>'),
+      'the new filter button carries its visible "new" label',
     );
     assert.ok(
       html.includes('<li class="story" data-status="new">'),

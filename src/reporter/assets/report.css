@@ -8,6 +8,10 @@
   --text-subtle: #8a8a8a;
   --border: #262626;
   --border-bright: #404040;
+  /* Control boundary for interactive chrome on --bg-elevated. --border-bright
+     only reaches 1.82:1 there, below the WCAG 1.4.11 3:1 non-text floor; this
+     token clears it (3.23:1 dark / 4.54:1 light). */
+  --control-border: #666666;
   --accent: #38bdf8;
   --img-outline: rgba(255, 255, 255, 0.1);
 
@@ -37,6 +41,7 @@
     --text-subtle: #6b6b6b;
     --border: #d4d4d4;
     --border-bright: #a3a3a3;
+    --control-border: #767676;
     --accent: #0369a1;
     --img-outline: rgba(0, 0, 0, 0.1);
 
@@ -168,10 +173,6 @@ h2 {
   border: 1px solid var(--border);
 }
 
-.summary-item:not(.coverage) + .summary-item.coverage {
-  margin-left: auto;
-}
-
 .summary-item {
   display: inline-flex;
   align-items: center;
@@ -203,9 +204,56 @@ h2 {
   color: var(--failed);
 }
 
-.summary-item.coverage .coverage-detail {
-  color: var(--text-subtle);
-  font-size: 0.8125rem;
+/* Each status total is a single-select filter button. At rest it carries a
+   --control-border boundary (≥3:1 vs --bg-elevated) so it reads as an
+   interactive control without relying on hover/focus (WCAG 1.4.11). The visible
+   count + label always show, never color-alone (1.4.1). Target size ≥24×24
+   via min-height/min-width + padding (2.5.8). */
+.summary-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0.2rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--control-border);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition-property: scale, border-color;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+.summary-filter:hover {
+  border-color: var(--text);
+}
+
+.summary-filter:active {
+  scale: 0.96;
+}
+
+/* Selected filter: never color-alone. A 2px --accent border (≥3:1) plus a bold
+   label plus aria-pressed carry the state across three channels. Padding shrinks
+   1px on each axis to absorb the extra border width, so toggling never reflows
+   the row. */
+.summary-filter[aria-pressed='true'] {
+  padding: calc(0.2rem - 1px) calc(0.6rem - 1px);
+  border-width: 2px;
+  border-color: var(--accent);
+}
+
+.summary-filter[aria-pressed='true'] .indicator {
+  font-weight: 600;
+}
+
+/* Two-tone focus ring: a --bg-elevated outline separates the control from the
+   --accent halo, so it survives the dark-mode collision where --accent equals
+   the --new tier color and the selected border. */
+.summary-filter:focus-visible {
+  outline: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 0 4px var(--accent);
 }
 
 .chip {
@@ -249,38 +297,9 @@ h2 {
   }
 }
 
-.stories-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
-  margin: 0 0 0.75rem;
-}
-
-.story-filter {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.story-filter legend {
-  padding: 0 0.5rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.story-filter-label input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
+/* The expand-all / collapse-all pair now lives at the right end of the summary
+   row (the slot the coverage stats vacated), pushed there by margin-left:auto
+   while staying the LAST flex children so DOM order matches the visual order. */
 .story-bulk-toggle {
   display: flex;
   flex-wrap: wrap;
@@ -293,6 +312,9 @@ h2 {
   font: inherit;
   font-size: 0.8125rem;
   min-height: 24px;
+  /* On --bg-elevated --border-bright fails 1.4.11; match the filter buttons'
+     --control-border so the whole control row clears the 3:1 floor. */
+  border-color: var(--control-border);
 }
 
 .story-bulk-toggle-button:hover {
@@ -306,7 +328,7 @@ h2 {
 }
 
 .story-filter-status {
-  margin: 0;
+  margin: 0 0 0.75rem;
   color: var(--text-subtle);
   font-size: 0.8125rem;
 }
@@ -719,10 +741,12 @@ summary.action-row:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
   summary.action-row::after,
-  .chip {
+  .chip,
+  .summary-filter {
     transition: none;
   }
-  .chip:active {
+  .chip:active,
+  .summary-filter:active {
     scale: none;
   }
 }

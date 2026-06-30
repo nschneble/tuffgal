@@ -59,6 +59,20 @@
   var statusRegion = createStatusRegion('.story-filter-status');
   var bulkRegion = createStatusRegion('.bulk-toggle-status');
 
+  // The visible scope word for a filter button, used to relabel the bulk-toggle
+  // buttons and to echo the active filter in the bulk announcement. The button's
+  // `data-filter` carries the matcher TOKEN ("pass"); the visible `.indicator`
+  // span carries the human LABEL ("passed"). The "all" total maps to "all"
+  // regardless of its visible "stories" label. A missing button → "all".
+  function filterLabel(button) {
+    if (!button) return 'all';
+    if (button.getAttribute('data-filter') === 'all') return 'all';
+    var indicator = button.querySelector('.indicator');
+    return indicator
+      ? indicator.textContent.trim()
+      : button.getAttribute('data-filter');
+  }
+
   // Reveals the matching <div.shot-panel> for the radio the user picks. The
   // radio group already handles keyboard navigation natively (arrow keys move
   // the selection across the visible labels); this script just translates the
@@ -214,23 +228,28 @@
       });
   })();
 
-  // Status filter for the stories list. Toggles `hidden` on each <li.story>
-  // whose `data-status` doesn't match the chosen radio value ("all" disables
-  // the filter). Live-region updates are debounced by ~150ms so arrow-key
-  // traversal across the radio group doesn't flood the polite region with
-  // every intermediate state; the visual hide/show is applied immediately.
+  // Status filter for the stories list. Each status total in the summary row is
+  // a native <button aria-pressed> single-select filter; clicking one toggles
+  // `hidden` on every <li.story> whose `data-status` doesn't match its
+  // `data-filter` token ("all" clears the filter). Exactly one button is pressed
+  // at all times (default: the "all/stories" button). Re-clicking the active
+  // non-"all" filter reverts to "all". Live-region updates are debounced by
+  // ~150ms; the visual hide/show is applied immediately.
   (function () {
-    var fieldset = document.querySelector('.story-filter');
-    if (!fieldset) return;
+    var filterButtons = Array.prototype.slice.call(
+      document.querySelectorAll('.summary-filter'),
+    );
+    if (filterButtons.length === 0) return;
     var list = document.querySelector('.stories');
     var empty = document.querySelector('.stories-empty');
     if (!list || !empty) return;
 
     var stories = Array.prototype.slice.call(list.querySelectorAll('.story'));
-    var radios = Array.prototype.slice.call(
-      fieldset.querySelectorAll('input[type="radio"]'),
-    );
     var total = stories.length;
+    var allButton =
+      filterButtons.find(function (button) {
+        return button.getAttribute('data-filter') === 'all';
+      }) || filterButtons[0];
 
     // Bulk-toggle buttons re-labelled per active filter so sighted users know
     // the toggle is scoped to the filtered subset: "Expand all" / "Collapse
@@ -243,14 +262,25 @@
       '[data-bulk-toggle="collapse"]',
     );
 
-    function relabelBulkToggle(name) {
-      var scope = name && name !== 'all' ? name : 'all';
+    function relabelBulkToggle(button) {
+      var scope = filterLabel(button);
       if (expandButton) {
         expandButton.textContent = 'Expand ' + scope;
       }
       if (collapseButton) {
         collapseButton.textContent = 'Collapse ' + scope;
       }
+    }
+
+    // Maintain the single-pressed invariant: exactly one filter button carries
+    // aria-pressed="true".
+    function setPressed(active) {
+      filterButtons.forEach(function (button) {
+        button.setAttribute(
+          'aria-pressed',
+          button === active ? 'true' : 'false',
+        );
+      });
     }
 
     function show(el) {
@@ -309,9 +339,9 @@
       }
 
       // Matching story under a specific filter: compare each action's
-      // data-status against the radio VALUE token ("pass"), not the
-      // data-filter-name label ("passed"), so the "passed" filter matches the
-      // `pass` actions instead of silently emptying every story.
+      // data-status against the button's data-filter TOKEN ("pass"), not its
+      // visible label ("passed"), so the "passed" filter matches the `pass`
+      // actions instead of silently emptying every story.
       actions.forEach(function (action) {
         action.hidden = action.getAttribute('data-status') !== value;
       });
@@ -332,10 +362,8 @@
       return storyVisible;
     }
 
-    function apply(radio) {
-      var value = radio.value;
-      var name = radio.getAttribute('data-filter-name') || value;
-      relabelBulkToggle(name);
+    function apply(value, button, trigger) {
+      relabelBulkToggle(button);
       var visible = 0;
       stories.forEach(function (story) {
         if (applyToStory(story, value)) visible += 1;
@@ -344,11 +372,21 @@
       list.hidden = hasNone;
       empty.hidden = !hasNone;
 
+      // Disable-while-focused guard: when a zero-match filter is about to
+      // disable a bulk-toggle button that currently holds focus, move focus to
+      // the triggering filter control FIRST, so focus is never stranded on a
+      // disabled (unfocusable) button.
+      if (
+        hasNone &&
+        trigger &&
+        (document.activeElement === expandButton ||
+          document.activeElement === collapseButton)
+      ) {
+        trigger.focus();
+      }
       // Disable both bulk-toggle buttons when the active filter matches zero
       // stories — there is nothing to expand/collapse. Runs on EVERY apply()
       // call (including "all"), so selecting a matching filter re-enables them.
-      // `disabled` on a standalone <button> removes it from the tab order
-      // without trapping focus (focus stays on the radio that triggered apply).
       if (expandButton) expandButton.disabled = hasNone;
       if (collapseButton) collapseButton.disabled = hasNone;
 
@@ -358,11 +396,37 @@
           : 'Showing ' + visible + ' of ' + total + ' stories';
 
       statusRegion.writeDebounced(message, 150);
+
+      // Post-apply focus-loss guard: if filtering left focus on nothing, the
+      // body, or inside a now-[hidden] subtree, return it to the control that
+      // triggered this apply so keyboard users keep their place.
+      var active = document.activeElement;
+      if (
+        trigger &&
+        (!active ||
+          active === document.body ||
+          (active.closest && active.closest('[hidden]')))
+      ) {
+        trigger.focus();
+      }
     }
 
-    radios.forEach(function (radio) {
-      radio.addEventListener('change', function () {
-        apply(radio);
+    filterButtons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var token = button.getAttribute('data-filter');
+        var isActive = button.getAttribute('aria-pressed') === 'true';
+        // Re-clicking the active, non-"all" filter reverts to "all". Focus stays
+        // on the clicked button — it is in the summary row and never hidden by
+        // its own action.
+        if (isActive && token !== 'all') {
+          setPressed(allButton);
+          apply('all', allButton, button);
+          return;
+        }
+        // Re-clicking the already-active "all" button is a no-op.
+        if (isActive) return;
+        setPressed(button);
+        apply(token, button, button);
       });
     });
   })();
@@ -396,6 +460,21 @@
 
     function apply(mode) {
       var shouldOpen = mode === 'expand';
+      // Collapse-all focus rescue: if focus sits inside a disclosure that is
+      // about to collapse, move it to that disclosure's <summary> first — the
+      // summary stays visible after collapse, so focus is never dropped into a
+      // hidden subtree. Expand-all reveals content, so it needs no rescue.
+      if (!shouldOpen) {
+        var active = document.activeElement;
+        var openDetails =
+          active &&
+          active.closest &&
+          active.closest('details.shots[open]');
+        if (openDetails) {
+          var summary = openDetails.querySelector('summary');
+          if (summary) summary.focus();
+        }
+      }
       var visibleStories = Array.prototype.slice.call(
         document.querySelectorAll('.story:not([hidden])'),
       );
@@ -418,13 +497,10 @@
       var verb = shouldOpen ? 'Expanded' : 'Collapsed';
       // Echo the active filter scope so the announcement matches the
       // filter-aware button label (e.g. "Expanded passed in 3 stories"). Read
-      // the checked radio at click time; use the same data-filter-name || value
-      // fallback relabelBulkToggle uses. No checked radio falls back to "all".
-      var checked = document.querySelector('.story-filter input:checked');
-      var name =
-        (checked &&
-          (checked.getAttribute('data-filter-name') || checked.value)) ||
-        'all';
+      // the pressed filter button at click time via the shared filterLabel
+      // helper. No pressed button falls back to "all".
+      var pressed = document.querySelector('.summary-filter[aria-pressed="true"]');
+      var name = filterLabel(pressed);
       bulkRegion.write(verb + ' ' + name + ' in ' + count + ' stories');
     }
 
