@@ -173,7 +173,9 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
       'collapse verb present with sr-only scope for a composed accessible name',
     );
     assert.ok(
-      html.includes('<span class="bulk-scope" aria-hidden="true">all screenshots</span>'),
+      html.includes(
+        '<span class="bulk-scope" aria-hidden="true">all screenshots</span>',
+      ),
       'shared visible scope phrase present and hidden from AT',
     );
     assert.ok(
