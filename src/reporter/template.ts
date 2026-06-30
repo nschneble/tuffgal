@@ -85,7 +85,7 @@ function renderSummary(result: RunResult): string {
       <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="expand"><span class="bulk-verb">Expand</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>
       <span class="bulk-sep" aria-hidden="true">/</span>
       <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="collapse"><span class="bulk-verb">Collapse</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>
-      <span class="bulk-scope" aria-hidden="true">all screenshots</span>
+      <span class="bulk-scope" aria-hidden="true">screenshots</span>
     </li>
   </ul>
 </section>
@@ -93,12 +93,15 @@ function renderSummary(result: RunResult): string {
 }
 
 /**
- * One status total rendered as a single-select filter button. The accessible
- * name leads with the visible "<count> <label>" and appends a visually-hidden
- * action suffix (e.g. ", show only passed stories"), composed from contents so
- * the visible text is never dropped (WCAG 2.5.3 — never an aria-label). The
- * `data-filter` token ("pass") is kept distinct from the visible label
- * ("passed") so report.js matches `story[data-status="pass"]`.
+ * One status total rendered as a single-select filter button. The visible count
+ * sits OUTSIDE the button as a sibling span and is wired to it via
+ * aria-describedby, so only the word ("passed") is the underlined link while the
+ * count still reads as the button's description. The accessible name is the
+ * visible label plus a visually-hidden action suffix (e.g. ", show only passed
+ * stories"), composed from contents so the visible text is never dropped (WCAG
+ * 2.5.3 — never an aria-label). The `data-filter` token ("pass") is kept
+ * distinct from the visible label ("passed") so report.js matches
+ * `story[data-status="pass"]`.
  */
 function summaryFilter(
   label: string,
@@ -109,10 +112,7 @@ function summaryFilter(
 ): string {
   return `
 <li class="summary-item" data-status="${filter}">
-  <button type="button" class="summary-filter" data-filter="${filter}" aria-pressed="${pressed}" aria-controls="stories-list">
-    <span class="count">${value}</span><span class="indicator label">${label}</span>
-    <span class="sr-only">${actionSuffix}</span>
-  </button>
+  <span class="count" id="summary-count-${filter}">${value}</span><button type="button" class="summary-filter" data-filter="${filter}" aria-pressed="${pressed}" aria-controls="stories-list" aria-describedby="summary-count-${filter}"><span class="indicator label">${label}</span><span class="sr-only">${actionSuffix}</span></button>
 </li>
 `;
 }

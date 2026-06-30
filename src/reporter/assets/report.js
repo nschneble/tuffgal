@@ -59,11 +59,11 @@
   var statusRegion = createStatusRegion('.story-filter-status');
   var bulkRegion = createStatusRegion('.bulk-toggle-status');
 
-  // The visible scope word for a filter button, used to relabel the bulk-toggle
-  // buttons and to echo the active filter in the bulk announcement. The button's
-  // `data-filter` carries the matcher TOKEN ("pass"); the visible `.indicator`
-  // span carries the human LABEL ("passed"). The "all" total maps to "all"
-  // regardless of its visible "stories" label. A missing button → "all".
+  // The visible label word for a filter button, used to echo the active filter
+  // in the bulk-toggle announcement (e.g. "Expanded passed in 3 stories"). The
+  // button's `data-filter` carries the matcher TOKEN ("pass"); the visible
+  // `.indicator` span carries the human LABEL ("passed"). The "all" total maps to
+  // "all" regardless of its visible "stories" label. A missing button → "all".
   function filterLabel(button) {
     if (!button) return 'all';
     if (button.getAttribute('data-filter') === 'all') return 'all';
@@ -251,33 +251,14 @@
         return button.getAttribute('data-filter') === 'all';
       }) || filterButtons[0];
 
-    // Bulk-toggle buttons re-labelled per active filter so sighted users know
-    // the toggle scope follows the filtered subset: "all screenshots" with no
-    // filter, "passed screenshots" when filtered. The static "Expand"/"Collapse"
-    // verbs are never rewritten — only the shared visible scope span and the
-    // per-button sr-only scope spans are. Writing the whole button's textContent
-    // would wipe the .bulk-verb and sr-only spans and destroy the composed
-    // accessible name, so target the scope spans by class instead. No aria-label
-    // (would risk WCAG 2.5.3 Label in Name) and no live-region write (the filter
-    // announcement already covers the context change).
+    // Cached for the zero-match disable + focus-rescue logic in apply(). The
+    // scope word is now static markup ("screenshots" visible, " all screenshots"
+    // sr-only), so the buttons are never relabelled per filter — the filter's own
+    // live-region announcement already covers the context change.
     var expandButton = document.querySelector('[data-bulk-toggle="expand"]');
     var collapseButton = document.querySelector(
       '[data-bulk-toggle="collapse"]',
     );
-
-    function relabelBulkToggle(button) {
-      var phrase = filterLabel(button) + ' screenshots';
-      var visibleScope = document.querySelector('.bulk-scope');
-      if (visibleScope) {
-        visibleScope.textContent = phrase;
-      }
-      Array.prototype.forEach.call(
-        document.querySelectorAll('.bulk-scope-sr'),
-        function (el) {
-          el.textContent = ' ' + phrase;
-        },
-      );
-    }
 
     // Maintain the single-pressed invariant: exactly one filter button carries
     // aria-pressed="true".
@@ -370,7 +351,6 @@
     }
 
     function apply(value, button, trigger) {
-      relabelBulkToggle(button);
       var visible = 0;
       stories.forEach(function (story) {
         if (applyToStory(story, value)) visible += 1;

@@ -183,29 +183,15 @@ h2 {
   color: var(--text-muted);
 }
 
-.summary-item[data-status='pass'] .indicator {
-  color: var(--pass);
-}
-
-.summary-item[data-status='new'] .indicator {
-  color: var(--new);
-}
-
-.summary-item[data-status='changed'] .indicator {
-  color: var(--changed);
-}
-
-.summary-item[data-status='failed'] .indicator {
-  color: var(--failed);
-}
-
 /* Each status total is a single-select filter styled as a plain text link. The
-   underline is the resting affordance — governed by 1.4.3 text contrast, not the
-   1.4.11 non-text floor (no border to measure). text-decoration inherits
-   currentColor, so a colored label carries a same-ratio underline. The visible
-   count + label always show, never color-alone (1.4.1). Target size ≥24×24 via
-   min-height/min-width (2.5.8). Stays a <button>: it filters in place, never
-   navigates. */
+   word ("passed") is the only underlined link; its sibling count precedes it
+   outside the button. Resting is plain --text (1.4.3 text contrast, not the
+   1.4.11 non-text floor — no border to measure); hover and pressed tint the word
+   AND its underline the status color (text-decoration inherits currentColor, so
+   they carry a same-ratio underline). The visible count + word always show, and
+   the pressed state is never color-alone (1.4.1) — bold weight + a double
+   underline carry it independently. Target size ≥24×24 via min-height/min-width
+   (2.5.8). Stays a <button>: it filters in place, never navigates. */
 .summary-filter {
   display: inline-flex;
   align-items: center;
@@ -216,12 +202,44 @@ h2 {
   line-height: 1.2;
   background: none;
   border: 0;
-  color: inherit;
+  color: var(--text);
   font: inherit;
   cursor: pointer;
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 4.5px;
+}
+
+.summary-filter .indicator {
+  color: inherit;
+}
+
+/* Hover + pressed tint the word its status color. The "all" total stays --text
+   on both: --accent equals --new, so tinting "all" blue would falsely imply the
+   "new" filter. Status colors clear 4.5:1 on --bg-elevated in both themes. */
+.summary-item[data-status='pass'] .summary-filter:hover,
+.summary-item[data-status='pass'] .summary-filter[aria-pressed='true'] {
+  color: var(--pass);
+}
+
+.summary-item[data-status='changed'] .summary-filter:hover,
+.summary-item[data-status='changed'] .summary-filter[aria-pressed='true'] {
+  color: var(--changed);
+}
+
+.summary-item[data-status='failed'] .summary-filter:hover,
+.summary-item[data-status='failed'] .summary-filter[aria-pressed='true'] {
+  color: var(--failed);
+}
+
+.summary-item[data-status='new'] .summary-filter:hover,
+.summary-item[data-status='new'] .summary-filter[aria-pressed='true'] {
+  color: var(--new);
+}
+
+.summary-item[data-status='all'] .summary-filter:hover,
+.summary-item[data-status='all'] .summary-filter[aria-pressed='true'] {
+  color: var(--text);
 }
 
 .summary-filter:hover {
@@ -319,6 +337,7 @@ h2 {
 }
 
 .story-bulk-toggle-button:hover:not(:disabled) {
+  color: var(--accent);
   text-decoration-thickness: 2px;
 }
 
@@ -346,6 +365,7 @@ h2 {
 
 .bulk-scope {
   cursor: default;
+  margin-inline-start: 0.5rem;
 }
 
 .story-filter-status {

@@ -100,31 +100,31 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list">',
+        '<button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list" aria-describedby="summary-count-all">',
       ),
       'the stories total is the default-pressed "show all" filter button',
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="summary-filter" data-filter="pass" aria-pressed="false" aria-controls="stories-list">',
+        '<button type="button" class="summary-filter" data-filter="pass" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-pass">',
       ),
       'passed total is an unpressed filter button keyed to the pass token',
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="summary-filter" data-filter="new" aria-pressed="false" aria-controls="stories-list">',
+        '<button type="button" class="summary-filter" data-filter="new" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-new">',
       ),
       'new filter button present',
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="summary-filter" data-filter="changed" aria-pressed="false" aria-controls="stories-list">',
+        '<button type="button" class="summary-filter" data-filter="changed" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-changed">',
       ),
       'changed filter button present',
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="summary-filter" data-filter="failed" aria-pressed="false" aria-controls="stories-list">',
+        '<button type="button" class="summary-filter" data-filter="failed" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-failed">',
       ),
       'failed filter button present',
     );
@@ -136,20 +136,20 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     );
   });
 
-  it('composes the filter accessible name from visible text + an sr-only action suffix', () => {
+  it('puts the count outside the button as an aria-describedby sibling and composes the name from the word + sr-only suffix', () => {
     assert.ok(
       html.includes(
-        '<span class="count">3</span><span class="indicator label">stories</span>\n    <span class="sr-only"> — show all stories</span>',
+        '<span class="count" id="summary-count-all">3</span><button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list" aria-describedby="summary-count-all"><span class="indicator label">stories</span><span class="sr-only"> — show all stories</span></button>',
       ),
-      'all button name leads with "3 stories" then " — show all stories"',
+      'count "3" precedes the button as a described-by sibling; button name is "stories — show all stories"',
     );
     assert.ok(
       html.includes(
-        '<span class="count">1</span><span class="indicator label">passed</span>\n    <span class="sr-only">, show only passed stories</span>',
+        '<span class="count" id="summary-count-pass">1</span><button type="button" class="summary-filter" data-filter="pass" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-pass"><span class="indicator label">passed</span><span class="sr-only">, show only passed stories</span></button>',
       ),
-      'passed button name leads with "1 passed" then ", show only passed stories"',
+      'count "1" precedes the passed button; button name is "passed, show only passed stories"',
     );
-    // Never an aria-label on the filter buttons (would drop the visible count).
+    // Never an aria-label on the filter buttons (would drop the visible word).
     assert.ok(
       !/class="summary-filter"[^>]*aria-label/.test(html),
       'filter buttons never carry an aria-label',
@@ -159,7 +159,7 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
   it('keeps the bulk-toggle buttons as the last items in the summary row', () => {
     // Link-styled verbs: static "Expand"/"Collapse" with an sr-only scope so the
     // accessible name reads "Expand all screenshots" while the visible scope
-    // ("all screenshots") is shared once and hidden from AT.
+    // (static "screenshots") is shared once and hidden from AT.
     assert.ok(
       html.includes(
         '<button type="button" class="story-bulk-toggle-button" data-bulk-toggle="expand"><span class="bulk-verb">Expand</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>',
@@ -174,9 +174,9 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     );
     assert.ok(
       html.includes(
-        '<span class="bulk-scope" aria-hidden="true">all screenshots</span>',
+        '<span class="bulk-scope" aria-hidden="true">screenshots</span>',
       ),
-      'shared visible scope phrase present and hidden from AT',
+      'shared static visible scope word present and hidden from AT',
     );
     assert.ok(
       html.includes('<span class="bulk-sep" aria-hidden="true">/</span>'),
@@ -259,25 +259,25 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="all">\n  <button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list">\n    <span class="count">3</span>',
+        '<li class="summary-item" data-status="all">\n  <span class="count" id="summary-count-all">3</span>',
       ),
       'stories total is 3',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="pass">\n  <button type="button" class="summary-filter" data-filter="pass" aria-pressed="false" aria-controls="stories-list">\n    <span class="count">1</span>',
+        '<li class="summary-item" data-status="pass">\n  <span class="count" id="summary-count-pass">1</span>',
       ),
       'pass tier total is 1',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="changed">\n  <button type="button" class="summary-filter" data-filter="changed" aria-pressed="false" aria-controls="stories-list">\n    <span class="count">1</span>',
+        '<li class="summary-item" data-status="changed">\n  <span class="count" id="summary-count-changed">1</span>',
       ),
       'changed tier total is 1',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="failed">\n  <button type="button" class="summary-filter" data-filter="failed" aria-pressed="false" aria-controls="stories-list">\n    <span class="count">1</span>',
+        '<li class="summary-item" data-status="failed">\n  <span class="count" id="summary-count-failed">1</span>',
       ),
       'failed tier total is 1',
     );
@@ -421,7 +421,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="new">\n  <button type="button" class="summary-filter" data-filter="new" aria-pressed="false" aria-controls="stories-list">\n    <span class="count">1</span>',
+        '<li class="summary-item" data-status="new">\n  <span class="count" id="summary-count-new">1</span><button type="button" class="summary-filter" data-filter="new" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-new">',
       ),
       'new tier total renders as a filter button in the summary',
     );
