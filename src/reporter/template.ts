@@ -82,8 +82,10 @@ function renderSummary(result: RunResult): string {
     ${summaryFilter('changed', result.totals.changed, 'changed', false, ', show only changed stories')}
     ${summaryFilter('failed', result.totals.failed, 'failed', false, ', show only failed stories')}
     <li class="story-bulk-toggle">
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all</button>
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">Collapse all</button>
+      <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="expand"><span class="bulk-verb">Expand</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>
+      <span class="bulk-sep" aria-hidden="true">/</span>
+      <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="collapse"><span class="bulk-verb">Collapse</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>
+      <span class="bulk-scope" aria-hidden="true">all screenshots</span>
     </li>
   </ul>
 </section>

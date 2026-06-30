@@ -157,17 +157,28 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
   });
 
   it('keeps the bulk-toggle buttons as the last items in the summary row', () => {
+    // Link-styled verbs: static "Expand"/"Collapse" with an sr-only scope so the
+    // accessible name reads "Expand all screenshots" while the visible scope
+    // ("all screenshots") is shared once and hidden from AT.
     assert.ok(
       html.includes(
-        '<button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all</button>',
+        '<button type="button" class="story-bulk-toggle-button" data-bulk-toggle="expand"><span class="bulk-verb">Expand</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>',
       ),
-      'expand-all bulk-toggle button present with initial "Expand all" text',
+      'expand verb present with sr-only scope for a composed accessible name',
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">Collapse all</button>',
+        '<button type="button" class="story-bulk-toggle-button" data-bulk-toggle="collapse"><span class="bulk-verb">Collapse</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>',
       ),
-      'collapse-all bulk-toggle button present with initial "Collapse all" text',
+      'collapse verb present with sr-only scope for a composed accessible name',
+    );
+    assert.ok(
+      html.includes('<span class="bulk-scope" aria-hidden="true">all screenshots</span>'),
+      'shared visible scope phrase present and hidden from AT',
+    );
+    assert.ok(
+      html.includes('<span class="bulk-sep" aria-hidden="true">/</span>'),
+      'decorative separator present and hidden from AT',
     );
     // Bulk-toggle group comes AFTER every filter button in the summary list.
     const lastFilterIndex = html.lastIndexOf('class="summary-filter"');

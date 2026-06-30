@@ -252,10 +252,13 @@
       }) || filterButtons[0];
 
     // Bulk-toggle buttons re-labelled per active filter so sighted users know
-    // the toggle is scoped to the filtered subset: "Expand all" / "Collapse
-    // all" with no filter, "Expand passed" / "Collapse passed" when filtered.
-    // This is a synchronous visible-text swap only — no aria-label (would risk
-    // WCAG 2.5.3 Label in Name) and no live-region write (the filter
+    // the toggle scope follows the filtered subset: "all screenshots" with no
+    // filter, "passed screenshots" when filtered. The static "Expand"/"Collapse"
+    // verbs are never rewritten — only the shared visible scope span and the
+    // per-button sr-only scope spans are. Writing the whole button's textContent
+    // would wipe the .bulk-verb and sr-only spans and destroy the composed
+    // accessible name, so target the scope spans by class instead. No aria-label
+    // (would risk WCAG 2.5.3 Label in Name) and no live-region write (the filter
     // announcement already covers the context change).
     var expandButton = document.querySelector('[data-bulk-toggle="expand"]');
     var collapseButton = document.querySelector(
@@ -263,13 +266,17 @@
     );
 
     function relabelBulkToggle(button) {
-      var scope = filterLabel(button);
-      if (expandButton) {
-        expandButton.textContent = 'Expand ' + scope;
+      var phrase = filterLabel(button) + ' screenshots';
+      var visibleScope = document.querySelector('.bulk-scope');
+      if (visibleScope) {
+        visibleScope.textContent = phrase;
       }
-      if (collapseButton) {
-        collapseButton.textContent = 'Collapse ' + scope;
-      }
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.bulk-scope-sr'),
+        function (el) {
+          el.textContent = ' ' + phrase;
+        },
+      );
     }
 
     // Maintain the single-pressed invariant: exactly one filter button carries

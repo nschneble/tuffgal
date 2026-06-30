@@ -8,10 +8,6 @@
   --text-subtle: #8a8a8a;
   --border: #262626;
   --border-bright: #404040;
-  /* Control boundary for interactive chrome on --bg-elevated. --border-bright
-     only reaches 1.82:1 there, below the WCAG 1.4.11 3:1 non-text floor; this
-     token clears it (3.29:1 dark / 4.54:1 light). */
-  --control-border: #666666;
   --accent: #38bdf8;
   --img-outline: rgba(255, 255, 255, 0.1);
 
@@ -41,7 +37,6 @@
     --text-subtle: #6b6b6b;
     --border: #d4d4d4;
     --border-bright: #a3a3a3;
-    --control-border: #767676;
     --accent: #0369a1;
     --img-outline: rgba(0, 0, 0, 0.1);
 
@@ -204,56 +199,51 @@ h2 {
   color: var(--failed);
 }
 
-/* Each status total is a single-select filter button. At rest it carries a
-   --control-border boundary (≥3:1 vs --bg-elevated) so it reads as an
-   interactive control without relying on hover/focus (WCAG 1.4.11). The visible
-   count + label always show, never color-alone (1.4.1). Target size ≥24×24
-   via min-height/min-width + padding (2.5.8). */
+/* Each status total is a single-select filter styled as a plain text link. The
+   underline is the resting affordance — governed by 1.4.3 text contrast, not the
+   1.4.11 non-text floor (no border to measure). text-decoration inherits
+   currentColor, so a colored label carries a same-ratio underline. The visible
+   count + label always show, never color-alone (1.4.1). Target size ≥24×24 via
+   min-height/min-width (2.5.8). Stays a <button>: it filters in place, never
+   navigates. */
 .summary-filter {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   min-height: 24px;
   min-width: 24px;
-  padding: 0.2rem 0.6rem;
-  background: transparent;
-  border: 1px solid var(--control-border);
+  padding: 0 0.15rem;
+  line-height: 1.2;
+  background: none;
+  border: 0;
   color: inherit;
   font: inherit;
   cursor: pointer;
-  transition-property: scale, border-color;
-  transition-duration: 0.15s;
-  transition-timing-function: ease;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4.5px;
 }
 
 .summary-filter:hover {
-  border-color: var(--text);
+  text-decoration-thickness: 2px;
 }
 
-.summary-filter:active {
-  scale: 0.96;
-}
-
-/* Selected filter: never color-alone. A 2px --accent border (≥3:1) plus a bold
-   label plus aria-pressed carry the state across three channels. Padding shrinks
-   1px on each axis to absorb the extra border width, so toggling never reflows
-   the row. */
+/* Selected filter: never color-alone. A double underline plus bold weight carry
+   the state across two grayscale-perceivable channels; aria-pressed is the
+   programmatic source of truth. */
 .summary-filter[aria-pressed='true'] {
-  padding: calc(0.2rem - 1px) calc(0.6rem - 1px);
-  border-width: 2px;
-  border-color: var(--accent);
+  font-weight: 700;
+  text-decoration-style: double;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4.5px;
 }
 
-.summary-filter[aria-pressed='true'] .indicator {
-  font-weight: 600;
-}
-
-/* Two-tone focus ring: a --bg-elevated outline separates the control from the
-   --accent halo, so it survives the dark-mode collision where --accent equals
-   the --new tier color and the selected border. */
+/* Simple accent focus ring: the old two-tone ring existed only to separate the
+   halo from the resting accent border, which is gone. 8.8:1 dark / 5.9:1 light
+   vs --bg-elevated clears 1.4.11/2.4.13. */
 .summary-filter:focus-visible {
-  outline: 2px solid var(--bg-elevated);
-  box-shadow: 0 0 0 4px var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .chip {
@@ -302,29 +292,60 @@ h2 {
    while staying the LAST flex children so DOM order matches the visual order. */
 .story-bulk-toggle {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 0.25rem;
   margin-left: auto;
-}
-
-.story-bulk-toggle-button {
-  background: transparent;
-  font: inherit;
+  line-height: 24px;
   font-size: 0.8125rem;
-  min-height: 24px;
-  /* On --bg-elevated --border-bright fails 1.4.11; match the filter buttons'
-     --control-border so the whole control row clears the 3:1 floor. */
-  border-color: var(--control-border);
 }
 
-.story-bulk-toggle-button:hover {
+/* Link-styled verbs ("Expand" / "Collapse") — still <button>s, they act in
+   place. The underline is the affordance; verbs exceed 24px wide intrinsically,
+   so min-height alone carries 2.5.8. */
+.story-bulk-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0;
+  background: none;
+  border: 0;
   color: var(--text);
-  border-color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  vertical-align: middle;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4.5px;
+}
+
+.story-bulk-toggle-button:hover:not(:disabled) {
+  text-decoration-thickness: 2px;
 }
 
 .story-bulk-toggle-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* Disabled verb: removing the underline is the color-independent cue (no
+   opacity — it can compound below the contrast floor). Disabled controls are
+   1.4.3/1.4.11 exempt, but the state stays perceptible without color. */
+.story-bulk-toggle-button:disabled {
+  color: var(--text-subtle);
+  text-decoration: none;
+  cursor: not-allowed;
+}
+
+/* Shared decorative scope phrase + separator: still meaningful visible text
+   (1.4.3 applies despite aria-hidden), dimmed via --text-subtle (≥5.3:1 both
+   themes). */
+.bulk-scope,
+.bulk-sep {
+  color: var(--text-subtle);
+}
+
+.bulk-scope {
+  cursor: default;
 }
 
 .story-filter-status {
@@ -741,12 +762,10 @@ summary.action-row:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
   summary.action-row::after,
-  .chip,
-  .summary-filter {
+  .chip {
     transition: none;
   }
-  .chip:active,
-  .summary-filter:active {
+  .chip:active {
     scale: none;
   }
 }
