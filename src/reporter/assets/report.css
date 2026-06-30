@@ -738,6 +738,34 @@ summary.action-row:focus-visible {
   border: 0;
 }
 
+/* interactiveMode: chip buttons collapsed by default — sighted mouse users
+   drive the viewer with the hover/press gesture on the stage. Clip (never
+   display/visibility/inert) so the nested radio stays focusable and keeps
+   its accessible name. Mirrors .sr-only. */
+.shot-interactive .shot-radio-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Reveal the whole chip group when a keyboard user focuses any radio.
+   :focus-within needs no :has() fallback and never fires for mouse/touch
+   (label clipped, input pointer-events:none → radios are keyboard-only
+   reachable). Specificity (0,3,0) beats the collapse rule (0,2,0). */
+.shot-interactive:focus-within .shot-radio-label {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
 /* Persistent caption naming the committed variant. Text on `--text` (≥4.5:1),
    so the active variant is never conveyed by color alone — it pairs the checked
    chip's accent border with this readable label. aria-hidden keeps it visual

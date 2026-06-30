@@ -918,6 +918,88 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
   });
 });
 
+describe('renderScreenshots — interactiveMode dimension-mismatch fallback (Request 7)', () => {
+  // A baseline/actual dimension mismatch yields status:changed + failureMessage
+  // but no diffRatio/diffPath: the diff is uncomputable, so the hover/press
+  // viewer has no diff to reveal. interactiveMode must fall back to the radio-tab
+  // render (visible chips, baseline + actual, disabled diff carrying the reason).
+  function mismatchResult(actionOverrides: Partial<ActionResult> = {}) {
+    return makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              actualPath: '/fake/report/dir/shots/settings.actual.png',
+              baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+              failureMessage:
+                'Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+              ...actionOverrides,
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it('falls back to the radio-tab fieldset, not the interactive viewer', () => {
+    const html = renderReport(mismatchResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes('<fieldset class="shot-radio"'),
+      'the radio-tab fieldset renders for an uncomputable diff in interactiveMode',
+    );
+    assert.ok(
+      !html.includes('class="shot-interactive"'),
+      'the interactive hover/press viewer does not render for a dimension mismatch',
+    );
+    // Both real variants render as radios → the full fieldset, not the collapsed
+    // lone-image path (soleVariant.length === 2).
+    assert.ok(html.includes('value="baseline"'), 'baseline radio renders');
+    assert.ok(html.includes('value="actual"'), 'actual radio renders');
+  });
+
+  it('wires the disabled diff radio aria-describedby to the unavailable note', () => {
+    const html = renderReport(mismatchResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes('diff-stats--unavailable'),
+      'the unavailable note renders inside the fieldset',
+    );
+    assert.ok(
+      html.includes('id="s0-a0-diff-stats"'),
+      'the unavailable note carries the referenced id',
+    );
+    assert.match(
+      html,
+      /value="diff"[^>]*aria-describedby="s0-a0-diff-stats"/s,
+      'the disabled diff radio is described by the unavailable note so AT hears the reason',
+    );
+  });
+
+  it('still uses the interactive viewer when the diff is computable', () => {
+    const html = renderReport(
+      mismatchResult({
+        failureMessage: undefined,
+        diffPath: '/fake/report/dir/shots/settings.diff.png',
+        diffPixels: 1234,
+        diffRatio: 0.012,
+      }),
+      REPORT_DIR,
+      true,
+    );
+    assert.ok(
+      html.includes('class="shot-interactive"'),
+      'a normal changed action still uses the interactive viewer',
+    );
+    assert.ok(
+      !html.includes('<fieldset class="shot-radio"'),
+      'no radio-tab fallback when the diff is computable',
+    );
+  });
+});
+
 describe('formatDate — friendly report-meta timestamp', () => {
   // formatDate is module-private; assert through renderReport's rendered output
   // (the friendly text appears in the <title> and the report-meta <time>). TZ is

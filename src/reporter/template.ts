@@ -370,7 +370,20 @@ function renderScreenshots(
   // interactiveMode swaps the radio-tab output for the single-image hover/press
   // viewer. When it is false the function falls through to the radio-tab output
   // below, byte-identical with the pre-interactiveMode render.
-  if (interactiveMode) {
+  //
+  // Request 7: when the baseline and actual differ in dimensions the diff is
+  // uncomputable (renderDiffStats' unavailable branch — both paths present,
+  // `changed` status, a recorded failureMessage, no diffRatio). The hover/press
+  // gesture has no diff image to reveal, so fall back to the radio-tab render:
+  // visible chips, baseline + actual, and the disabled diff option carrying the
+  // mismatch reason.
+  const diffUncomputable =
+    action.baselinePath !== undefined &&
+    action.actualPath !== undefined &&
+    action.diffRatio === undefined &&
+    action.status === 'changed' &&
+    action.failureMessage !== undefined;
+  if (interactiveMode && !diffUncomputable) {
     return renderInteractiveScreenshots(action, actionId, reportDir);
   }
   // A `new` baseline writes its baseline straight from this run's actual, so the
@@ -397,6 +410,15 @@ function renderScreenshots(
         );
   const diffStatsId = `${actionId}-diff-stats`;
   const diffStats = renderDiffStats(action, diffStatsId);
+  // renderDiffStats emits the `diff-stats--unavailable` note (with this id) when
+  // the diff is uncomputable. The diff radio is disabled in that case, so wire
+  // its aria-describedby to the note — a keyboard/AT user reaching the disabled
+  // diff option then hears why no diff exists. (The diff PANEL only takes the
+  // association when a real diff image renders, below.)
+  const diffNoteUnavailable =
+    action.diffRatio === undefined &&
+    action.status === 'changed' &&
+    action.failureMessage !== undefined;
   // When only one variant is real (the common case for a `new` baseline, whose
   // baseline is suppressed and has no diff), a radio group offering a single
   // choice is noise to AT. Drop the controls and show the image alone; the row's
@@ -424,7 +446,7 @@ function renderScreenshots(
   <legend class="sr-only">Screenshot to display</legend>
   ${shotRadio(actionId, 'baseline', baseline === undefined, initialTab === 'baseline')}
   ${shotRadio(actionId, 'actual', actual === undefined, initialTab === 'actual')}
-  ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff')}
+  ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff', diffNoteUnavailable ? { describedById: diffStatsId } : undefined)}
   ${diffStats}
 </fieldset>
 ${shotPanel(actionId, 'baseline', baseline, SHOT_ALT.baseline(action), initialTab === 'baseline')}
