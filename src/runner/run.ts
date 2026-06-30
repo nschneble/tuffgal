@@ -37,6 +37,12 @@ export interface RunCliOptions {
   coverage?: boolean;
 }
 
+/** One Summary bullet's data: a breakpoint name and that pass's own counts. */
+interface PassSummary {
+  name: string;
+  counts: RunResult['totals'];
+}
+
 const HEARTBEAT_FILE = '.heartbeat';
 
 /**
@@ -89,20 +95,24 @@ export async function runAll(
     // pass starts from a fresh reset. Results are merged back per story below.
     const partsByFile = new Map<string, StoryResult[]>();
     const order: string[] = [];
+    const passSummaries: PassSummary[] = [];
     for (const breakpoint of passes) {
       const participating = subset.filter((item) =>
         storyRendersAt(item, config, breakpoint),
       );
       if (participating.length === 0) continue;
+      // Header for every pass — single- and multi-breakpoint alike. The reset
+      // sits beneath the header so the "fresh database" line reads as part of
+      // this pass's setup; a trailing blank line then separates setup from the
+      // streaming result lines.
+      process.stdout.write(
+        `\nStarting "${breakpoint.name}" breakpoint pass at ${breakpoint.width}x${breakpoint.height}\n`,
+      );
       if (config.database?.reset) {
         process.stdout.write('Resetting test database…\n');
         await resetDatabase(config);
       }
-      if (multiPass) {
-        process.stdout.write(
-          `▷ ${breakpoint.name} ${breakpoint.width}×${breakpoint.height}\n`,
-        );
-      }
+      process.stdout.write('\n');
       const passResults = await drainSchedule(
         adaptNeedsForPass(participating),
         workerCount,
@@ -115,12 +125,16 @@ export async function runAll(
             coverage,
             breakpoint,
           ),
-        (item) => process.stdout.write(`▶ ${item.file}\n`),
-        (item, result) =>
+        () => {},
+        (_item, result) =>
           process.stdout.write(
-            `  ${result.status.toUpperCase()} ${item.file} (${result.actions.length} actions, ${result.durationMs} ms)\n`,
+            `${formatResultLine(result.status, result.actions.length, result.durationMs, result.file)}\n`,
           ),
       );
+      passSummaries.push({
+        name: breakpoint.name,
+        counts: summarise(passResults),
+      });
       for (const result of passResults) {
         let parts = partsByFile.get(result.file);
         if (!parts) {
@@ -153,7 +167,7 @@ export async function runAll(
       runResult,
       config.interactiveMode,
     );
-    writeRunSummary(results, runResult.totals, reportPath);
+    writeRunSummary(passSummaries, reportPath);
     if (coverage) {
       const coveragePath = await coverage.generate();
       process.stdout.write(`Coverage: ${coveragePath}\n`);
@@ -232,55 +246,67 @@ function summarise(results: StoryResult[]): RunResult['totals'] {
   };
 }
 
+/** Status → leading glyph for a streaming result line. */
+const STATUS_SYMBOL: Record<StoryStatus, string> = {
+  pass: '✓',
+  changed: '~',
+  new: '+',
+  failed: '✗',
+};
+
 /**
- * Emits the end-of-run tail. The streaming `▶`/`PASS|CHANGED|FAILED` lines
- * already cover the heartbeat; this groups the noteworthy stories
- * (changed + failed) in finish order so a user scanning the terminal lands
- * on the actionable list directly above the totals. The `Report:` line is
- * a `file://` URL so terminals that recognise file URIs (iTerm2, Warp, VS
- * Code) render it as a clickable link.
+ * One streaming finish line: `<symbol> <actionCount> <elapsed>s <stem>`. The
+ * count is how many steps the story ran, the elapsed time is wall-clock
+ * duration to hundredths of a second, and the stem is the story file without
+ * its `.json` extension.
  */
-function writeRunSummary(
-  results: StoryResult[],
-  totals: RunResult['totals'],
-  reportPath: string,
-): void {
-  const newStories = results.filter((result) => result.status === 'new');
-  const changed = results.filter((result) => result.status === 'changed');
-  const failed = results.filter((result) => result.status === 'failed');
-
-  if (newStories.length > 0 || changed.length > 0 || failed.length > 0) {
-    process.stdout.write('\n');
-    if (newStories.length > 0) {
-      process.stdout.write('New:\n');
-      for (const result of newStories) {
-        process.stdout.write(`  ${formatSummaryLine(result)}\n`);
-      }
-    }
-    if (changed.length > 0) {
-      process.stdout.write('Changed:\n');
-      for (const result of changed) {
-        process.stdout.write(`  ${formatSummaryLine(result)}\n`);
-      }
-    }
-    if (failed.length > 0) {
-      process.stdout.write('Failed:\n');
-      for (const result of failed) {
-        process.stdout.write(`  ${formatSummaryLine(result)}\n`);
-      }
-    }
-  }
-
-  process.stdout.write(
-    `\nTotals: ${totals.passed} pass · ${totals.new} new · ${totals.changed} changed · ${totals.failed} failed\n`,
-  );
-  process.stdout.write(`Report: ${pathToFileURL(reportPath).href}\n`);
+export function formatResultLine(
+  status: StoryStatus,
+  actionCount: number,
+  durationMs: number,
+  file: string,
+): string {
+  const elapsed = (durationMs / 1000).toFixed(2);
+  const stem = file.replace(/\.json$/, '');
+  return `${STATUS_SYMBOL[status]} ${actionCount} ${elapsed}s ${stem}`;
 }
 
-function formatSummaryLine(result: StoryResult): string {
-  const base = `${result.status.toUpperCase()} ${result.file} — ${result.story} (${result.actions.length} actions, ${result.durationMs} ms)`;
-  const driving = drivingBreakpoints(result);
-  return driving.length > 0 ? `${base} [${driving.join(' · ')}]` : base;
+/**
+ * One Summary bullet for a breakpoint pass: `• <parts> on "<name>" breakpoint`,
+ * where `<parts>` joins only the nonzero outcome categories in a fixed order
+ * (passed, new, changed, failed) — e.g. `2 passed, 1 changed`. Falls back to
+ * `0 passed` for the degenerate all-zero pass the run loop never actually
+ * emits (it `continue`s past a pass with no participating stories).
+ */
+export function formatSummaryBullet(
+  name: string,
+  counts: RunResult['totals'],
+): string {
+  const parts: string[] = [];
+  if (counts.passed > 0) parts.push(`${counts.passed} passed`);
+  if (counts.new > 0) parts.push(`${counts.new} new`);
+  if (counts.changed > 0) parts.push(`${counts.changed} changed`);
+  if (counts.failed > 0) parts.push(`${counts.failed} failed`);
+  const summary = parts.length > 0 ? parts.join(', ') : '0 passed';
+  return `• ${summary} on "${name}" breakpoint`;
+}
+
+/**
+ * Emits the end-of-run tail: a `Summary` section with one bullet per breakpoint
+ * pass — counted from that pass's own results, not the merged-across-passes
+ * rollup — then the `Report:` line. The report link is a `file://` URL so
+ * terminals that recognise file URIs (iTerm2, Warp, VS Code) render it as a
+ * clickable link.
+ */
+function writeRunSummary(
+  passSummaries: PassSummary[],
+  reportPath: string,
+): void {
+  process.stdout.write('\nSummary\n');
+  for (const pass of passSummaries) {
+    process.stdout.write(`${formatSummaryBullet(pass.name, pass.counts)}\n`);
+  }
+  process.stdout.write(`\nReport: ${pathToFileURL(reportPath).href}\n`);
 }
 
 /**
