@@ -10,7 +10,7 @@
   --border-bright: #404040;
   /* Control boundary for interactive chrome on --bg-elevated. --border-bright
      only reaches 1.82:1 there, below the WCAG 1.4.11 3:1 non-text floor; this
-     token clears it (3.23:1 dark / 4.54:1 light). */
+     token clears it (3.29:1 dark / 4.54:1 light). */
   --control-border: #666666;
   --accent: #38bdf8;
   --img-outline: rgba(255, 255, 255, 0.1);
