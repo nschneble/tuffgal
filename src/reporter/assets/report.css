@@ -160,16 +160,12 @@ h2 {
 .summary-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.25rem;
+  gap: 0.5rem;
   margin: 0;
   padding: 0.75rem 1rem;
   list-style: none;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-}
-
-.summary-item:not(.coverage) + .summary-item.coverage {
-  margin-left: auto;
 }
 
 .summary-item {
@@ -181,31 +177,77 @@ h2 {
 
 .summary-item .count {
   font-weight: 600;
+  color: var(--text-subtle);
 }
 
-.summary-item .label {
-  color: var(--text-muted);
+/* Each status total is a single-select filter styled as a plain text link. The
+   word ("passed") is the only underlined link; its sibling count precedes it
+   outside the button. Resting is plain --text (1.4.3 text contrast, not the
+   1.4.11 non-text floor — no border to measure); hover and pressed tint the word
+   AND its underline the status color (text-decoration inherits currentColor, so
+   they carry a same-ratio underline). The visible count + word always show, and
+   the pressed state is never color-alone (1.4.1) — bold weight + a double
+   underline carry it independently. Target size ≥24×24 via min-height/min-width
+   (2.5.8). Stays a <button>: it filters in place, never navigates. */
+.summary-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 0.15rem;
+  line-height: 1.2;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4.5px;
 }
 
-.summary-item[data-status='pass'] .indicator {
+.summary-filter[aria-pressed='true'] {
+  cursor: default;
+  user-select: none;
+}
+
+/* Hover + pressed tint the word its status color. The "all" total stays --text
+   on both: --accent equals --new, so tinting "all" blue would falsely imply the
+   "new" filter. Status colors clear 4.5:1 on --bg-elevated in both themes. */
+.summary-item[data-status='pass'] .summary-filter:hover,
+.summary-item[data-status='pass'] .summary-filter[aria-pressed='true'] {
   color: var(--pass);
 }
 
-.summary-item[data-status='new'] .indicator {
-  color: var(--new);
-}
-
-.summary-item[data-status='changed'] .indicator {
+.summary-item[data-status='changed'] .summary-filter:hover,
+.summary-item[data-status='changed'] .summary-filter[aria-pressed='true'] {
   color: var(--changed);
 }
 
-.summary-item[data-status='failed'] .indicator {
+.summary-item[data-status='failed'] .summary-filter:hover,
+.summary-item[data-status='failed'] .summary-filter[aria-pressed='true'] {
   color: var(--failed);
 }
 
-.summary-item.coverage .coverage-detail {
-  color: var(--text-subtle);
-  font-size: 0.8125rem;
+.summary-item[data-status='new'] .summary-filter:hover,
+.summary-item[data-status='new'] .summary-filter[aria-pressed='true'] {
+  color: var(--new);
+}
+
+.summary-item[data-status='all'] .summary-filter:hover,
+.summary-item[data-status='all'] .summary-filter[aria-pressed='true'] {
+  color: var(--text);
+}
+
+.summary-filter:hover,
+.summary-filter[aria-pressed='true'] {
+  text-decoration-style: double;
+}
+
+.summary-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .chip {
@@ -249,55 +291,40 @@ h2 {
   }
 }
 
-.stories-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
-  margin: 0 0 0.75rem;
-}
-
-.story-filter {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.story-filter legend {
-  padding: 0 0.5rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.story-filter-label input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
+/* The expand-all / collapse-all pair now lives at the right end of the summary
+   row (the slot the coverage stats vacated), pushed there by margin-left:auto
+   while staying the LAST flex children so DOM order matches the visual order. */
 .story-bulk-toggle {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 0.25rem;
   margin-left: auto;
-}
-
-.story-bulk-toggle-button {
-  background: transparent;
-  font: inherit;
+  line-height: 24px;
   font-size: 0.8125rem;
-  min-height: 24px;
 }
 
-.story-bulk-toggle-button:hover {
+/* Link-styled verbs ("Expand" / "Collapse") — still <button>s, they act in
+   place. The underline is the affordance; verbs exceed 24px wide intrinsically,
+   so min-height alone carries 2.5.8. */
+.story-bulk-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0;
+  background: none;
+  border: 0;
   color: var(--text);
-  border-color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  vertical-align: middle;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4.5px;
+}
+
+.story-bulk-toggle-button:hover:not(:disabled) {
+  color: var(--accent);
+  text-decoration-thickness: 2px;
 }
 
 .story-bulk-toggle-button:focus-visible {
@@ -305,8 +332,31 @@ h2 {
   outline-offset: 1px;
 }
 
+/* Disabled verb: removing the underline is the color-independent cue (no
+   opacity — it can compound below the contrast floor). Disabled controls are
+   1.4.3/1.4.11 exempt, but the state stays perceptible without color. */
+.story-bulk-toggle-button:disabled {
+  color: var(--text-subtle);
+  text-decoration: none;
+  cursor: not-allowed;
+}
+
+.bulk-scope,
+.bulk-sep {
+  color: var(--text-subtle);
+}
+
+.summary-item:has(+ .story-bulk-toggle) .bulk-sep {
+  display: none;
+}
+
+.bulk-scope {
+  cursor: default;
+  margin-inline-start: 0.25rem;
+}
+
 .story-filter-status {
-  margin: 0;
+  margin: 0 0 0.75rem;
   color: var(--text-subtle);
   font-size: 0.8125rem;
 }
@@ -673,6 +723,34 @@ summary.action-row:focus-visible {
   margin: 0.5rem 0 0.5rem 2.2rem;
   padding: 0;
   border: 0;
+}
+
+/* interactiveMode: chip buttons collapsed by default — sighted mouse users
+   drive the viewer with the hover/press gesture on the stage. Clip (never
+   display/visibility/inert) so the nested radio stays focusable and keeps
+   its accessible name. Mirrors .sr-only. */
+.shot-interactive .shot-radio-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Reveal the whole chip group when a keyboard user focuses any radio.
+   :focus-within needs no :has() fallback and never fires for mouse/touch
+   (label clipped, input pointer-events:none → radios are keyboard-only
+   reachable). Specificity (0,3,0) beats the collapse rule (0,2,0). */
+.shot-interactive:focus-within .shot-radio-label {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
 }
 
 /* Persistent caption naming the committed variant. Text on `--text` (≥4.5:1),

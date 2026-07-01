@@ -2,7 +2,6 @@ import { relative } from 'node:path';
 import type {
   ActionResult,
   ActionStatus,
-  CoverageMetric,
   RunResult,
   StoryResult,
 } from '../schema/result.ts';
@@ -63,46 +62,58 @@ export function renderReport(
 `;
 }
 
+/**
+ * The status totals double as the report's filter controls: each is a native
+ * `<button aria-pressed>` single-select filter, with the "stories" total acting
+ * as the "show all / clear" control (pressed by default). The expand-all /
+ * collapse-all pair sits at the right end of the same row — the slot the old
+ * coverage stats used to occupy. The `<ul>` stays a plain list (no composite
+ * role): a non-filter total and the bulk-toggle group share it, so a
+ * radiogroup/fieldset could not cleanly scope just the filters.
+ */
 function renderSummary(result: RunResult): string {
-  const screens = result.customCoverage.screens;
-  const flows = result.customCoverage.flows;
   return `
 <section class="summary" aria-labelledby="summary-heading">
   <h2 id="summary-heading">summary</h2>
   <ul class="summary-list" aria-label="Run totals">
-    ${summaryItem('stories', result.totals.stories)}
-    ${summaryItem('passed', result.totals.passed, 'pass')}
-    ${summaryItem('new', result.totals.new, 'new')}
-    ${summaryItem('changed', result.totals.changed, 'changed')}
-    ${summaryItem('failed', result.totals.failed, 'failed')}
-    ${coverageItem('screens', screens)}
-    ${coverageItem('flows', flows)}
+    ${summaryFilter('stories', result.totals.stories, 'all', true, ' — show all stories')}
+    ${summaryFilter('passed', result.totals.passed, 'pass', false, ', show only passed stories')}
+    ${summaryFilter('new', result.totals.new, 'new', false, ', show only new stories')}
+    ${summaryFilter('changed', result.totals.changed, 'changed', false, ', show only changed stories')}
+    ${summaryFilter('failed', result.totals.failed, 'failed', false, ', show only failed stories')}
+    <li class="story-bulk-toggle">
+      <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="expand"><span class="bulk-verb">Expand</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>
+      <span class="bulk-sep" aria-hidden="true">/</span>
+      <button type="button" class="story-bulk-toggle-button" data-bulk-toggle="collapse"><span class="bulk-verb">Collapse</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>
+      <span class="bulk-scope" aria-hidden="true">screenshots</span>
+    </li>
   </ul>
 </section>
 `;
 }
 
-function coverageItem(label: string, metric: CoverageMetric): string {
-  const pct = `${(metric.ratio * 100).toFixed(0)}%`;
-  return `
-<li class="summary-item coverage">
-  <span class="count">${pct}</span>
-  <span class="label">${label}</span>
-  <span class="coverage-detail" aria-hidden="true">· ${metric.covered}/${metric.total}</span>
-  <span class="sr-only">${metric.covered} of ${metric.total} ${label} covered</span>
-</li>
-`;
-}
-
-function summaryItem(
+/**
+ * One status total rendered as a single-select filter button. The visible count
+ * sits OUTSIDE the button as a sibling span and is wired to it via
+ * aria-describedby, so only the word ("passed") is the underlined link while the
+ * count still reads as the button's description. The accessible name is the
+ * visible label plus a visually-hidden action suffix (e.g. ", show only passed
+ * stories"), composed from contents so the visible text is never dropped (WCAG
+ * 2.5.3 — never an aria-label). The `data-filter` token ("pass") is kept
+ * distinct from the visible label ("passed") so report.js matches
+ * `story[data-status="pass"]`.
+ */
+function summaryFilter(
   label: string,
   value: number,
-  statusKey?: ActionStatus,
+  filter: 'all' | ActionStatus,
+  pressed: boolean,
+  actionSuffix: string,
 ): string {
   return `
-<li class="summary-item"${statusKey ? ` data-status="${statusKey}"` : ''}>
-  <span class="count">${value}</span>
-  <span class="indicator label">${label}</span>
+<li class="summary-item" data-status="${filter}">
+  <span class="count" id="summary-count-${filter}">${value}</span><button type="button" class="summary-filter" data-filter="${filter}" aria-pressed="${pressed}" aria-controls="stories-list" aria-describedby="summary-count-${filter}"><span class="indicator label">${label}</span><span class="sr-only">${actionSuffix}</span></button>
+  <span class="bulk-sep" aria-hidden="true">·</span>
 </li>
 `;
 }
@@ -118,48 +129,20 @@ function renderStories(
     )
     .join('\n');
   const total = result.stories.length;
+  // The interactive controls now live in the summary row; this section keeps
+  // only the two live regions (both server-rendered between the heading and the
+  // list so a screen reader announces filter/bulk changes reliably) and the
+  // list itself, whose id the summary filter buttons target via aria-controls.
   return `
 <section aria-labelledby="stories-heading">
   <h2 id="stories-heading">stories</h2>
-  <div class="stories-toolbar">
-    <fieldset class="story-filter">
-      <legend class="sr-only">filter</legend>
-      ${storyFilterRadio('all', true)}
-      ${storyFilterRadio('passed', false)}
-      ${storyFilterRadio('new', false)}
-      ${storyFilterRadio('changed', false)}
-      ${storyFilterRadio('failed', false)}
-    </fieldset>
-    <p class="story-filter-status" role="status" aria-live="polite">Showing all ${total} stories</p>
-    <div class="story-bulk-toggle">
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand">Expand all</button>
-      <button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse">Collapse all</button>
-    </div>
-    <p class="bulk-toggle-status sr-only" role="status" aria-live="polite"></p>
-  </div>
-  <ol class="stories" aria-label="Stories executed in dependency order">
+  <p class="story-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all ${total} stories</p>
+  <p class="bulk-toggle-status sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+  <ol class="stories" id="stories-list" aria-label="Stories executed in dependency order">
     ${items}
   </ol>
   <p class="stories-empty" hidden>No matching stories</p>
 </section>
-`;
-}
-
-function storyFilterRadio(status: string, checked: boolean): string {
-  const inputId = `story-filter-${status}`;
-  const value = status === 'passed' ? 'pass' : status;
-  return `
-<label for="${inputId}" class="chip chip--toggle story-filter-label">
-  <input
-    type="radio"
-    name="story-filter"
-    id="${inputId}"
-    value="${value}"
-    data-filter-name="${status}"
-    ${checked ? 'checked' : ''}
-  />
-  ${status}
-</label>
 `;
 }
 
@@ -376,6 +359,21 @@ function renderParameters(
   return `<dl class="action-parameters">${entries}</dl>`;
 }
 
+/**
+ * A "changed" row whose diff could not be computed: baseline and actual differ
+ * in dimensions, so pixelmatch throws before producing a diffRatio or diff
+ * image, leaving only the recorded failureMessage. Centralizes the predicate
+ * shared by the radio fallback, the diff radio's describedby wiring, and
+ * renderDiffStats' unavailable note.
+ */
+function isDiffUnavailable(action: ActionResult): boolean {
+  return (
+    action.diffRatio === undefined &&
+    action.status === 'changed' &&
+    !!action.failureMessage
+  );
+}
+
 function renderScreenshots(
   action: ActionResult,
   actionId: string,
@@ -388,7 +386,17 @@ function renderScreenshots(
   // interactiveMode swaps the radio-tab output for the single-image hover/press
   // viewer. When it is false the function falls through to the radio-tab output
   // below, byte-identical with the pre-interactiveMode render.
-  if (interactiveMode) {
+  //
+  // When the baseline and actual differ in dimensions the diff is uncomputable
+  // (renderDiffStats' unavailable branch — both paths present, `changed` status,
+  // a recorded failureMessage, no diffRatio). The hover/press gesture has no diff
+  // image to reveal, so fall back to the radio-tab render: visible chips,
+  // baseline + actual, and the disabled diff option carrying the mismatch reason.
+  const diffUncomputable =
+    action.baselinePath !== undefined &&
+    action.actualPath !== undefined &&
+    isDiffUnavailable(action);
+  if (interactiveMode && !diffUncomputable) {
     return renderInteractiveScreenshots(action, actionId, reportDir);
   }
   // A `new` baseline writes its baseline straight from this run's actual, so the
@@ -405,7 +413,7 @@ function renderScreenshots(
   const diff = action.diffPath
     ? toReportRelative(reportDir, action.diffPath)
     : undefined;
-  const defaultTab = diff ? 'diff' : 'actual';
+  const defaultTab = 'actual';
   const available = { baseline, actual, diff };
   const initialTab =
     available[defaultTab] !== undefined
@@ -415,6 +423,12 @@ function renderScreenshots(
         );
   const diffStatsId = `${actionId}-diff-stats`;
   const diffStats = renderDiffStats(action, diffStatsId);
+  // renderDiffStats emits the `diff-stats--unavailable` note (with this id) when
+  // the diff is uncomputable. The diff radio is disabled in that case, so wire
+  // its aria-describedby to the note — a keyboard/AT user reaching the disabled
+  // diff option then hears why no diff exists. (The diff PANEL only takes the
+  // association when a real diff image renders, below.)
+  const diffNoteUnavailable = isDiffUnavailable(action);
   // When only one variant is real (the common case for a `new` baseline, whose
   // baseline is suppressed and has no diff), a radio group offering a single
   // choice is noise to AT. Drop the controls and show the image alone; the row's
@@ -442,7 +456,7 @@ function renderScreenshots(
   <legend class="sr-only">Screenshot to display</legend>
   ${shotRadio(actionId, 'baseline', baseline === undefined, initialTab === 'baseline')}
   ${shotRadio(actionId, 'actual', actual === undefined, initialTab === 'actual')}
-  ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff')}
+  ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff', diffNoteUnavailable ? { describedById: diffStatsId } : undefined)}
   ${diffStats}
 </fieldset>
 ${shotPanel(actionId, 'baseline', baseline, SHOT_ALT.baseline(action), initialTab === 'baseline')}
@@ -488,6 +502,9 @@ function renderDiffStats(action: ActionResult, diffStatsId: string): string {
  * variant — and its radio — is omitted entirely (not disabled) when this action
  * produced no diff image; the existing diff-stats association then rides on the
  * diff radio control rather than the image, leaving no dangling describedby.
+ * (Distinct from the dimension-mismatch case, where the diff is uncomputable:
+ * renderScreenshots never reaches this viewer and instead falls back to the
+ * radio-tab render with a disabled — not omitted — diff radio.)
  */
 function renderInteractiveScreenshots(
   action: ActionResult,

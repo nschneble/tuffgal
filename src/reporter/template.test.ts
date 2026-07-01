@@ -93,72 +93,142 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
   });
   const html = renderReport(result, REPORT_DIR);
 
-  it('renders the stories toolbar with filter radios and bulk-toggle buttons', () => {
+  it('renders each status total as a single-select aria-pressed filter button', () => {
     assert.ok(
-      html.includes('<fieldset class="story-filter">'),
-      'story-filter fieldset present',
-    );
-    assert.ok(html.includes('value="all"'), 'all radio present');
-    assert.ok(html.includes('value="pass"'), 'pass radio present');
-    assert.ok(html.includes('value="new"'), 'new radio present');
-    assert.ok(html.includes('value="changed"'), 'changed radio present');
-    assert.ok(html.includes('value="failed"'), 'failed radio present');
-    assert.match(
-      html,
-      /<input[^>]*value="all"[^>]*checked/s,
-      'all radio is the default-checked radio',
+      !html.includes('<fieldset class="story-filter">'),
+      'the old radio filter fieldset is gone',
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="expand"',
+        '<button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list" aria-describedby="summary-count-all">',
       ),
-      'expand-all bulk-toggle button present',
+      'the stories total is the default-pressed "show all" filter button',
     );
     assert.ok(
       html.includes(
-        '<button type="button" class="chip story-bulk-toggle-button" data-bulk-toggle="collapse"',
+        '<button type="button" class="summary-filter" data-filter="pass" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-pass">',
       ),
-      'collapse-all bulk-toggle button present',
+      'passed total is an unpressed filter button keyed to the pass token',
     );
     assert.ok(
-      html.includes('data-bulk-toggle="expand">Expand all</button>'),
-      'expand button has filter-agnostic "Expand all" initial text',
+      html.includes(
+        '<button type="button" class="summary-filter" data-filter="new" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-new">',
+      ),
+      'new filter button present',
     );
     assert.ok(
-      html.includes('data-bulk-toggle="collapse">Collapse all</button>'),
-      'collapse button has filter-agnostic "Collapse all" initial text',
+      html.includes(
+        '<button type="button" class="summary-filter" data-filter="changed" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-changed">',
+      ),
+      'changed filter button present',
+    );
+    assert.ok(
+      html.includes(
+        '<button type="button" class="summary-filter" data-filter="failed" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-failed">',
+      ),
+      'failed filter button present',
+    );
+    // Exactly one button is pressed by default: the "all" total.
+    assert.equal(
+      countOccurrences(html, 'aria-pressed="true"'),
+      1,
+      'exactly one filter button is pressed at load',
     );
   });
 
-  it('orders the toolbar DOM filters → status → bulk-toggle buttons', () => {
-    const fieldsetIndex = html.indexOf('<fieldset class="story-filter">');
-    const statusIndex = html.indexOf('<p class="story-filter-status"');
-    const bulkToggleIndex = html.indexOf('<div class="story-bulk-toggle">');
-    assert.ok(fieldsetIndex !== -1, 'filter fieldset present');
-    assert.ok(statusIndex !== -1, 'status region present');
-    assert.ok(bulkToggleIndex !== -1, 'bulk-toggle group present');
+  it('puts the count outside the button as an aria-describedby sibling and composes the name from the word + sr-only suffix', () => {
     assert.ok(
-      fieldsetIndex < statusIndex && statusIndex < bulkToggleIndex,
-      'reading order is filters, then status, then buttons (status sits between)',
+      html.includes(
+        '<span class="count" id="summary-count-all">3</span><button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list" aria-describedby="summary-count-all"><span class="indicator label">stories</span><span class="sr-only"> — show all stories</span></button>',
+      ),
+      'count "3" precedes the button as a described-by sibling; button name is "stories — show all stories"',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="count" id="summary-count-pass">1</span><button type="button" class="summary-filter" data-filter="pass" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-pass"><span class="indicator label">passed</span><span class="sr-only">, show only passed stories</span></button>',
+      ),
+      'count "1" precedes the passed button; button name is "passed, show only passed stories"',
+    );
+    // Never an aria-label on the filter buttons (would drop the visible word).
+    assert.ok(
+      !/class="summary-filter"[^>]*aria-label/.test(html),
+      'filter buttons never carry an aria-label',
     );
   });
 
-  it('renders the live region with initial story count and empty-state placeholder', () => {
+  it('keeps the bulk-toggle buttons as the last items in the summary row', () => {
+    // Link-styled verbs: static "Expand"/"Collapse" with an sr-only scope so the
+    // accessible name reads "Expand all screenshots" while the visible scope
+    // (static "screenshots") is shared once and hidden from AT.
     assert.ok(
       html.includes(
-        '<p class="story-filter-status" role="status" aria-live="polite">Showing all 3 stories</p>',
+        '<button type="button" class="story-bulk-toggle-button" data-bulk-toggle="expand"><span class="bulk-verb">Expand</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>',
       ),
-      'live region carries default "Showing all 3 stories" text',
+      'expand verb present with sr-only scope for a composed accessible name',
     );
     assert.ok(
       html.includes(
-        '<p class="bulk-toggle-status sr-only" role="status" aria-live="polite"></p>',
+        '<button type="button" class="story-bulk-toggle-button" data-bulk-toggle="collapse"><span class="bulk-verb">Collapse</span><span class="bulk-scope-sr sr-only"> all screenshots</span></button>',
       ),
-      'separate bulk-toggle live region present',
+      'collapse verb present with sr-only scope for a composed accessible name',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="bulk-scope" aria-hidden="true">screenshots</span>',
+      ),
+      'shared static visible scope word present and hidden from AT',
+    );
+    assert.ok(
+      html.includes('<span class="bulk-sep" aria-hidden="true">/</span>'),
+      'decorative separator present and hidden from AT',
+    );
+    // Bulk-toggle group comes AFTER every filter button in the summary list.
+    const lastFilterIndex = html.lastIndexOf('class="summary-filter"');
+    const bulkIndex = html.indexOf('<li class="story-bulk-toggle">');
+    assert.ok(lastFilterIndex !== -1, 'filter buttons present');
+    assert.ok(bulkIndex !== -1, 'bulk-toggle list item present');
+    assert.ok(
+      lastFilterIndex < bulkIndex,
+      'the bulk-toggle pair sits after the filters (last in DOM order)',
+    );
+  });
+
+  it('relocates both live regions into the stories section between the heading and the list', () => {
+    assert.ok(
+      html.includes(
+        '<p class="story-filter-status" role="status" aria-live="polite" aria-atomic="true">Showing all 3 stories</p>',
+      ),
+      'filter status region carries default text + aria-atomic',
+    );
+    assert.ok(
+      html.includes(
+        '<p class="bulk-toggle-status sr-only" role="status" aria-live="polite" aria-atomic="true"></p>',
+      ),
+      'separate sr-only bulk-toggle region present with aria-atomic',
+    );
+    // Both regions are server-rendered between the stories <h2> and the <ol>.
+    const headingIndex = html.indexOf('<h2 id="stories-heading">stories</h2>');
+    const filterStatusIndex = html.indexOf('<p class="story-filter-status"');
+    const bulkStatusIndex = html.indexOf('<p class="bulk-toggle-status');
+    const listIndex = html.indexOf('<ol class="stories" id="stories-list"');
+    assert.ok(
+      headingIndex !== -1 && listIndex !== -1,
+      'stories heading and list present',
+    );
+    assert.ok(
+      headingIndex < filterStatusIndex &&
+        filterStatusIndex < bulkStatusIndex &&
+        bulkStatusIndex < listIndex,
+      'order is heading → filter status → bulk status → list',
     );
     assert.ok(
       html.includes('<p class="stories-empty" hidden>No matching stories</p>'),
       'empty-state paragraph present and hidden by default',
+    );
+    // The old toolbar wrapper is gone entirely.
+    assert.ok(
+      !html.includes('class="stories-toolbar"'),
+      'the .stories-toolbar wrapper is removed',
     );
   });
 
@@ -189,32 +259,38 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item">\n  <span class="count">3</span>',
+        '<li class="summary-item" data-status="all">\n  <span class="count" id="summary-count-all">3</span>',
       ),
       'stories total is 3',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="pass">\n  <span class="count">1</span>',
+        '<li class="summary-item" data-status="pass">\n  <span class="count" id="summary-count-pass">1</span>',
       ),
       'pass tier total is 1',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="changed">\n  <span class="count">1</span>',
+        '<li class="summary-item" data-status="changed">\n  <span class="count" id="summary-count-changed">1</span>',
       ),
       'changed tier total is 1',
     );
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="failed">\n  <span class="count">1</span>',
+        '<li class="summary-item" data-status="failed">\n  <span class="count" id="summary-count-failed">1</span>',
       ),
       'failed tier total is 1',
     );
-    assert.equal(
-      countOccurrences(html, '<li class="summary-item coverage">'),
-      2,
-      'customCoverage renders one summary-item coverage <li> per metric (screens + flows)',
+    // The screens/flows coverage stats were dropped entirely. (`.coverage-detail`
+    // is intentionally NOT asserted here — it is also reused by the diff-stats
+    // pixel-count markup, so its presence/absence is unrelated to this change.)
+    assert.ok(
+      !html.includes('summary-item coverage'),
+      'no coverage stat items render in the summary row',
+    );
+    assert.ok(
+      !/ (?:screens|flows) covered</.test(html),
+      'no coverage sr-only "<n> of <m> screens/flows covered" text leaks',
     );
   });
 
@@ -331,7 +407,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
   });
 
-  it('renders new as a first-class tier: summary total, filter radio, story row', () => {
+  it('renders new as a first-class tier: summary total, filter button, story row', () => {
     const result = makeRunResult({
       totals: { stories: 1, passed: 0, changed: 0, failed: 0, new: 1 },
       stories: [
@@ -345,14 +421,13 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 
     assert.ok(
       html.includes(
-        '<li class="summary-item" data-status="new">\n  <span class="count">1</span>',
+        '<li class="summary-item" data-status="new">\n  <span class="count" id="summary-count-new">1</span><button type="button" class="summary-filter" data-filter="new" aria-pressed="false" aria-controls="stories-list" aria-describedby="summary-count-new">',
       ),
-      'new tier total renders in the summary',
+      'new tier total renders as a filter button in the summary',
     );
-    assert.match(
-      html,
-      /<input[^>]*value="new"[^>]*data-filter-name="new"/s,
-      'a new filter radio renders',
+    assert.ok(
+      html.includes('<span class="indicator label">new</span>'),
+      'the new filter button carries its visible "new" label',
     );
     assert.ok(
       html.includes('<li class="story" data-status="new">'),
@@ -839,6 +914,93 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
       renderReport(result, REPORT_DIR, true),
       renderReport(result, REPORT_DIR, false),
       'interactive output differs from the radio-tab output',
+    );
+  });
+});
+
+describe('renderScreenshots — interactiveMode dimension-mismatch fallback', () => {
+  // A baseline/actual dimension mismatch yields status:changed + failureMessage
+  // but no diffRatio/diffPath: the diff is uncomputable, so the hover/press
+  // viewer has no diff to reveal. interactiveMode must fall back to the radio-tab
+  // render (visible chips, baseline + actual, disabled diff carrying the reason).
+  function mismatchResult(actionOverrides: Partial<ActionResult> = {}) {
+    return makeRunResult({
+      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              actualPath: '/fake/report/dir/shots/settings.actual.png',
+              baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+              failureMessage:
+                'Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+              ...actionOverrides,
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it('falls back to the radio-tab fieldset, not the interactive viewer', () => {
+    const html = renderReport(mismatchResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes('<fieldset class="shot-radio"'),
+      'the radio-tab fieldset renders for an uncomputable diff in interactiveMode',
+    );
+    assert.ok(
+      !html.includes('class="shot-interactive"'),
+      'the interactive hover/press viewer does not render for a dimension mismatch',
+    );
+    // Both real variants render as radios → the full fieldset, not the collapsed
+    // lone-image path (soleVariant.length === 2).
+    assert.ok(html.includes('value="baseline"'), 'baseline radio renders');
+    assert.ok(html.includes('value="actual"'), 'actual radio renders');
+  });
+
+  it('wires the disabled diff radio aria-describedby to the unavailable note', () => {
+    const html = renderReport(mismatchResult(), REPORT_DIR, true);
+    assert.ok(
+      html.includes('diff-stats--unavailable'),
+      'the unavailable note renders inside the fieldset',
+    );
+    assert.ok(
+      html.includes('id="s0-a0-diff-stats"'),
+      'the unavailable note carries the referenced id',
+    );
+    assert.match(
+      html,
+      /value="diff"[^>]*aria-describedby="s0-a0-diff-stats"/s,
+      'the disabled diff radio is described by the unavailable note so AT hears the reason',
+    );
+    assert.match(
+      html,
+      /value="diff"[^>]*\bdisabled\b/s,
+      'the diff radio is disabled when the mismatch leaves no diff image',
+    );
+  });
+
+  it('still uses the interactive viewer when the diff is computable', () => {
+    const html = renderReport(
+      mismatchResult({
+        failureMessage: undefined,
+        diffPath: '/fake/report/dir/shots/settings.diff.png',
+        diffPixels: 1234,
+        diffRatio: 0.012,
+      }),
+      REPORT_DIR,
+      true,
+    );
+    assert.ok(
+      html.includes('class="shot-interactive"'),
+      'a normal changed action still uses the interactive viewer',
+    );
+    assert.ok(
+      !html.includes('<fieldset class="shot-radio"'),
+      'no radio-tab fallback when the diff is computable',
     );
   });
 });

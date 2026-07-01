@@ -8,6 +8,13 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.1.0-alpha.13] — 2026-06-30
+
+### Changed
+
+HTML report filters have been merged with the summary row. Plus a few other
+miscellaneous UI/UX improvements.
+
 ## [0.1.0-alpha.12] — 2026-06-27
 
 ### Fixed
@@ -180,7 +187,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.12...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.13...HEAD
+[0.1.0-alpha.13]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.13
 [0.1.0-alpha.12]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.12
 [0.1.0-alpha.11]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.11
 [0.1.0-alpha.10]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.10
