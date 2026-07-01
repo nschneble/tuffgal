@@ -113,6 +113,7 @@ function summaryFilter(
   return `
 <li class="summary-item" data-status="${filter}">
   <span class="count" id="summary-count-${filter}">${value}</span><button type="button" class="summary-filter" data-filter="${filter}" aria-pressed="${pressed}" aria-controls="stories-list" aria-describedby="summary-count-${filter}"><span class="indicator label">${label}</span><span class="sr-only">${actionSuffix}</span></button>
+  <span class="bulk-sep" aria-hidden="true">·</span>
 </li>
 `;
 }
@@ -412,7 +413,7 @@ function renderScreenshots(
   const diff = action.diffPath
     ? toReportRelative(reportDir, action.diffPath)
     : undefined;
-  const defaultTab = diff ? 'diff' : 'actual';
+  const defaultTab = 'actual';
   const available = { baseline, actual, diff };
   const initialTab =
     available[defaultTab] !== undefined

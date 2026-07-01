@@ -93,17 +93,20 @@
       }
 
       var defaultTab = container.getAttribute('data-default-tab');
-      var initialRadio =
-        radios.find(function (radio) {
-          return radio.value === defaultTab && !radio.disabled;
-        }) ||
-        radios.find(function (radio) {
-          return !radio.disabled;
-        });
-      if (initialRadio) {
-        initialRadio.checked = true;
-        activate(initialRadio.value);
+      function reset() {
+        var initialRadio =
+          radios.find(function (radio) {
+            return radio.value === defaultTab && !radio.disabled;
+          }) ||
+          radios.find(function (radio) {
+            return !radio.disabled;
+          });
+        if (initialRadio) {
+          initialRadio.checked = true;
+          activate(initialRadio.value);
+        }
       }
+      reset();
 
       radios.forEach(function (radio) {
         radio.addEventListener('change', function () {
@@ -111,6 +114,21 @@
           activate(radio.value);
         });
       });
+
+      // Selection lives in the DOM, so a collapse only HIDES it — a prior
+      // Baseline/Diff pick would otherwise still be checked on the next expand.
+      // Reset on COLLAPSE, not expand: the `toggle` event fires AFTER the state
+      // change, so resetting on open flashes a visible baseline→actual jump.
+      // Resetting on close does the swap while the panel is hidden, so the next
+      // expand is already on the default. <details> fires `toggle` on user clicks
+      // AND the bulk-toggle's programmatic `open` change, so this covers
+      // Collapse-all too. First-ever open is covered by the initial reset() above.
+      var details = container.closest && container.closest('details.shots');
+      if (details) {
+        details.addEventListener('toggle', function () {
+          if (!details.open) reset();
+        });
+      }
     }
 
     document.querySelectorAll('.shot-radio').forEach(function (container) {
