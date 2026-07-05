@@ -8,6 +8,19 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.1.0-alpha.14] — 2026-07-04
+
+### Fixed
+
+A `viewport` capture no longer resets the page's scroll offset before shooting.
+The reset was added to keep `fullPage` stitches deterministic — sticky/fixed
+chrome resolves against `scrollY`, so a composited image drifted if an earlier
+step left the page scrolled — but it applied to both modes. That threw away the
+whole point of a `viewport` shot: a story scrolling to a below-the-fold region
+(a Settings panel, a success banner) captured the top of the page instead of
+the region it navigated to. The reset is now scoped to `fullPage`; `viewport`
+shoots at the offset the flow reached.
+
 ## [0.1.0-alpha.13] — 2026-06-30
 
 ### Changed

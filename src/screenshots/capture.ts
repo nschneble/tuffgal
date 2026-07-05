@@ -16,21 +16,29 @@ export async function capturePage(
   masks: Locator[] = [],
   mode: CaptureMode = 'viewport',
 ): Promise<Buffer> {
-  // Both capture modes shoot at the page's current scroll offset.
-  // `position: sticky` / `fixed` elements resolve their offset against that
-  // scroll position, so a page captured mid-scroll renders its sticky chrome
-  // (sidebars, headers) shifted down by `scrollY` — the same UI produces a
-  // different image purely because an earlier step left the viewport scrolled.
-  // (`fullPage` composites the whole document but inherits the same offset.)
-  // Resetting to the origin first
-  // pins those elements to their static-baseline position so the capture is
-  // deterministic. `instant` defeats any `scroll-behavior: smooth` the page
-  // sets, which would otherwise animate and reintroduce a timing race.
-  // String form so the snippet runs in the page (DOM) context without
-  // pulling the DOM lib into this Node-side module's type environment.
-  await page.evaluate(
-    `window.scrollTo({ top: 0, left: 0, behavior: 'instant' })`,
-  );
+  // `fullPage` composites the whole scrollable document into one image. When
+  // the document is captured at a non-zero offset, `position: sticky` / `fixed`
+  // chrome (sidebars, headers) resolves against that scroll position and lands
+  // shifted down by `scrollY` in the stitch — the same UI produces a different
+  // image purely because an earlier step left the viewport scrolled. Resetting
+  // to the origin first pins those elements to their static-baseline position
+  // so the capture is deterministic. `instant` defeats any `scroll-behavior:
+  // smooth` the page sets, which would otherwise animate and reintroduce a
+  // timing race.
+  //
+  // A `viewport` shot captures exactly the box the flow scrolled to, so it must
+  // NOT reset — a story that scrolls to a below-the-fold section (a Settings
+  // panel, a success banner) would otherwise capture the top of the page
+  // instead of the region it navigated to. The flow lands at a deterministic
+  // offset, so the viewport shot is deterministic without any reset.
+  //
+  // String form so the snippet runs in the page (DOM) context without pulling
+  // the DOM lib into this Node-side module's type environment.
+  if (mode === 'fullPage') {
+    await page.evaluate(
+      `window.scrollTo({ top: 0, left: 0, behavior: 'instant' })`,
+    );
+  }
   return page.screenshot({
     fullPage: mode === 'fullPage',
     animations: 'disabled',
