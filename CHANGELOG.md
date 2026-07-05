@@ -8,6 +8,12 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.1.0-alpha.14] — 2026-07-04
+
+### Fixed
+
+A `viewport` capture no longer resets the page's scroll offset before shooting.
+
 ## [0.1.0-alpha.13] — 2026-06-30
 
 ### Changed
@@ -187,7 +193,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.13...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.14...HEAD
+[0.1.0-alpha.14]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.14
 [0.1.0-alpha.13]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.13
 [0.1.0-alpha.12]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.12
 [0.1.0-alpha.11]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.11
