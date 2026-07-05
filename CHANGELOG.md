@@ -13,13 +13,6 @@ _Nothing just yet_
 ### Fixed
 
 A `viewport` capture no longer resets the page's scroll offset before shooting.
-The reset was added to keep `fullPage` stitches deterministic — sticky/fixed
-chrome resolves against `scrollY`, so a composited image drifted if an earlier
-step left the page scrolled — but it applied to both modes. That threw away the
-whole point of a `viewport` shot: a story scrolling to a below-the-fold region
-(a Settings panel, a success banner) captured the top of the page instead of
-the region it navigated to. The reset is now scoped to `fullPage`; `viewport`
-shoots at the offset the flow reached.
 
 ## [0.1.0-alpha.13] — 2026-06-30
 
@@ -200,7 +193,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.13...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.14...HEAD
+[0.1.0-alpha.14]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.14
 [0.1.0-alpha.13]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.13
 [0.1.0-alpha.12]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.12
 [0.1.0-alpha.11]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.11
