@@ -11,10 +11,13 @@ import type { RunResult } from '../schema/result.ts';
  *   - `1` — one or more stories failed (a step threw / the harness broke).
  *     Always outranks a pending-changes signal: a broken run's failure is the
  *     headline, not the visual diff it never got to compute cleanly.
- *   - `2` — CI mode only: pending visual changes (`new` or `changed` stories)
- *     that a human must approve. This is the PR-gate signal — the run itself
- *     succeeded, but committed baselines don't yet reflect the current UI.
- *   - `0` — clean: every story passed.
+ *   - `2` — CI mode only: pending baseline changes a human must approve —
+ *     `new` or `changed` stories, or `deleted` (orphaned committed baselines an
+ *     approve/prune should retire). This is the PR-gate signal — the run itself
+ *     succeeded, but committed baselines don't yet reflect the current UI. A
+ *     deleted-only run still gates: the baseline set has drifted from the story
+ *     set even though nothing rendered differently.
+ *   - `0` — clean: every story passed and no baselines were orphaned.
  *
  * Local mode never emits `2` this wave: local runs are advisory (they auto-write
  * their own comparison target), so `new`/`changed` there are informational, not
@@ -26,6 +29,8 @@ export function deriveExitCode(
   totals: RunResult['totals'],
 ): 0 | 1 | 2 {
   if (totals.failed > 0) return 1;
-  if (mode === 'ci' && totals.changed + totals.new > 0) return 2;
+  if (mode === 'ci' && totals.changed + totals.new + totals.deleted > 0) {
+    return 2;
+  }
   return 0;
 }

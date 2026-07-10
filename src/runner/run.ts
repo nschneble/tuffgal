@@ -28,7 +28,13 @@ import {
   storyRendersAt,
 } from './breakpointPasses.ts';
 import { storyMatchesFilter } from './storyFilter.ts';
+import {
+  executedActionNames,
+  scanOrphanedBaselines,
+  shouldScanForOrphans,
+} from './orphanScan.ts';
 import type { RunMode } from './mode.ts';
+import type { DeletedBaseline } from '../schema/result.ts';
 
 export interface RunCliOptions {
   storyFilter?: string;
@@ -165,13 +171,32 @@ export async function runAll(
       computeScreenCoverage(config.paths.actions, config.paths.baselines),
       computeFlowCoverage(config.flowInventory, allStories),
     ]);
+    // Orphan scan: committed baselines whose action ran no story this run are
+    // retired candidates (status `deleted`). Only meaningful for an UNFILTERED
+    // CI run — a `--story` filter runs a deliberate subset, so unselected
+    // stories' baselines would look orphaned when they are merely unvisited; we
+    // skip the scan rather than mark live baselines deleted. Local mode never
+    // reads `paths.baselines`, so it never scans. Detection only — pruning is a
+    // later wave, so the baselines directory stays untouched here.
+    const deleted: DeletedBaseline[] = shouldScanForOrphans(
+      mode,
+      options.storyFilter,
+    )
+      ? await scanOrphanedBaselines(
+          config.paths.baselines,
+          executedActionNames(results),
+        )
+      : [];
+    const totals = summarise(results);
+    totals.deleted = deleted.length;
     const runResult: RunResult = {
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
       durationMs: finishedAt.getTime() - startedAt.getTime(),
       mode,
-      totals: summarise(results),
+      totals,
       customCoverage: { screens, flows },
+      deleted,
       stories: results,
     };
     const reportPath = await writeReport(
@@ -279,13 +304,21 @@ export async function copyResultsIntoCandidates(
   );
 }
 
-function summarise(results: StoryResult[]): RunResult['totals'] {
+/**
+ * Rolls a set of story results into the outcome counts. `deleted` counts
+ * orphaned baselines, which are a run-level detection (not a per-story outcome),
+ * so it always seeds `0` here; `runAll` overwrites the run-total `deleted` from
+ * the orphan scan. Per-breakpoint pass summaries keep `0`, which is correct —
+ * an orphan is not attributable to a single breakpoint pass.
+ */
+export function summarise(results: StoryResult[]): RunResult['totals'] {
   return {
     stories: results.length,
     passed: results.filter((result) => result.status === 'pass').length,
     changed: results.filter((result) => result.status === 'changed').length,
     failed: results.filter((result) => result.status === 'failed').length,
     new: results.filter((result) => result.status === 'new').length,
+    deleted: 0,
   };
 }
 

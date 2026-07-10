@@ -40,11 +40,19 @@ function makeRunResult(overrides: Partial<RunResult> = {}): RunResult {
     startedAt: '2026-06-11T12:00:00.000Z',
     finishedAt: '2026-06-11T12:00:01.000Z',
     durationMs: 1000,
-    totals: { stories: 0, passed: 0, changed: 0, failed: 0, new: 0 },
+    totals: {
+      stories: 0,
+      passed: 0,
+      changed: 0,
+      failed: 0,
+      new: 0,
+      deleted: 0,
+    },
     customCoverage: {
       screens: { total: 10, covered: 5, ratio: 0.5, missing: [] },
       flows: { total: 4, covered: 2, ratio: 0.5, missing: [] },
     },
+    deleted: [],
     stories: [],
     ...overrides,
   };
@@ -63,7 +71,14 @@ function countOccurrences(haystack: string, needle: string): number {
 
 describe('renderReport — mixed pass/changed/failed fixture', () => {
   const result = makeRunResult({
-    totals: { stories: 3, passed: 1, changed: 1, failed: 1, new: 0 },
+    totals: {
+      stories: 3,
+      passed: 1,
+      changed: 1,
+      failed: 1,
+      new: 0,
+      deleted: 0,
+    },
     stories: [
       makeStory({
         story: 'home page renders',
@@ -311,7 +326,14 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
 describe('renderAction — whole row as screenshot disclosure', () => {
   it('wraps a shot-bearing action in <details class="shots"> with the full row as <summary class="action-row">', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 0,
+        changed: 1,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'changed',
@@ -376,7 +398,14 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     // error must be a sibling after </details>, never nested inside it (a
     // nested error would hide behind the collapsed disclosure).
     const result = makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 0, failed: 1, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 0,
+        changed: 0,
+        failed: 1,
+        new: 0,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'failed',
@@ -409,7 +438,14 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 
   it('renders new as a first-class tier: summary total, filter button, story row', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 0, failed: 0, new: 1 },
+      totals: {
+        stories: 1,
+        passed: 0,
+        changed: 0,
+        failed: 0,
+        new: 1,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'new',
@@ -441,7 +477,14 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     // empty stats slot and no diff tab — an unexplained no-op. The recorded
     // reason must fill the slot the "% differs" stat normally occupies.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 0,
+        changed: 1,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'changed',
@@ -478,7 +521,14 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 
   it('emits no box-drawing branch glyphs (the CSS trunk line replaces them)', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 1,
+        changed: 0,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'pass',
@@ -496,7 +546,14 @@ describe('renderAction — whole row as screenshot disclosure', () => {
   it('renders a screenshot-less action as a plain <div class="action-row"> with no <details>', () => {
     // The default makeAction fixture has no actualPath/baselinePath.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 1,
+        changed: 0,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
       stories: [makeStory({ status: 'pass', actions: [makeAction()] })],
     });
     const html = renderReport(result, REPORT_DIR);
@@ -519,7 +576,14 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 describe('renderStoryActions — per-breakpoint grouping', () => {
   it('groups tagged actions under labelled regions with mode name + dimensions', () => {
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 1,
+        changed: 0,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'pass',
@@ -620,7 +684,14 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     // The common default `desktop` project ran at one mode: no caption, no
     // group wrapper — just the historical flat list.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 1,
+        changed: 0,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'pass',
@@ -655,7 +726,14 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     // Two modes force grouping; the desktop group shows the recorded override
     // (1440×900), never a registry default for the name.
     const result = makeRunResult({
-      totals: { stories: 1, passed: 1, changed: 0, failed: 0, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 1,
+        changed: 0,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'pass',
@@ -694,7 +772,14 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
 describe('renderScreenshots — interactive viewer (interactiveMode:true)', () => {
   function interactiveResult(actionOverrides: Partial<ActionResult> = {}) {
     return makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 0,
+        changed: 1,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'changed',
@@ -925,7 +1010,14 @@ describe('renderScreenshots — interactiveMode dimension-mismatch fallback', ()
   // render (visible chips, baseline + actual, disabled diff carrying the reason).
   function mismatchResult(actionOverrides: Partial<ActionResult> = {}) {
     return makeRunResult({
-      totals: { stories: 1, passed: 0, changed: 1, failed: 0, new: 0 },
+      totals: {
+        stories: 1,
+        passed: 0,
+        changed: 1,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
       stories: [
         makeStory({
           status: 'changed',
@@ -1048,7 +1140,14 @@ describe('formatDate — friendly report-meta timestamp', () => {
 
 describe('renderStory — status marker + sr-only word per tier', () => {
   const result = makeRunResult({
-    totals: { stories: 3, passed: 1, changed: 1, failed: 1, new: 0 },
+    totals: {
+      stories: 3,
+      passed: 1,
+      changed: 1,
+      failed: 1,
+      new: 0,
+      deleted: 0,
+    },
     stories: [
       makeStory({ status: 'pass' }),
       makeStory({ status: 'changed' }),

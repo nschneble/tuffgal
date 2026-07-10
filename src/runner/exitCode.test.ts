@@ -5,7 +5,15 @@ import type { RunResult } from '../schema/result.ts';
 import { deriveExitCode } from './exitCode.ts';
 
 function totals(over: Partial<RunResult['totals']>): RunResult['totals'] {
-  return { stories: 0, passed: 0, changed: 0, failed: 0, new: 0, ...over };
+  return {
+    stories: 0,
+    passed: 0,
+    changed: 0,
+    failed: 0,
+    new: 0,
+    deleted: 0,
+    ...over,
+  };
 }
 
 describe('deriveExitCode', () => {
@@ -25,8 +33,24 @@ describe('deriveExitCode', () => {
     assert.equal(deriveExitCode('ci', totals({ new: 2, changed: 1 })), 2);
   });
 
+  it('returns 2 for orphaned baselines only in CI mode', () => {
+    assert.equal(deriveExitCode('ci', totals({ deleted: 1 })), 2);
+  });
+
+  it('returns 2 when only deleted alongside passing stories in CI mode', () => {
+    assert.equal(deriveExitCode('ci', totals({ passed: 3, deleted: 2 })), 2);
+  });
+
+  it('never emits 2 for orphaned baselines in local mode', () => {
+    assert.equal(deriveExitCode('local', totals({ deleted: 3 })), 0);
+  });
+
   it('lets failed (1) beat pending changes (2) in CI mode', () => {
     assert.equal(deriveExitCode('ci', totals({ failed: 1, changed: 3 })), 1);
+  });
+
+  it('lets failed (1) beat orphaned baselines (2) in CI mode', () => {
+    assert.equal(deriveExitCode('ci', totals({ failed: 1, deleted: 3 })), 1);
   });
 
   it('returns 1 for a failed CI run with no changes', () => {

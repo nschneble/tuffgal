@@ -68,11 +68,13 @@ async function writeResults(stories: RunResult['stories']): Promise<void> {
       changed: 0,
       failed: 0,
       new: 0,
+      deleted: 0,
     },
     customCoverage: {
       screens: { total: 0, covered: 0, ratio: 1, missing: [] },
       flows: { total: 0, covered: 0, ratio: 1, missing: [] },
     },
+    deleted: [],
     stories,
   } satisfies RunResult;
   await writeFile(join(report, 'results.json'), JSON.stringify(result), 'utf8');

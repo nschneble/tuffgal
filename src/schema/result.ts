@@ -97,6 +97,27 @@ export interface CoverageMetric {
 }
 
 /**
+ * One orphaned committed baseline: an entry under `paths.baselines` whose action
+ * ran no story this run, so nothing compared against it. Recorded (CI mode,
+ * unfiltered runs only) so the report can surface it and a later `approve
+ * --prune` can delete it — this wave detects, it never removes.
+ *
+ * Keyed per breakpoint rather than per action so a partially-orphaned action
+ * (some breakpoints retired, others still live) could in principle be expressed;
+ * today an orphan action is retired wholesale, one entry per baseline file group
+ * it left behind. `breakpoint` is the mode name (`mobile`/`desktop`/…) for the
+ * breakpoint-keyed `<action>/<breakpoint>.png` layout, or `'legacy'` for the
+ * pre-breakpoint `<action>/0.png` layout. `baselinePaths` are the absolute paths
+ * the prune step deletes — the PNG plus its a11y companion when one exists — so
+ * wave 7 prunes a flat path list without re-deriving layout.
+ */
+export interface DeletedBaseline {
+  action: string;
+  breakpoint: string;
+  baselinePaths: string[];
+}
+
+/**
  * Parses and shape-checks a `results.json` blob. `approve` re-reads the run's
  * own output, the one JSON re-entry point that skips the zod validation every
  * input file gets. A truncated or stale-schema artifact would otherwise throw
@@ -144,7 +165,21 @@ export interface RunResult {
     failed: number;
     /** Stories whose rollup status is `new` (wrote a fresh baseline, no drift). */
     new: number;
+    /**
+     * Orphaned committed baselines detected this run — the length of `deleted`.
+     * CI mode + unfiltered runs only; `0` in local mode and on any filtered run
+     * (where unselected stories' baselines are not orphans, merely unvisited).
+     */
+    deleted: number;
   };
+  /**
+   * Orphaned committed baselines: entries under `paths.baselines` whose action
+   * ran no story this run. Populated only for an unfiltered CI run (see
+   * {@link DeletedBaseline}); empty in local mode and on filtered runs, where a
+   * baseline going unvisited says nothing about whether its story still exists.
+   * Detection only — pruning is a later wave.
+   */
+  deleted: DeletedBaseline[];
   /**
    * Custom coverage metrics layered on top of V8 line coverage:
    * `screens` = baselined visit-* actions / declared screens,

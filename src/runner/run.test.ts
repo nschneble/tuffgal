@@ -11,6 +11,7 @@ import {
   drivingBreakpoints,
   formatResultLine,
   formatSummaryBullet,
+  summarise,
 } from './run.ts';
 
 function action(
@@ -92,6 +93,29 @@ describe('drivingBreakpoints', () => {
       action('mobile', 'new'),
     ]);
     assert.deepEqual(drivingBreakpoints(result), ['mobile']);
+  });
+});
+
+describe('summarise', () => {
+  it('counts new-status stories distinctly from changed', () => {
+    const results = [
+      story('new', [action('desktop', 'new')]),
+      story('new', [action('desktop', 'new')]),
+      story('changed', [action('desktop', 'changed')]),
+      story('pass', [action('desktop', 'pass')]),
+    ];
+    const totals = summarise(results);
+    assert.equal(totals.new, 2);
+    assert.equal(totals.changed, 1);
+    assert.equal(totals.passed, 1);
+    assert.equal(totals.stories, 4);
+  });
+
+  it('seeds deleted at 0 — orphans are a run-level count, not a story outcome', () => {
+    assert.equal(
+      summarise([story('pass', [action('desktop', 'pass')])]).deleted,
+      0,
+    );
   });
 });
 
@@ -187,6 +211,7 @@ describe('formatSummaryBullet', () => {
     changed: 0,
     failed: 0,
     new: 0,
+    deleted: 0,
     ...over,
   });
 
