@@ -591,6 +591,175 @@ describe('runAction — legacy baseline fallback (CI mode, within paths.baseline
   });
 });
 
+describe('runAction — CI mode a11y-only drift', () => {
+  it('flips status to changed and writes a candidate pair when pixels pass but the aria snapshot drifts', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    // Committed baseline: identical pixels (→ pixels pass) but a stale a11y tree
+    // that differs from the page's current snapshot. Under the sole-writer model
+    // this drift must become `changed` with a candidate, else the drifted
+    // committed a11y.yaml is permanently unre-approvable.
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- button "Old"');
+
+    const result = await runAction({
+      page: fakePage(png, '- button "New"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    // Pixels matched, aria drifted → changed (not pass), a11yChanged recorded.
+    assert.equal(result.status, 'changed');
+    assert.equal(result.a11yChanged, true);
+    // No pixel diff was produced — a11y-only drift carries no diff image, which
+    // (with a11yChanged) is what tells this apart from pixel drift downstream.
+    assert.equal(result.diffPath, undefined);
+
+    // A full candidate PAIR is written so `approve --from` can promote the new
+    // snapshot: the proposed PNG plus its a11y companion (the drifted tree).
+    const candidatePng = join(
+      config.paths.report,
+      'candidates',
+      'open',
+      'desktop.png',
+    );
+    const candidateA11y = join(
+      config.paths.report,
+      'candidates',
+      'open',
+      'desktop.a11y.yaml',
+    );
+    assert.ok(await pathExists(candidatePng));
+    assert.ok(await pathExists(candidateA11y));
+    assert.equal(await readFile(candidateA11y, 'utf8'), '- button "New"');
+    // The committed baseline is never rewritten by the run.
+    assert.deepEqual(await readFile(join(baselineDir, 'desktop.png')), png);
+  });
+
+  it('stays pass with no candidate when CI pixels pass AND the aria snapshot matches', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- document');
+
+    const result = await runAction({
+      // Same aria as the seeded baseline → no a11y drift.
+      page: fakePage(png, '- document'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    // Both channels clean → pass, and no candidate is proposed. This is the
+    // other direction of the a11y-drift toggle: the flip is gated on drift.
+    assert.equal(result.status, 'pass');
+    assert.equal(result.a11yChanged, undefined);
+    assert.equal(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+      false,
+    );
+  });
+
+  it('writes exactly ONE candidate pair when BOTH pixels and aria drift (no double write)', async () => {
+    const config = await makeConfig();
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    // Baseline drifts on BOTH channels: different pixels AND a different tree.
+    await writeFile(join(baselineDir, 'desktop.png'), solidPng(10, 20, 30));
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- button "Old"');
+
+    const candidatePng = join(
+      config.paths.report,
+      'candidates',
+      'open',
+      'desktop.png',
+    );
+    const candidateA11y = join(
+      config.paths.report,
+      'candidates',
+      'open',
+      'desktop.a11y.yaml',
+    );
+
+    const result = await runAction({
+      page: fakePage(solidPng(200, 50, 50), '- button "New"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.status, 'changed');
+    assert.equal(result.a11yChanged, true);
+    // Pixel drift ⇒ a diff image IS produced. A present `diffPath` proves the
+    // pixel-drift branch ran and the pixels-pass branch did NOT — the two are an
+    // if/else, and the a11y-only candidate write lives solely in the pass branch.
+    // So reaching here proves that write never fired, i.e. no second candidate
+    // pair: exactly one pair is written, from the pixel-drift path alone.
+    assert.ok(result.diffPath);
+    // Exactly one candidate pair on disk — the files exist and hold the proposed
+    // render (the actual bytes, uncorrupted by any competing second write).
+    assert.ok(await pathExists(candidatePng));
+    assert.ok(await pathExists(candidateA11y));
+    assert.equal(await readFile(candidateA11y, 'utf8'), '- button "New"');
+    assert.deepEqual(await readFile(candidatePng), solidPng(200, 50, 50));
+  });
+});
+
+describe('runAction — local mode a11y-only drift stays advisory', () => {
+  it('keeps pass (no status flip, no candidate) when local pixels pass but aria drifts', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    // Seed the cache entry with a stale a11y tree; drift the page's aria only.
+    const cacheDir = join(config.paths.localCache, 'open');
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(join(cacheDir, 'desktop.png'), png);
+    await writeFile(join(cacheDir, 'desktop.a11y.yaml'), '- button "Old"');
+
+    const result = await runAction({
+      page: fakePage(png, '- button "New"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+
+    // Local mode is advisory: aria drift is flagged but never flips status or
+    // proposes a candidate (that is the CI-only sole-writer promotion path).
+    assert.equal(result.status, 'pass');
+    assert.equal(result.a11yChanged, true);
+    assert.equal(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+      false,
+    );
+    assert.equal(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.a11y.yaml'),
+      ),
+      false,
+    );
+  });
+});
+
 describe('runAction — CI mode size-mismatch drift', () => {
   it('treats a dimension change as changed, writes a candidate, and never rewrites the baseline', async () => {
     const config = await makeConfig();

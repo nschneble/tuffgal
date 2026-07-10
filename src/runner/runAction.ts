@@ -404,8 +404,24 @@ async function captureAndCompare(
     const passesSsim = outcome.ssimScore >= ssimThreshold;
     if (passesSsim) {
       await deleteIfExists(paths.diff);
+      // A11y-only drift: pixels match but the committed aria snapshot has moved.
+      // In CI mode this must surface as `changed` with a candidate pair, not a
+      // silent `pass` — under the sole-writer model a `pass` writes no candidate,
+      // so a drifted committed `a11y.yaml` would be permanently unre-approvable
+      // (`approve --from` has nothing to promote). The pixel-drift path below is
+      // mutually exclusive with this branch, so exactly one candidate pair is
+      // ever written per action. Local mode keeps the advisory behaviour — the
+      // cache is auto-managed, there is no human-approval step, so the flag stays
+      // informational and no candidate is proposed. There is no pixel diff here
+      // (pixels passed), so `diffPath` is omitted — that, alongside
+      // `a11yChanged`, is what marks a11y-only drift apart from pixel drift
+      // downstream.
+      const a11yDriftInCi = mode === 'ci' && a11yChanged;
+      if (a11yDriftInCi) {
+        await writeCandidate(mode, paths, actualPng, a11yJson);
+      }
       return finishResult(baseResult, {
-        status: 'pass',
+        status: a11yDriftInCi ? 'changed' : 'pass',
         baselinePath: paths.baseline,
         actualPath: paths.actual,
         diffPixels: outcome.diffPixels,
@@ -463,7 +479,8 @@ async function captureAndCompare(
  * The candidate tree is a CI-only artifact: local mode self-diffs against the
  * per-machine cache and has no human-approval step, so it never proposes
  * candidates. The mode guard lives here — a single early-return — rather than
- * being repeated at each of the three `new`/`changed`/size-mismatch call sites.
+ * being repeated at each of the four call sites (`new`, pixel-`changed`,
+ * size-mismatch, and CI a11y-only drift).
  */
 async function writeCandidate(
   mode: RunMode,

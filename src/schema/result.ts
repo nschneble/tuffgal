@@ -7,9 +7,10 @@ import type { EnvironmentManifest } from '../runner/manifest.ts';
  * outcomes the framework distinguishes:
  *
  * - `pass`  — action succeeded and screenshot matched baseline (or no baseline).
- * - `changed` — action succeeded but screenshot drifted past the threshold.
- *   The story does not fail. The user reviews and either approves the new
- *   baseline or files a bug.
+ * - `changed` — action succeeded but the baseline drifted: the screenshot moved
+ *   past the threshold, or (CI mode) pixels matched while the accessibility-tree
+ *   snapshot drifted. The story does not fail. The user reviews and either
+ *   approves the new baseline or files a bug.
  * - `new` — no baseline existed; one was written this run. Informational, not a
  *   regression — there is nothing to compare against yet.
  * - `failed` — a step threw. The story fails fast and skips any later actions.
@@ -56,8 +57,12 @@ export interface ActionResult {
   ssimScore?: number;
   /**
    * `true` when the captured page accessibility tree differs from the
-   * baseline tree. Informational only — does not gate pass/changed by
-   * itself; pixel/SSIM still drives the status.
+   * baseline tree. Advisory in local mode (flagged, never gates status). In CI
+   * mode it DOES gate: when pixels pass but the aria snapshot drifts, the status
+   * becomes `changed` and a candidate pair is written, so a drifted committed
+   * `a11y.yaml` stays re-approvable under the sole-writer model. On a
+   * `changed` result with no `diffPath` (no pixel diff), this flag being `true`
+   * marks the drift as a11y-only — pixel drift always carries a `diffPath`.
    */
   a11yChanged?: boolean;
   /**
