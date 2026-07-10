@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { approveAll } from './runner/approve.ts';
+import { approveAll, approveFrom } from './runner/approve.ts';
 import { init } from './commands/init.ts';
 import { BREAKPOINTS, loadConfig } from './config.ts';
 import { deriveExitCode } from './runner/exitCode.ts';
@@ -26,6 +27,13 @@ interface ParsedArguments {
   maxRespawns?: number;
   maxRuntimeMs?: number;
   newOnly: boolean;
+  /**
+   * `approve --from <dir>`: promote a CI candidate tree into the committed
+   * baselines. The one command that writes `paths.baselines`.
+   */
+  from?: string;
+  /** `approve --prune`: delete orphaned baselines listed in the candidate results. */
+  prune: boolean;
   /** `--ci` flag: force CI comparison mode. Mutually exclusive with `--local`. */
   ci: boolean;
   /** `--local` flag: force local (advisory) mode. Mutually exclusive with `--ci`. */
@@ -48,6 +56,7 @@ export function parseArguments(argv: string[]): ParsedArguments {
     manageServers: false,
     coverage: false,
     newOnly: false,
+    prune: false,
     ci: false,
     local: false,
     breakpoints: [],
@@ -98,6 +107,13 @@ export function parseArguments(argv: string[]): ParsedArguments {
       parsed.coverage = true;
     } else if (arg === '--new-only') {
       parsed.newOnly = true;
+    } else if (arg === '--from') {
+      parsed.from = stringFlag('--from', rest[index + 1]);
+      index += 1;
+    } else if (arg.startsWith('--from=')) {
+      parsed.from = stringFlag('--from', arg.slice('--from='.length));
+    } else if (arg === '--prune') {
+      parsed.prune = true;
     } else if (arg === '--ci') {
       parsed.ci = true;
     } else if (arg === '--local') {
@@ -161,6 +177,14 @@ function numericFlag(flag: string, raw: string | undefined): number {
   return value;
 }
 
+/** Parses a string-valued CLI flag, rejecting a missing/empty value. */
+function stringFlag(flag: string, raw: string | undefined): string {
+  if (raw === undefined || raw === '' || raw.startsWith('-')) {
+    throw new Error(`${flag} requires a value (got "${raw ?? ''}")`);
+  }
+  return raw;
+}
+
 function printHelp(): void {
   process.stdout.write(
     [
@@ -183,10 +207,17 @@ function printHelp(): void {
       '  --manage-servers           Spawn devServers.command, wait, run, then kill it.',
       '  --coverage                 Capture V8 JS + CSS coverage and emit a monocart report.',
       '',
-      'Approve options:',
+      'Approve options (local cache refresh):',
       '  <story>                    Positional story to approve (name or path); same as --story.',
       '  --new-only                 Only refresh new cache entries; skip changed.',
       '  --breakpoint <name>        Only approve this mode; repeatable. Also --desktop/--mobile/etc.',
+      '',
+      'Approve options (CI baseline promotion):',
+      '  --from <dir>               Promote a CI candidate tree into the committed baselines.',
+      '                             The only command that writes paths.baselines. Rejects the',
+      '                             cache-refresh filters above (whole-tree copy).',
+      '  --prune                    With --from, delete orphaned baselines the candidate',
+      '                             run recorded as deleted. Requires --from.',
       '',
       'Supervise options:',
       '  --healthcheck-interval N   Probe interval in ms (default 30_000).',
@@ -210,7 +241,14 @@ function failExit(message: string): never {
  * flags that only mean something on a specific subcommand:
  *   - `--new-only`, `--breakpoint`/`--<name>`, and a bare positional narrow an
  *     approval set — meaningless on any command but `approve`.
+ *   - `--from`/`--prune` promote a CI candidate tree — only on `approve`.
  *   - `--ci`/`--local` pick the comparison contract — meaningful only on `run`.
+ *
+ * `approve` itself is two disjoint modes: plain (cache refresh, accepts the
+ * local-narrowing filters) and `--from` (baseline promotion, a whole-tree copy).
+ * The filters target the plain cache mode, so `--from` rejects them for v1 —
+ * partial `--from` approvals are a PRD backlog item. `--prune` is a `--from`
+ * modifier and is meaningless without it.
  */
 export function validateCommandFlags(
   args: ParsedArguments,
@@ -224,6 +262,26 @@ export function validateCommandFlags(
     }
     if (args.positional !== undefined) {
       return `unexpected argument "${args.positional}"`;
+    }
+    if (args.from !== undefined) {
+      return '--from is only valid with the `approve` subcommand';
+    }
+    if (args.prune) {
+      return '--prune is only valid with the `approve` subcommand';
+    }
+  }
+  if (args.prune && args.from === undefined) {
+    return '--prune requires --from (it prunes orphans listed in the candidate results)';
+  }
+  if (args.from !== undefined) {
+    if (args.storyFilter !== undefined || args.positional !== undefined) {
+      return '--from cannot be combined with a story filter (--from promotes the whole candidate tree)';
+    }
+    if (args.newOnly) {
+      return '--from cannot be combined with --new-only';
+    }
+    if (args.breakpoints.length > 0) {
+      return '--from cannot be combined with --breakpoint';
     }
   }
   if (args.command !== 'run' && (args.ci || args.local)) {
@@ -277,6 +335,23 @@ async function main(): Promise<void> {
     );
   }
   if (args.command === 'approve') {
+    if (args.from !== undefined) {
+      // Baseline-promotion mode: promote a CI candidate tree into the committed
+      // baselines. `validateCommandFlags` has already rejected the local-mode
+      // filters, so nothing here narrows the tree.
+      try {
+        const summary = await approveFrom(config, {
+          from: resolve(process.cwd(), args.from),
+          prune: args.prune,
+        });
+        process.stdout.write(
+          `\nPromoted ${summary.written} baselines; pruned ${summary.pruned} orphans.\n`,
+        );
+      } catch (error) {
+        failExit(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
     // A story may be named positionally (`approve user-logs-in`) or via
     // `--story`, but not both.
     if (args.positional !== undefined && args.storyFilter !== undefined) {

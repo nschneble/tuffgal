@@ -74,6 +74,33 @@ function breakpointSegment(breakpoint: string): string {
 }
 
 /**
+ * The single owner of the `<report>/candidates/` path. The runner writes the
+ * candidate tree + a `results.json` copy here, and `approve --from` reads that
+ * same tree back. Centralised so the literal `'candidates'` segment has one
+ * definition instead of drifting across the runner, the store, and approve.
+ */
+export function candidatesDir(reportDir: string): string {
+  return join(reportDir, 'candidates');
+}
+
+/**
+ * The action-name shape the action schema enforces (`/^[a-z0-9-]+$/`,
+ * lowercase-kebab). Re-exported here so the trust boundary in `approve --from`
+ * can reject a directory name from an untrusted candidate artifact against the
+ * exact same invariant the runner produced its layout under, without importing
+ * the zod schema. Kept in lock-step with `schema/action.ts` by intent.
+ */
+export const ACTION_NAME_PATTERN = /^[a-z0-9-]+$/;
+
+/**
+ * The filesystem-safe breakpoint segment shape (`/^[a-z0-9_-]+$/`) that {@link
+ * breakpointSegment} emits. `approve --from` validates a candidate PNG's
+ * breakpoint stem against this so a name outside the runner's own output shape
+ * (path separators, dots, traversal) can never reach a write.
+ */
+export const BREAKPOINT_SEGMENT_PATTERN = /^[a-z0-9_-]+$/;
+
+/**
  * Computes deterministic paths for the baseline (the comparison target —
  * committed baselines by default, or the local cache when `comparisonRoot` is
  * supplied), actual (regenerated each run), diff (regenerated when a baseline
@@ -120,14 +147,12 @@ export function pathsFor(options: StoreOptions): BaselinePaths {
     // Candidate tree mirrors the baseline layout under the report so a CI
     // approval is a plain copy of `<report>/candidates/` into `paths.baselines`.
     candidate: join(
-      options.reportDir,
-      'candidates',
+      candidatesDir(options.reportDir),
       options.actionName,
       `${bp}.png`,
     ),
     a11yCandidate: join(
-      options.reportDir,
-      'candidates',
+      candidatesDir(options.reportDir),
       options.actionName,
       `${bp}.a11y.yaml`,
     ),

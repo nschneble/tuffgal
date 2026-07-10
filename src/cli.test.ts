@@ -159,6 +159,93 @@ describe('validateCommandFlags — cross-command flag placement', () => {
   });
 });
 
+describe('parseArguments — approve --from / --prune', () => {
+  it('parses --from <dir> and --prune', () => {
+    const args = parseArguments(['approve', '--from', 'candidates', '--prune']);
+    assert.equal(args.from, 'candidates');
+    assert.equal(args.prune, true);
+  });
+
+  it('parses --from=dir form', () => {
+    const args = parseArguments(['approve', '--from=candidates']);
+    assert.equal(args.from, 'candidates');
+  });
+
+  it('throws when --from has no value', () => {
+    assert.throws(
+      () => parseArguments(['approve', '--from']),
+      /--from requires a value/,
+    );
+  });
+
+  it('throws when --from is followed by another flag', () => {
+    assert.throws(
+      () => parseArguments(['approve', '--from', '--prune']),
+      /--from requires a value/,
+    );
+  });
+});
+
+describe('validateCommandFlags — --from / --prune placement', () => {
+  it('rejects --from outside approve', () => {
+    assert.match(
+      validateCommandFlags(parseArguments(['run', '--from', 'x'])) ?? '',
+      /--from is only valid with the `approve`/,
+    );
+  });
+
+  it('rejects --prune without --from', () => {
+    assert.match(
+      validateCommandFlags(parseArguments(['approve', '--prune'])) ?? '',
+      /--prune requires --from/,
+    );
+  });
+
+  it('rejects --from combined with a story filter', () => {
+    assert.match(
+      validateCommandFlags(
+        parseArguments(['approve', '--from', 'x', '--story', 's']),
+      ) ?? '',
+      /--from cannot be combined with a story filter/,
+    );
+  });
+
+  it('rejects --from combined with a positional story', () => {
+    assert.match(
+      validateCommandFlags(parseArguments(['approve', '--from', 'x', 's'])) ??
+        '',
+      /--from cannot be combined with a story filter/,
+    );
+  });
+
+  it('rejects --from combined with --new-only', () => {
+    assert.match(
+      validateCommandFlags(
+        parseArguments(['approve', '--from', 'x', '--new-only']),
+      ) ?? '',
+      /--from cannot be combined with --new-only/,
+    );
+  });
+
+  it('rejects --from combined with --breakpoint', () => {
+    assert.match(
+      validateCommandFlags(
+        parseArguments(['approve', '--from', 'x', '--desktop']),
+      ) ?? '',
+      /--from cannot be combined with --breakpoint/,
+    );
+  });
+
+  it('accepts a clean approve --from --prune', () => {
+    assert.equal(
+      validateCommandFlags(
+        parseArguments(['approve', '--from', 'x', '--prune']),
+      ),
+      undefined,
+    );
+  });
+});
+
 describe('isMainEntry — entry-point detection', () => {
   it('matches when argv[1] is a symlink resolving to the module file', () => {
     const directory = mkdtempSync(join(tmpdir(), 'tuffgal-entry-'));

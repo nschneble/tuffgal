@@ -34,6 +34,7 @@ import {
   storyRendersAt,
 } from './breakpointPasses.ts';
 import { storyMatchesFilter } from './storyFilter.ts';
+import { candidatesDir } from '../screenshots/baselineStore.ts';
 import {
   executedActionNames,
   scanOrphanedBaselines,
@@ -314,12 +315,9 @@ async function touchHeartbeat(config: ResolvedConfig): Promise<void> {
 export async function copyResultsIntoCandidates(
   reportDir: string,
 ): Promise<void> {
-  const candidatesDir = join(reportDir, 'candidates');
-  await mkdir(candidatesDir, { recursive: true });
-  await copyFile(
-    join(reportDir, 'results.json'),
-    join(candidatesDir, 'results.json'),
-  );
+  const dir = candidatesDir(reportDir);
+  await mkdir(dir, { recursive: true });
+  await copyFile(join(reportDir, 'results.json'), join(dir, 'results.json'));
 }
 
 /**

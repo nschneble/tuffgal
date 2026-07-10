@@ -1,9 +1,24 @@
-import { readFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { lstat, readFile, readdir, rm } from 'node:fs/promises';
+import { basename, dirname, join, relative, sep } from 'node:path';
+
+import { PNG } from 'pngjs';
+
 import type { ResolvedConfig } from '../config.ts';
-import { copyToBaseline } from '../screenshots/baselineStore.ts';
+import {
+  ACTION_NAME_PATTERN,
+  BREAKPOINT_SEGMENT_PATTERN,
+  copyToBaseline,
+  writePng,
+  writeText,
+} from '../screenshots/baselineStore.ts';
+import {
+  MANIFEST_FILENAME,
+  SCHEMA_VERSION,
+  CAPTURE_SCHEMA,
+} from './manifest.ts';
+import type { EnvironmentManifest } from './manifest.ts';
 import { parseRunResult } from '../schema/result.ts';
-import type { ActionResult } from '../schema/result.ts';
+import type { ActionResult, RunResult } from '../schema/result.ts';
 import { pathExists } from '../util.ts';
 import { storyMatchesFilter } from './storyFilter.ts';
 
@@ -29,6 +44,18 @@ export interface ApproveSummary {
   approved: number;
   skipped: number;
 }
+
+/**
+ * `approve` is dual-mode:
+ *   - Plain `approve` (this function, {@link approveAll}) refreshes the local
+ *     per-machine comparison cache (`paths.localCache`) from the last run's
+ *     `<report>/results.json`. Advisory — it never writes committed baselines.
+ *   - `approve --from <dir>` ({@link approveFrom}) promotes a CI candidate tree
+ *     into the committed `paths.baselines` set + writes the environment manifest.
+ *     This is the ONLY code path in the tool that writes committed baselines, so
+ *     it treats `<dir>` as an untrusted artifact and validates the whole tree
+ *     before writing a single byte.
+ */
 
 /**
  * Reads `<report>/results.json` from the previous run and refreshes the local
@@ -145,4 +172,402 @@ function isApprovable(
     return false;
   }
   return Boolean(action.actualPath && action.baselinePath);
+}
+
+// ---------------------------------------------------------------------------
+// approve --from <dir>: CI candidate promotion into committed baselines.
+// ---------------------------------------------------------------------------
+
+export interface ApproveFromOptions {
+  /** Absolute (or cwd-relative) path to the candidate tree to promote. */
+  from: string;
+  /**
+   * When `true`, delete committed baseline entries the candidate run's
+   * `results.json` recorded as orphaned (`results.deleted`). Prune targets are
+   * always recomputed locally under `paths.baselines` from each entry's
+   * `action`/`breakpoint` — never the artifact's own `baselinePaths[]` strings,
+   * which describe another machine's filesystem.
+   */
+  prune?: boolean;
+}
+
+export interface ApproveFromSummary {
+  /** Baseline PNG files written (a11y companions not counted). */
+  written: number;
+  /** Baseline file groups pruned (`--prune`); `0` without it. */
+  pruned: number;
+}
+
+/** A single validated candidate file destined for `paths.baselines`. */
+interface PlannedWrite {
+  /** Absolute source path inside the candidate tree. */
+  source: string;
+  /** Absolute destination under `paths.baselines`, same relative layout. */
+  destination: string;
+  /** PNGs are decoded+re-encoded (recompress); yaml companions copied verbatim. */
+  kind: 'png' | 'a11y';
+}
+
+/**
+ * Error thrown when the candidate tree fails a trust-boundary check. Carries no
+ * extra data — the message is the whole contract. Distinct type so the CLI can
+ * present it plainly; every throw here happens BEFORE any write, so the promise
+ * rejecting guarantees `paths.baselines` was not touched.
+ */
+export class ApproveFromError extends Error {}
+
+/**
+ * Promotes a CI candidate tree (`<dir>/<action>/<breakpoint>.png` + optional
+ * `.a11y.yaml`, plus a top-level `results.json`) into the committed
+ * `paths.baselines` set, and writes `<baselines>/manifest.json` from the
+ * candidate run's captured environment.
+ *
+ * TRUST BOUNDARY. `<dir>` is an untrusted artifact — a human or bot unzipped it
+ * from CI. This is the only path that writes committed baselines, so it is
+ * fail-closed and validate-all-then-write:
+ *   1. Every tree entry is validated (allowed shape, safe names, no symlinks, no
+ *      traversal) and every PNG is decoded to prove it is a real PNG.
+ *   2. `results.json` must parse and carry an `environment.actual` block.
+ *   3. ONLY after the whole tree passes are any bytes written. A single bad
+ *      entry aborts with {@link ApproveFromError} and zero filesystem changes.
+ *
+ * PNGs are written through {@link writePng} (decode→recompress→encode), so the
+ * promoted baseline is losslessly recompressed and provably decodable in one
+ * step — never a raw `copyFile` of unvalidated artifact bytes.
+ */
+export async function approveFrom(
+  config: ResolvedConfig,
+  options: ApproveFromOptions,
+): Promise<ApproveFromSummary> {
+  const candidateDir = options.from;
+  await assertRealDirectory(candidateDir);
+
+  // Phase 1 — validate the whole tree and build a write plan. No writes yet.
+  const result = await readCandidateResults(candidateDir);
+  const environment = extractEnvironment(result);
+  const plan = await planWrites(candidateDir, config.paths.baselines);
+  await assertAllPngsDecode(plan);
+  const pruneTargets = options.prune
+    ? computePruneTargets(result, config.paths.baselines)
+    : [];
+
+  // Phase 2 — every check passed; commit the plan.
+  for (const write of plan) {
+    if (write.kind === 'png') {
+      await writePng(write.destination, await readFile(write.source));
+    } else {
+      await writeText(write.destination, await readFile(write.source, 'utf8'));
+    }
+  }
+  await writeManifest(config.paths.baselines, environment);
+
+  let pruned = 0;
+  for (const group of pruneTargets) {
+    for (const path of group) {
+      await rm(path, { force: true });
+    }
+    pruned += 1;
+  }
+
+  return {
+    written: plan.filter((write) => write.kind === 'png').length,
+    pruned,
+  };
+}
+
+/** Aborts unless `dir` exists and is a real directory (not a symlink). */
+async function assertRealDirectory(dir: string): Promise<void> {
+  let stats;
+  try {
+    stats = await lstat(dir);
+  } catch {
+    throw new ApproveFromError(`--from directory not found: ${dir}`);
+  }
+  if (stats.isSymbolicLink()) {
+    throw new ApproveFromError(`--from path is a symlink, refusing: ${dir}`);
+  }
+  if (!stats.isDirectory()) {
+    throw new ApproveFromError(`--from path is not a directory: ${dir}`);
+  }
+}
+
+/**
+ * Reads + parses `<dir>/results.json`. Absence is a hard error: the candidate
+ * artifact is incomplete without it (prune targets and the environment manifest
+ * both come from here).
+ */
+async function readCandidateResults(dir: string): Promise<RunResult> {
+  const resultsPath = join(dir, 'results.json');
+  let raw: string;
+  try {
+    raw = await readFile(resultsPath, 'utf8');
+  } catch {
+    throw new ApproveFromError(
+      `candidate tree is missing results.json at ${resultsPath}`,
+    );
+  }
+  try {
+    return parseRunResult(raw, resultsPath);
+  } catch (error) {
+    throw new ApproveFromError(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+/**
+ * Pulls the captured environment (`environment.actual`) out of the candidate
+ * run's results. Missing => fail closed: a candidate artifact produced by a
+ * pre-manifest tuffgal cannot populate `<baselines>/manifest.json`, and writing
+ * baselines without the manifest that gates them would silently defeat the
+ * environment-drift check. The user re-runs with a manifest-aware tuffgal.
+ */
+function extractEnvironment(result: RunResult): EnvironmentManifest {
+  const actual = result.environment?.actual;
+  if (!actual) {
+    throw new ApproveFromError(
+      'candidate results.json has no environment block — it was produced by a ' +
+        'pre-manifest tuffgal. Re-run with a manifest-aware version before ' +
+        'approving, so baselines/manifest.json can be written.',
+    );
+  }
+  return actual;
+}
+
+/**
+ * Walks the candidate tree and returns the validated set of files to write.
+ * Enforces the whole allow-list: top level holds only `results.json` and action
+ * directories; each action directory holds only `<breakpoint>.png` /
+ * `<breakpoint>.a11y.yaml` (or legacy `0.png` / `a11y.yaml`). Every other shape
+ * — stray extensions, nested dirs, dotfiles, symlinks, traversal names — aborts.
+ * Every PNG is decoded here so a corrupt payload fails validation, not a write.
+ */
+async function planWrites(
+  candidateDir: string,
+  baselinesDir: string,
+): Promise<PlannedWrite[]> {
+  const plan: PlannedWrite[] = [];
+  const topEntries = await readdir(candidateDir, { withFileTypes: true });
+  for (const entry of topEntries) {
+    assertSafeName(entry.name, candidateDir);
+    const entryPath = join(candidateDir, entry.name);
+    await assertNotSymlink(entryPath);
+    if (entry.name === 'results.json') {
+      continue; // consumed separately; never written into baselines
+    }
+    if (!entry.isDirectory()) {
+      throw new ApproveFromError(
+        `unexpected top-level file in candidate tree: ${entry.name} ` +
+          '(only results.json and action directories are allowed)',
+      );
+    }
+    if (!ACTION_NAME_PATTERN.test(entry.name)) {
+      throw new ApproveFromError(
+        `invalid action directory name "${entry.name}" — must be ` +
+          'lowercase-kebab ([a-z0-9-]+)',
+      );
+    }
+    plan.push(...(await planActionDir(candidateDir, baselinesDir, entry.name)));
+  }
+  return plan;
+}
+
+/** Validates one action directory's contents and returns its planned writes. */
+async function planActionDir(
+  candidateDir: string,
+  baselinesDir: string,
+  action: string,
+): Promise<PlannedWrite[]> {
+  const actionPath = join(candidateDir, action);
+  const files = await readdir(actionPath, { withFileTypes: true });
+  const plan: PlannedWrite[] = [];
+  for (const file of files) {
+    assertSafeName(file.name, candidateDir);
+    const source = join(actionPath, file.name);
+    await assertNotSymlink(source);
+    if (!file.isFile()) {
+      throw new ApproveFromError(
+        `unexpected non-file entry in candidate tree: ${action}/${file.name} ` +
+          '(action directories hold only PNG + a11y.yaml files)',
+      );
+    }
+    const kind = classifyCandidateFile(file.name, `${action}/${file.name}`);
+    // The destination is derived purely from validated names — never from any
+    // path string in the artifact — so it always lands inside <baselines>.
+    plan.push({
+      source,
+      destination: join(baselinesDir, action, file.name),
+      kind,
+    });
+  }
+  return plan;
+}
+
+/**
+ * Decodes every planned PNG (validation phase) so a corrupt or non-PNG payload
+ * aborts the whole approve with zero writes. `writePng`'s own recompress step
+ * SWALLOWS a decode failure (it falls back to writing the given bytes), which is
+ * the right behaviour for a trusted capture but wrong for an untrusted artifact
+ * — a corrupt candidate PNG must fail closed, not land verbatim as a baseline.
+ */
+async function assertAllPngsDecode(plan: PlannedWrite[]): Promise<void> {
+  for (const write of plan) {
+    if (write.kind !== 'png') continue;
+    const bytes = await readFile(write.source);
+    try {
+      PNG.sync.read(bytes);
+    } catch {
+      throw new ApproveFromError(
+        `candidate PNG is not a decodable PNG: ${write.source}`,
+      );
+    }
+  }
+}
+
+/**
+ * Classifies a candidate file inside an action dir, validating its breakpoint
+ * stem. Accepts breakpoint-keyed `<bp>.png` / `<bp>.a11y.yaml` and the legacy
+ * `0.png` / `a11y.yaml` pair. Anything else aborts.
+ */
+function classifyCandidateFile(name: string, label: string): 'png' | 'a11y' {
+  if (name === 'a11y.yaml') return 'a11y'; // legacy companion
+  if (name === '0.png') return 'png'; // legacy PNG
+  if (name.endsWith('.a11y.yaml')) {
+    assertBreakpointStem(name.slice(0, -'.a11y.yaml'.length), label);
+    return 'a11y';
+  }
+  if (name.endsWith('.png')) {
+    assertBreakpointStem(name.slice(0, -'.png'.length), label);
+    return 'png';
+  }
+  throw new ApproveFromError(
+    `unexpected file in candidate tree: ${label} ` +
+      '(only <breakpoint>.png and <breakpoint>.a11y.yaml are allowed)',
+  );
+}
+
+/** Aborts unless `stem` matches the runner's own breakpoint-segment shape. */
+function assertBreakpointStem(stem: string, label: string): void {
+  if (!BREAKPOINT_SEGMENT_PATTERN.test(stem)) {
+    throw new ApproveFromError(
+      `invalid breakpoint name in candidate tree: ${label} ` +
+        '(must be [a-z0-9_-]+)',
+    );
+  }
+}
+
+/**
+ * Rejects a filesystem name that is a dotfile or carries a path separator /
+ * traversal segment. `readdir` yields single path segments, so a `..` or a
+ * separator here means a hostile or malformed entry, not normal nesting.
+ */
+function assertSafeName(name: string, context: string): void {
+  if (name === '' || name === '.' || name === '..') {
+    throw new ApproveFromError(
+      `unsafe entry name "${name}" in candidate tree under ${context}`,
+    );
+  }
+  if (name.startsWith('.')) {
+    throw new ApproveFromError(
+      `dotfile "${name}" not allowed in candidate tree under ${context}`,
+    );
+  }
+  if (name.includes('/') || name.includes('\\') || name.includes(sep)) {
+    throw new ApproveFromError(
+      `path separator in candidate entry name "${name}" under ${context}`,
+    );
+  }
+}
+
+/** Aborts if `path` is a symlink — never follow a link out of the tree. */
+async function assertNotSymlink(path: string): Promise<void> {
+  const stats = await lstat(path);
+  if (stats.isSymbolicLink()) {
+    throw new ApproveFromError(
+      `symlink not allowed in candidate tree: ${path}`,
+    );
+  }
+}
+
+/**
+ * Recomputes the local prune targets for `--prune` from the candidate run's
+ * `results.deleted`, entirely under the resolved `baselinesDir`. The artifact's
+ * own `baselinePaths[]` strings are ignored — they describe the CI machine's
+ * filesystem and could point anywhere. Instead each entry's `action` +
+ * `breakpoint` is re-validated and re-rooted here, so a prune can only ever
+ * delete files inside this repo's baselines directory.
+ */
+function computePruneTargets(
+  result: RunResult,
+  baselinesDir: string,
+): string[][] {
+  const groups: string[][] = [];
+  for (const entry of result.deleted ?? []) {
+    if (!ACTION_NAME_PATTERN.test(entry.action)) {
+      throw new ApproveFromError(
+        `results.deleted has an invalid action name "${entry.action}"`,
+      );
+    }
+    const actionDir = join(baselinesDir, entry.action);
+    const paths =
+      entry.breakpoint === 'legacy'
+        ? [join(actionDir, '0.png'), join(actionDir, 'a11y.yaml')]
+        : legacyBreakpointPaths(entry.breakpoint, actionDir);
+    for (const path of paths) {
+      assertInsideBaselines(path, baselinesDir);
+    }
+    groups.push(paths);
+  }
+  return groups;
+}
+
+/** The PNG + a11y companion paths for a breakpoint-keyed orphan. */
+function legacyBreakpointPaths(
+  breakpoint: string,
+  actionDir: string,
+): string[] {
+  if (!BREAKPOINT_SEGMENT_PATTERN.test(breakpoint)) {
+    throw new ApproveFromError(
+      `results.deleted has an invalid breakpoint name "${breakpoint}"`,
+    );
+  }
+  return [
+    join(actionDir, `${breakpoint}.png`),
+    join(actionDir, `${breakpoint}.a11y.yaml`),
+  ];
+}
+
+/**
+ * Belt-and-suspenders: even though prune paths are recomputed from validated
+ * names, assert the resolved path stays inside `baselinesDir` before any delete.
+ * A path that escapes (it should be impossible after name validation) aborts.
+ */
+function assertInsideBaselines(path: string, baselinesDir: string): void {
+  const rel = relative(baselinesDir, path);
+  if (rel === '' || rel.startsWith('..') || rel.includes(`..${sep}`)) {
+    throw new ApproveFromError(
+      `refusing to prune a path outside the baselines directory: ${path}`,
+    );
+  }
+}
+
+/**
+ * Writes `<baselines>/manifest.json` from the candidate run's captured
+ * environment. `schemaVersion`/`captureSchema` are re-stamped from this
+ * tuffgal's constants (the single source of truth for the file format), so a
+ * candidate carrying a stale schema number is normalised on promotion.
+ */
+async function writeManifest(
+  baselinesDir: string,
+  environment: EnvironmentManifest,
+): Promise<void> {
+  const manifest: EnvironmentManifest = {
+    ...environment,
+    schemaVersion: SCHEMA_VERSION,
+    captureSchema: CAPTURE_SCHEMA,
+  };
+  await writeText(
+    join(baselinesDir, MANIFEST_FILENAME),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
 }
