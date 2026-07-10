@@ -2,9 +2,15 @@ import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { chromium } from 'playwright';
 import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
 import type { Action } from '../schema/action.ts';
-import type { RunResult, StoryResult, StoryStatus } from '../schema/result.ts';
+import type {
+  EnvironmentReport,
+  RunResult,
+  StoryResult,
+  StoryStatus,
+} from '../schema/result.ts';
 import { loadActions, loadStories } from '../schema/load.ts';
 import { writeReport } from '../reporter/writeReport.ts';
 import { computeFlowCoverage } from '../coverage/flows.ts';
@@ -34,6 +40,12 @@ import {
   shouldScanForOrphans,
 } from './orphanScan.ts';
 import type { RunMode } from './mode.ts';
+import {
+  captureEnvironment,
+  compareEnvironment,
+  readManifest,
+  type EnvironmentManifest,
+} from './manifest.ts';
 import type { DeletedBaseline } from '../schema/result.ts';
 
 export interface RunCliOptions {
@@ -189,12 +201,18 @@ export async function runAll(
       : [];
     const totals = summarise(results);
     totals.deleted = deleted.length;
+    // Capture-environment provenance: what this run rendered under, and — in CI
+    // mode — whether it drifted from the committed baselines' manifest. Local
+    // mode never reads `paths.baselines`, so `expected` stays null and mismatch
+    // is always false (see resolveEnvironmentReport).
+    const environment = await resolveEnvironmentReport(config, mode);
     const runResult: RunResult = {
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
       durationMs: finishedAt.getTime() - startedAt.getTime(),
       mode,
       totals,
+      environment,
       customCoverage: { screens, flows },
       deleted,
       stories: results,
@@ -302,6 +320,54 @@ export async function copyResultsIntoCandidates(
     join(reportDir, 'results.json'),
     join(candidatesDir, 'results.json'),
   );
+}
+
+/**
+ * Reads the launched Chromium's `browser.version()` so the run's environment
+ * manifest records the exact browser build the baselines were rendered against —
+ * the single pixel-affecting fact that only a live browser can report. Launched
+ * throwaway (not the per-story browsers, which spin up and tear down inside the
+ * schedule) because the version is invariant across stories, so one probe covers
+ * the whole run. Kept narrow: launch, read, close.
+ */
+async function captureBrowserIdentity(): Promise<{
+  name: string;
+  version: string;
+}> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    return { name: 'chromium', version: browser.version() };
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * Builds the run's {@link EnvironmentReport}: the environment this run captured
+ * under (`actual`), and — in CI mode — the committed `<baselines>/manifest.json`
+ * (`expected`) plus whether their pixel-affecting keys diverge.
+ *
+ * Local mode never reads `paths.baselines`, so `expected` is `null` and mismatch
+ * is always `false` — a local self-diff has no committed manifest to violate. In
+ * CI mode a missing manifest is the bootstrap case (no expectation yet, no
+ * mismatch); a malformed one surfaces as a mismatch note (see
+ * {@link compareEnvironment}). `expected` carries the parsed manifest only when
+ * it read cleanly, so a malformed file reports `null` here while still driving a
+ * mismatch.
+ */
+export async function resolveEnvironmentReport(
+  config: ResolvedConfig,
+  mode: RunMode,
+): Promise<EnvironmentReport> {
+  const actual = captureEnvironment(config, await captureBrowserIdentity());
+  if (mode !== 'ci') {
+    return { expected: null, actual, mismatch: false, mismatchKeys: [] };
+  }
+  const read = await readManifest(config.paths.baselines);
+  const { mismatch, mismatchKeys } = compareEnvironment(read, actual);
+  const expected: EnvironmentManifest | null =
+    read.status === 'ok' ? read.manifest : null;
+  return { expected, actual, mismatch, mismatchKeys };
 }
 
 /**

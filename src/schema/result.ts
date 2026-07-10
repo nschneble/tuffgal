@@ -1,4 +1,5 @@
 import type { RunMode } from '../runner/mode.ts';
+import type { EnvironmentManifest } from '../runner/manifest.ts';
 
 /**
  * Outcome model. The runner emits a `RunResult` per invocation; the reporter
@@ -146,6 +147,30 @@ export function parseRunResult(raw: string, sourcePath: string): RunResult {
   return parsed as RunResult;
 }
 
+/**
+ * The capture-environment block recorded on every run. Lets the report, the
+ * Action, and a human diagnose an environment drift between the committed
+ * baselines and the run that compared against them.
+ *
+ * - `expected` — the committed `<baselines>/manifest.json` when one exists and
+ *   parses, else `null`. `null` covers both the bootstrap case (no manifest
+ *   written yet — the first `approve --from` creates it) and local mode, which
+ *   never reads `paths.baselines` at all.
+ * - `actual` — the environment this run actually captured under.
+ * - `mismatch` — `true` when a pixel-affecting key diverged (CI mode with a
+ *   present manifest), or when the committed manifest was unreadable. Always
+ *   `false` in local mode and on the bootstrap (missing-manifest) case.
+ * - `mismatchKeys` — the specific diverging keys (see `PIXEL_AFFECTING_KEYS`),
+ *   or `['manifest']` when the committed manifest could not be parsed. Empty
+ *   when `mismatch` is `false`.
+ */
+export interface EnvironmentReport {
+  expected: EnvironmentManifest | null;
+  actual: EnvironmentManifest;
+  mismatch: boolean;
+  mismatchKeys: string[];
+}
+
 export interface RunResult {
   startedAt: string;
   finishedAt: string;
@@ -180,6 +205,15 @@ export interface RunResult {
    * Detection only — pruning is a later wave.
    */
   deleted: DeletedBaseline[];
+  /**
+   * Capture-environment provenance for this run (see {@link EnvironmentReport}).
+   * `expected` is the committed manifest (null in local mode / bootstrap),
+   * `actual` is what this run captured under, and `mismatch`/`mismatchKeys`
+   * drive the report banner and the `3` exit code. Optional in the type only as
+   * a defensive parse guard for older `results.json` artifacts that predate this
+   * block; every result the current runner emits carries it.
+   */
+  environment?: EnvironmentReport;
   /**
    * Custom coverage metrics layered on top of V8 line coverage:
    * `screens` = baselined visit-* actions / declared screens,

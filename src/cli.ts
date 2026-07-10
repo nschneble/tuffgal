@@ -202,29 +202,42 @@ function failExit(message: string): never {
   process.exit(1);
 }
 
+/**
+ * Validates cross-command flag placement, returning the first error message or
+ * `undefined` when the flag set is legal for the parsed command. Pure (no
+ * `process.exit`) so the command × flag matrix is unit-testable in isolation;
+ * `main` calls it and routes any message through {@link failExit}. Covers the
+ * flags that only mean something on a specific subcommand:
+ *   - `--new-only`, `--breakpoint`/`--<name>`, and a bare positional narrow an
+ *     approval set — meaningless on any command but `approve`.
+ *   - `--ci`/`--local` pick the comparison contract — meaningful only on `run`.
+ */
+export function validateCommandFlags(
+  args: ParsedArguments,
+): string | undefined {
+  if (args.command !== 'approve') {
+    if (args.newOnly) {
+      return '--new-only is only valid with the `approve` subcommand';
+    }
+    if (args.breakpoints.length > 0) {
+      return '--breakpoint (and --desktop/--mobile/…) is only valid with the `approve` subcommand';
+    }
+    if (args.positional !== undefined) {
+      return `unexpected argument "${args.positional}"`;
+    }
+  }
+  if (args.command !== 'run' && (args.ci || args.local)) {
+    return '--ci and --local are only valid with the `run` subcommand';
+  }
+  return undefined;
+}
+
 async function main(): Promise<void> {
   const args = parseArguments(process.argv.slice(2));
 
-  // `--new-only` and the breakpoint filters narrow an approval set; they have no
-  // meaning on the other subcommands.
-  if (args.command !== 'approve') {
-    if (args.newOnly) {
-      failExit('--new-only is only valid with the `approve` subcommand');
-    }
-    if (args.breakpoints.length > 0) {
-      failExit(
-        '--breakpoint (and --desktop/--mobile/…) is only valid with the `approve` subcommand',
-      );
-    }
-    if (args.positional !== undefined) {
-      failExit(`unexpected argument "${args.positional}"`);
-    }
-  }
-
-  // `--ci` / `--local` pick the comparison contract; they only mean anything on
-  // `run`.
-  if (args.command !== 'run' && (args.ci || args.local)) {
-    failExit('--ci and --local are only valid with the `run` subcommand');
+  const flagError = validateCommandFlags(args);
+  if (flagError) {
+    failExit(flagError);
   }
 
   if (args.command === 'help') {
@@ -255,7 +268,13 @@ async function main(): Promise<void> {
       coverage: args.coverage,
       mode,
     });
-    process.exit(deriveExitCode(mode, result.totals));
+    process.exit(
+      deriveExitCode(
+        mode,
+        result.totals,
+        result.environment?.mismatch ?? false,
+      ),
+    );
   }
   if (args.command === 'approve') {
     // A story may be named positionally (`approve user-logs-in`) or via
