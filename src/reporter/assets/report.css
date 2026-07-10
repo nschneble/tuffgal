@@ -153,6 +153,71 @@ h2 {
   text-wrap: balance;
 }
 
+/* Environment-mismatch banner, first inside <main>. The "warning" meaning is
+   carried by the heading word + body copy, never by color alone (1.4.1). Body
+   text stays --text (≥4.5:1); the red accent lives only on the left border (a
+   non-text ≥3:1 cue, mirroring .action-error). The list of diverging keys reads
+   as monospace <code> tokens. */
+.env-mismatch {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--failed);
+}
+
+.env-mismatch h2 {
+  margin-top: 0.25rem;
+  color: var(--changed);
+}
+
+.env-mismatch p {
+  margin: 0.5rem 0;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  text-wrap: pretty;
+}
+
+.env-mismatch ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.env-mismatch li {
+  color: var(--changed);
+}
+
+/* Deleted (orphaned-baseline) section, a peer landmark after the stories. */
+.deleted {
+  margin-top: 0.5rem;
+}
+
+.deleted p {
+  margin: 0 0 0.5rem;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  text-wrap: pretty;
+}
+
+.deleted ul {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  list-style: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.deleted li {
+  padding: 0.15rem 0;
+  color: var(--text);
+}
+
 .summary {
   margin-top: 0.5rem;
 }
@@ -581,6 +646,28 @@ h2 {
   font-size: 0.8125rem;
   white-space: pre-wrap;
   overflow-x: auto;
+}
+
+/* Supplementary per-action notes (candidate / a11y-drift). Both plain prose
+   inside li.action; an a11y-only changed row stacks both. Indented to align
+   under the action name (past the status badge), muted like other secondary
+   prose. Stacked cleanly with a small gap when both render. */
+.candidate-note,
+.a11y-drift-note {
+  margin: 0.35rem 0 0 2.2rem;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  text-wrap: pretty;
+}
+
+.candidate-note + .a11y-drift-note {
+  margin-top: 0.15rem;
+}
+
+.a11y-drift-note code {
+  font-family: var(--font-mono);
+  color: var(--text);
 }
 
 summary.action-row {

@@ -1138,6 +1138,408 @@ describe('formatDate — friendly report-meta timestamp', () => {
   });
 });
 
+describe('renderEnvMismatch — capture-environment banner', () => {
+  it('renders no banner when environment is absent', () => {
+    const html = renderReport(makeRunResult(), REPORT_DIR);
+    assert.ok(
+      !html.includes('class="env-mismatch"'),
+      'no banner without an environment block',
+    );
+  });
+
+  it('renders no banner when environment.mismatch is false', () => {
+    const html = renderReport(
+      makeRunResult({
+        environment: {
+          expected: null,
+          actual: {} as never,
+          mismatch: false,
+          mismatchKeys: [],
+        },
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      !html.includes('class="env-mismatch"'),
+      'no banner when mismatch is false, even with an environment block',
+    );
+  });
+
+  it('renders the banner as the first child of <main>, above the summary, with role=alert and an h2', () => {
+    const html = renderReport(
+      makeRunResult({
+        environment: {
+          expected: null,
+          actual: {} as never,
+          mismatch: true,
+          mismatchKeys: ['browserVersion', 'os'],
+        },
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        '<section class="env-mismatch" role="alert" aria-labelledby="env-mismatch-heading">',
+      ),
+      'banner is a role=alert section labelled by its heading',
+    );
+    assert.ok(
+      html.includes(
+        '<h2 id="env-mismatch-heading">capture environment changed</h2>',
+      ),
+      'banner carries its h2 landmark',
+    );
+    // First inside <main>: before the summary section.
+    const mainIndex = html.indexOf('<main id="main"');
+    const bannerIndex = html.indexOf('class="env-mismatch"');
+    const summaryIndex = html.indexOf('<section class="summary"');
+    assert.ok(
+      mainIndex < bannerIndex && bannerIndex < summaryIndex,
+      'banner sits inside <main> and before the summary',
+    );
+  });
+
+  it('lists the diverging keys as escaped <code> list items', () => {
+    const html = renderReport(
+      makeRunResult({
+        environment: {
+          expected: null,
+          actual: {} as never,
+          mismatch: true,
+          mismatchKeys: ['browserVersion', 'deviceScaleFactor'],
+        },
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes('<ul aria-label="Changed environment keys">'),
+      'diverging keys render as a labelled list',
+    );
+    assert.ok(
+      html.includes('<li><code>browserVersion</code></li>'),
+      'first diverging key rendered',
+    );
+    assert.ok(
+      html.includes('<li><code>deviceScaleFactor</code></li>'),
+      'second diverging key rendered',
+    );
+    assert.ok(
+      html.includes(
+        'Expect a full re-approve — baselines were captured under a different environment.',
+      ),
+      'banner body conveys the re-approve consequence',
+    );
+  });
+
+  it('uses the manifest-sentinel copy with no key list when mismatchKeys is exactly [manifest]', () => {
+    const html = renderReport(
+      makeRunResult({
+        environment: {
+          expected: null,
+          actual: {} as never,
+          mismatch: true,
+          mismatchKeys: ['manifest'],
+        },
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        "The committed baseline manifest could not be read, so the capture environment can't be verified. Expect a full re-approve.",
+      ),
+      'manifest sentinel uses the unreadable-manifest copy',
+    );
+    assert.ok(
+      !html.includes('<ul aria-label="Changed environment keys">'),
+      'no key list renders for the manifest sentinel',
+    );
+    assert.ok(
+      !html.includes('<li><code>manifest</code></li>'),
+      'the literal "manifest" sentinel is never surfaced as a key',
+    );
+  });
+
+  it('escapes a malicious environment key', () => {
+    const html = renderReport(
+      makeRunResult({
+        environment: {
+          expected: null,
+          actual: {} as never,
+          mismatch: true,
+          mismatchKeys: ['<script>boom</script>'],
+        },
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes('<li><code>&lt;script&gt;boom&lt;/script&gt;</code></li>'),
+      'a diverging key is HTML-escaped',
+    );
+    assert.ok(
+      !html.includes('<script>boom</script>'),
+      'no raw script tag leaks from a key',
+    );
+  });
+});
+
+describe('renderDeleted — orphaned-baseline section', () => {
+  it('renders no section when deleted is empty', () => {
+    const html = renderReport(makeRunResult({ deleted: [] }), REPORT_DIR);
+    assert.ok(
+      !html.includes('class="deleted"'),
+      'no deleted section when nothing is orphaned',
+    );
+  });
+
+  it('renders a peer h2 section after the stories with a prune intro and a labelled list', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 0,
+          passed: 0,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 1,
+        },
+        deleted: [
+          {
+            action: 'visit-retired',
+            breakpoint: 'mobile',
+            baselinePaths: ['/base/visit-retired/mobile.png'],
+          },
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        '<section class="deleted" aria-labelledby="deleted-heading">',
+      ),
+      'deleted section labelled by its heading',
+    );
+    assert.ok(
+      html.includes('<h2 id="deleted-heading">deleted</h2>'),
+      'lowercase single-word heading matching the summary/stories convention',
+    );
+    assert.ok(
+      html.includes(
+        'These committed baselines have no matching story this run. <code>tuffgal approve --prune</code> removes them.',
+      ),
+      'intro names the prune command as a code token',
+    );
+    assert.ok(
+      html.includes(
+        '<ul aria-label="Orphaned baselines to be pruned on approve">',
+      ),
+      'orphan list carries its accessible label',
+    );
+    assert.ok(
+      html.includes('<li><code>visit-retired</code> mobile</li>'),
+      'orphan entry names the action as code plus its plain breakpoint',
+    );
+    // Deleted section comes after the stories section.
+    const storiesIndex = html.indexOf('<h2 id="stories-heading">stories</h2>');
+    const deletedIndex = html.indexOf('<h2 id="deleted-heading">deleted</h2>');
+    assert.ok(
+      storiesIndex !== -1 && deletedIndex !== -1 && storiesIndex < deletedIndex,
+      'deleted heading follows the stories heading in reading order',
+    );
+  });
+
+  it('adds an sr-only clarifier for a legacy breakpoint and escapes the action', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 0,
+          passed: 0,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 1,
+        },
+        deleted: [
+          {
+            action: '<b>old</b>',
+            breakpoint: 'legacy',
+            baselinePaths: ['/base/old/0.png'],
+          },
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        '<li><code>&lt;b&gt;old&lt;/b&gt;</code> legacy<span class="sr-only"> (pre-breakpoint layout)</span></li>',
+      ),
+      'legacy breakpoint reads "legacy" visibly with an sr-only clarifier; action is escaped',
+    );
+  });
+});
+
+describe('renderActionNotes — candidate + a11y-drift notes', () => {
+  function actionResult(actionOverrides: Partial<ActionResult>) {
+    return makeRunResult({
+      totals: {
+        stories: 1,
+        passed: 0,
+        changed: 1,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [makeAction(actionOverrides)],
+        }),
+      ],
+    });
+  }
+
+  it('renders the candidate note on a changed action', () => {
+    const html = renderReport(
+      actionResult({ action: 'visit-settings', status: 'changed' }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        '<p class="candidate-note" role="note">This render is the proposed new baseline.</p>',
+      ),
+      'changed action carries the candidate note',
+    );
+  });
+
+  it('renders the candidate note on a new action', () => {
+    const html = renderReport(
+      actionResult({ action: 'visit-home', status: 'new' }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes('class="candidate-note"'),
+      'new action carries the candidate note',
+    );
+  });
+
+  it('renders NO candidate note on pass, failed, or skipped actions', () => {
+    for (const status of ['pass', 'failed', 'skipped'] as const) {
+      const html = renderReport(
+        actionResult({ action: 'visit-home', status }),
+        REPORT_DIR,
+      );
+      assert.ok(
+        !html.includes('class="candidate-note"'),
+        `no candidate note for a ${status} action`,
+      );
+    }
+  });
+
+  it('renders the a11y-drift note (with relativized path) when a11yChanged is true', () => {
+    const html = renderReport(
+      actionResult({
+        action: 'visit-settings',
+        status: 'changed',
+        a11yChanged: true,
+        a11yBaselinePath:
+          '/fake/report/dir/base/visit-settings/mobile.a11y.yaml',
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        '<p class="a11y-drift-note" role="note">Accessibility snapshot changed. Proposed a11y baseline written to <code>base/visit-settings/mobile.a11y.yaml</code>.</p>',
+      ),
+      'a11y-drift note renders the report-relative baseline path as plain code text',
+    );
+    assert.ok(
+      !/a11y-drift-note[^>]*>[^<]*<a /.test(html),
+      'the a11y baseline path is plain text, never a link',
+    );
+  });
+
+  it('renders the a11y-drift note without a path clause when a11yBaselinePath is undefined', () => {
+    const html = renderReport(
+      actionResult({
+        action: 'visit-settings',
+        status: 'changed',
+        a11yChanged: true,
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        '<p class="a11y-drift-note" role="note">Accessibility snapshot changed.</p>',
+      ),
+      'a11y-drift note degrades gracefully with no path clause',
+    );
+  });
+
+  it('does NOT render the a11y-drift note for a changed row that lacks a11yChanged (size-mismatch discriminator)', () => {
+    // A size-mismatch changed row has no diffPath AND no a11yChanged. Keying the
+    // note on !diffPath would misfire here; it must key strictly on a11yChanged.
+    const html = renderReport(
+      actionResult({
+        action: 'visit-settings',
+        status: 'changed',
+        failureMessage:
+          'Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+        actualPath: '/fake/report/dir/shots/settings.actual.png',
+        baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      !html.includes('class="a11y-drift-note"'),
+      'no a11y-drift note on a size-mismatch changed row (no a11yChanged)',
+    );
+    assert.ok(
+      html.includes('class="candidate-note"'),
+      'the size-mismatch changed row still carries the candidate note',
+    );
+  });
+
+  it('does NOT render the a11y-drift note for a pixel-drift changed row with a diff but no a11yChanged', () => {
+    const html = renderReport(
+      actionResult({
+        action: 'visit-settings',
+        status: 'changed',
+        actualPath: '/fake/report/dir/shots/settings.actual.png',
+        baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+        diffPath: '/fake/report/dir/shots/settings.diff.png',
+        diffPixels: 1234,
+        diffRatio: 0.012,
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      !html.includes('class="a11y-drift-note"'),
+      'an SSIM-fail changed row with a diff but no a11yChanged shows no a11y-drift note',
+    );
+  });
+
+  it('stacks candidate note before a11y-drift note on an a11y-only changed row', () => {
+    const html = renderReport(
+      actionResult({
+        action: 'visit-settings',
+        status: 'changed',
+        a11yChanged: true,
+        a11yBaselinePath: '/fake/report/dir/base/visit-settings/0.a11y.yaml',
+      }),
+      REPORT_DIR,
+    );
+    const candidateIndex = html.indexOf('class="candidate-note"');
+    const a11yIndex = html.indexOf('class="a11y-drift-note"');
+    assert.ok(
+      candidateIndex !== -1 && a11yIndex !== -1,
+      'both notes render on an a11y-only changed row',
+    );
+    assert.ok(
+      candidateIndex < a11yIndex,
+      'candidate note precedes the a11y-drift note',
+    );
+  });
+});
+
 describe('renderStory — status marker + sr-only word per tier', () => {
   const result = makeRunResult({
     totals: {
