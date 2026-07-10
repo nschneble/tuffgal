@@ -40,7 +40,7 @@ import {
   scanOrphanedBaselines,
   shouldScanForOrphans,
 } from './orphanScan.ts';
-import type { RunMode } from './mode.ts';
+import { comparisonRootFor, type RunMode } from './mode.ts';
 import {
   captureEnvironment,
   compareEnvironment,
@@ -184,9 +184,10 @@ export async function runAll(
     // Screen coverage measures how many screens have a baseline in the set this
     // run compares against — the committed `paths.baselines` in CI mode, the
     // per-machine `paths.localCache` in local mode. Local runs never read
-    // `paths.baselines` (PRD invariant), so the metric points at the same
-    // comparison root `runAction` uses; its meaning ("screens with a baseline to
-    // diff against") is preserved rather than blanked.
+    // `paths.baselines` (PRD invariant). Both the metric and `runAction` pick
+    // their root through the shared `comparisonRootFor`, so the metric measures
+    // against the exact set the run diffed against; its meaning ("screens with a
+    // baseline to diff against") is preserved rather than blanked.
     const [screens, flows] = await Promise.all([
       computeScreenCoverage(
         config.paths.actions,
@@ -333,18 +334,17 @@ export async function copyResultsIntoCandidates(
 /**
  * The baseline root the screen-coverage metric measures against: committed
  * `paths.baselines` in CI mode, per-machine `paths.localCache` in local mode.
- * Mirrors `runAction`'s own comparison-root selection so the metric counts
- * screens against the SAME set the run diffed against. Enforces the PRD
- * invariant that a local run never reads `paths.baselines` — a local run's
- * coverage is measured against its cache, keeping the metric meaningful (screens
- * with a baseline to diff against) instead of pointing at a set local mode must
- * never touch.
+ * A thin, coverage-named alias over the shared {@link comparisonRootFor} so the
+ * metric counts screens against the SAME set the run (via `runAction`) diffed
+ * against — the mode→root mapping now lives once, in `mode.ts`. Preserved as a
+ * named export because the coverage metric's PRD invariant (a local run never
+ * reads `paths.baselines`) reads most clearly against a coverage-specific name.
  */
 export function coverageComparisonRoot(
   config: ResolvedConfig,
   mode: RunMode,
 ): string {
-  return mode === 'ci' ? config.paths.baselines : config.paths.localCache;
+  return comparisonRootFor(config, mode);
 }
 
 /**

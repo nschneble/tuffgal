@@ -15,7 +15,7 @@ import {
   writeText,
 } from '../screenshots/baselineStore.ts';
 import { sleep } from '../util.ts';
-import type { RunMode } from './mode.ts';
+import { comparisonRootFor, type RunMode } from './mode.ts';
 import { interpolate, interpolateHint } from './interpolate.ts';
 import { LocatorNotFoundError, resolveLocator } from './resolveLocator.ts';
 import { runClick } from './steps/click.ts';
@@ -298,7 +298,8 @@ async function captureAndCompare(
     breakpoint,
     mode,
   } = options;
-  // The comparison target moves with the mode. CI compares against (and, on
+  // The comparison target moves with the mode (see `comparisonRootFor`, the
+  // single owner of the mode→root mapping). CI compares against (and, on
   // approval, promotes into) the committed `paths.baselines`; local mode
   // self-diffs against — and auto-seeds — the per-machine, gitignored
   // `paths.localCache`, never reading or writing `paths.baselines`. Report-side
@@ -307,8 +308,7 @@ async function captureAndCompare(
   // fallback resolves within whichever root is active, so a project migrating
   // its committed baselines and a developer with a legacy cache each get the
   // pre-breakpoint fallback within their own root.
-  const comparisonRoot =
-    mode === 'local' ? config.paths.localCache : config.paths.baselines;
+  const comparisonRoot = comparisonRootFor(config, mode);
   const paths = pathsFor({
     baselinesDir: config.paths.baselines,
     comparisonRoot,

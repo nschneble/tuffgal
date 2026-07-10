@@ -72,35 +72,52 @@ function environment(): EnvironmentManifest {
 }
 
 /**
- * Writes a `results.json` into the candidate tree. Callers override the
- * `environment` and `deleted` fields; everything else is inert filler that
- * clears `parseRunResult`'s shallow shape check.
+ * Overrides accepted by {@link writeCandidateResults}. Every field is optional;
+ * an absent field takes the clean-filler default. The subtle ones are keyed on
+ * PRESENCE, not value, so a caller can force an explicitly-empty/omitted shape:
+ *   - `environment`: absent → the default well-shaped block; present (incl.
+ *     `undefined`) → written verbatim, so `{ environment: undefined }` omits the
+ *     block entirely (pre-manifest artifact).
+ *   - `mode`: absent → `'ci'`; present `undefined` → the key is omitted entirely
+ *     (pre-mode artifact); any string → written verbatim.
+ *   - `totals`: absent → a clean zero-failure block whose `failed` is
+ *     `overrides.failed ?? 0`; present `null` → the whole `totals` object is
+ *     omitted (truncated artifact); a raw object → written verbatim (exercise the
+ *     shape-guard, e.g. `{}` for a missing `failed` or a non-numeric one).
+ */
+interface CandidateResultsOverrides {
+  environment?: RunResult['environment'];
+  deleted?: DeletedBaseline[];
+  mode?: 'ci' | 'local' | undefined;
+  failed?: number;
+  totals?: Record<string, unknown> | null;
+}
+
+/**
+ * Writes a `results.json` into the candidate tree. Everything not overridden is
+ * inert filler that clears `parseRunResult`'s shallow shape check; the overrides
+ * (see {@link CandidateResultsOverrides}) let a test force the exact promotability
+ * -gate shape it exercises — including omitting the `mode`, `totals`, or
+ * `environment` keys entirely.
  */
 async function writeCandidateResults(
-  overrides: Partial<Pick<RunResult, 'environment' | 'deleted'>> = {},
+  overrides: CandidateResultsOverrides = {},
 ): Promise<void> {
-  const results = {
+  const hasEnvironment = 'environment' in overrides;
+  const hasMode = 'mode' in overrides;
+  const hasTotals = 'totals' in overrides;
+  const results: Record<string, unknown> = {
     startedAt: '2026-06-11T12:00:00.000Z',
     finishedAt: '2026-06-11T12:00:01.000Z',
     durationMs: 1000,
-    mode: 'ci',
-    totals: {
-      stories: 0,
-      passed: 0,
-      changed: 0,
-      failed: 0,
-      new: 0,
-      deleted: 0,
-    },
-    environment:
-      'environment' in overrides
-        ? overrides.environment
-        : {
-            expected: null,
-            actual: environment(),
-            mismatch: false,
-            mismatchKeys: [],
-          },
+    environment: hasEnvironment
+      ? overrides.environment
+      : {
+          expected: null,
+          actual: environment(),
+          mismatch: false,
+          mismatchKeys: [],
+        },
     deleted: overrides.deleted ?? [],
     customCoverage: {
       screens: { total: 0, covered: 0, ratio: 1, missing: [] },
@@ -108,52 +125,12 @@ async function writeCandidateResults(
     },
     stories: [],
   };
-  await writeFile(
-    join(candidateDir, 'results.json'),
-    JSON.stringify(results),
-    'utf8',
-  );
-}
-
-/**
- * Writes a `results.json` overriding the promotability-gate fields: `mode`,
- * `totals.failed`, or the whole `totals` object. `mode: undefined` omits the key
- * entirely (pre-mode artifact). `totals: null` omits the whole `totals` object
- * (truncated artifact); a raw object (e.g. `{}` for a missing `failed`, or a
- * non-numeric `failed`) is written verbatim so the shape-guard can be exercised.
- * Everything else is the same clean filler as {@link writeCandidateResults}.
- */
-async function writeCandidateResultsRaw(
-  overrides: {
-    mode?: 'ci' | 'local' | undefined;
-    failed?: number;
-    totals?: Record<string, unknown> | null;
-  } = {},
-): Promise<void> {
-  const hasMode = 'mode' in overrides;
-  const hasTotals = 'totals' in overrides;
-  const results: Record<string, unknown> = {
-    startedAt: '2026-06-11T12:00:00.000Z',
-    finishedAt: '2026-06-11T12:00:01.000Z',
-    durationMs: 1000,
-    environment: {
-      expected: null,
-      actual: environment(),
-      mismatch: false,
-      mismatchKeys: [],
-    },
-    deleted: [],
-    customCoverage: {
-      screens: { total: 0, covered: 0, ratio: 1, missing: [] },
-      flows: { total: 0, covered: 0, ratio: 1, missing: [] },
-    },
-    stories: [],
-  };
+  // `mode` absent → 'ci'; present `undefined` → omit the key (pre-mode artifact).
   if (!hasMode || overrides.mode !== undefined) {
     results.mode = hasMode ? overrides.mode : 'ci';
   }
   // `totals: null` omits the object entirely; any other override is written
-  // verbatim; the default is a clean zero-failure totals block.
+  // verbatim; the default is a clean zero-failure block.
   if (hasTotals) {
     if (overrides.totals !== null) {
       results.totals = overrides.totals;
@@ -560,7 +537,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
     // A local run renders against the per-machine cache on the developer's own
     // platform; its pixels must never become committed baselines.
     await writeCandidatePng('open', 'desktop');
-    await writeCandidateResultsRaw({ mode: 'local' });
+    await writeCandidateResults({ mode: 'local' });
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
       /not a CI run/,
@@ -571,7 +548,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
     // An older artifact predating the `mode` field is treated as non-ci and
     // refused — only a current `mode: 'ci'` run is eligible.
     await writeCandidatePng('open', 'desktop');
-    await writeCandidateResultsRaw({ mode: undefined });
+    await writeCandidateResults({ mode: undefined });
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
       /pre-mode run, not a CI run/,
@@ -582,7 +559,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
     // A failed run produces a PARTIAL candidate tree — promoting it would commit
     // an incomplete baseline set.
     await writeCandidatePng('open', 'desktop');
-    await writeCandidateResultsRaw({ failed: 2 });
+    await writeCandidateResults({ failed: 2 });
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
       /2 failed story/,
@@ -594,7 +571,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
     // Reading `result.totals.failed` would throw a raw TypeError (not an
     // ApproveFromError) — the guard must fail closed with the trust-boundary type.
     await writeCandidatePng('open', 'desktop');
-    await writeCandidateResultsRaw({ totals: null });
+    await writeCandidateResults({ totals: null });
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
       /missing a numeric totals\.failed/,
@@ -606,7 +583,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
     // would sail through the promotability gate. It must be refused, not assumed
     // zero — a run whose fail count is unknown is not a source of truth.
     await writeCandidatePng('open', 'desktop');
-    await writeCandidateResultsRaw({
+    await writeCandidateResults({
       totals: { stories: 0, passed: 0, changed: 0, new: 0, deleted: 0 },
     });
     await assertZeroWrites(
@@ -619,7 +596,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
     // A non-numeric `failed` (e.g. a string) is neither `> 0` nor throwing —
     // another silent-pass shape the shape-guard must catch.
     await writeCandidatePng('open', 'desktop');
-    await writeCandidateResultsRaw({
+    await writeCandidateResults({
       totals: {
         stories: 0,
         passed: 0,
