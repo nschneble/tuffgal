@@ -428,7 +428,7 @@ async function captureAndCompare(
         diffRatio: outcome.diffRatio,
         ssimScore: outcome.ssimScore,
         a11yChanged: a11yChanged || undefined,
-        a11yBaselinePath: paths.a11yBaseline,
+        a11yBaselinePath: a11yBaselinePathForRead,
         a11yActualPath: paths.a11yActual,
       });
     }
@@ -447,7 +447,7 @@ async function captureAndCompare(
       diffRatio: outcome.diffRatio,
       ssimScore: outcome.ssimScore,
       a11yChanged: a11yChanged || undefined,
-      a11yBaselinePath: paths.a11yBaseline,
+      a11yBaselinePath: a11yBaselinePathForRead,
       a11yActualPath: paths.a11yActual,
     });
   } catch (error) {
@@ -455,12 +455,21 @@ async function captureAndCompare(
       // Dimension drift is still a `changed` outcome — same candidate emission
       // (CI only; `writeCandidate` no-ops in local mode).
       await writeCandidate(mode, paths, actualPng, a11yJson);
+      // CONTRACT: this branch must NEVER emit `a11yChanged`. The a11y-only-drift
+      // discriminator downstream is `a11yChanged === true`, and this pixel-drift
+      // (size-mismatch) result already carries no `diffPath`. Were it to also set
+      // `a11yChanged`, a consumer that (incorrectly) inferred a11y-only drift from
+      // `!diffPath` would misclassify it — but the positive `a11yChanged` gate,
+      // which this branch deliberately leaves unset, keeps the two apart. The
+      // locking test `never carries a11yChanged` guards this omission against a
+      // future "cleanup" that would add it. See the `a11yChanged` doc in
+      // schema/result.ts for the consumer-side rule.
       return finishResult(baseResult, {
         status: 'changed',
         baselinePath: paths.baseline,
         actualPath: paths.actual,
         failureMessage: error.message,
-        a11yBaselinePath: paths.a11yBaseline,
+        a11yBaselinePath: a11yBaselinePathForRead,
         a11yActualPath: paths.a11yActual,
       });
     }

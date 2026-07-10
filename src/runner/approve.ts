@@ -351,16 +351,23 @@ async function readCandidateResults(dir: string): Promise<RunResult> {
 
 /**
  * Refuses to promote a candidate tree that did not come from a clean CI run.
- * Two fail-closed gates, both derived from the candidate's own `results.json`:
+ * Three fail-closed gates, all derived from the candidate's own `results.json`:
  *   - `mode !== 'ci'` — a local (advisory) run's candidate tree is rendered
  *     against the per-machine cache on the developer's own platform, so
  *     promoting it commits cross-platform pixels the CI gate would immediately
  *     re-flag. Only a CI-mode run's renders are eligible for the committed set.
+ *   - `totals.failed` is not a number — `parseRunResult` validates only that
+ *     `stories` is an array, so a truncated or foreign artifact can reach here
+ *     with `totals` (or `totals.failed`) missing or non-numeric. Reading it
+ *     unguarded would either throw a raw `TypeError` (not an `ApproveFromError`,
+ *     breaking the trust-boundary contract) or, worse, evaluate `undefined > 0`
+ *     to `false` and SILENTLY pass the gate. A non-numeric `failed` is therefore
+ *     an explicit fail-closed refusal, not an assumed-zero.
  *   - `totals.failed > 0` — a run with failed stories produced a PARTIAL tree
  *     (broken stories wrote no candidate, or wrote a candidate mid-failure), so
  *     promoting it would commit an incomplete baseline set. A broken run is
  *     never a source of truth.
- * Both abort before any write. `mode` is read defensively (older artifacts may
+ * All abort before any write. `mode` is read defensively (older artifacts may
  * omit it) — a missing `mode` is treated as non-`ci` and refused, since only a
  * current CI run stamps `mode: 'ci'`.
  */
@@ -370,6 +377,13 @@ function assertPromotableRun(result: RunResult): void {
       `Candidate results.json was produced by a ${result.mode ?? 'pre-mode'} ` +
         'run, not a CI run — only `mode: "ci"` candidates may be promoted into ' +
         'committed baselines. Re-run under `tuffgal run --ci`.',
+    );
+  }
+  if (typeof result.totals?.failed !== 'number') {
+    throw new ApproveFromError(
+      'Candidate results.json is missing a numeric totals.failed count — the ' +
+        'artifact is truncated or was not produced by tuffgal. Refusing to ' +
+        'promote a run whose pass/fail status cannot be verified.',
     );
   }
   if (result.totals.failed > 0) {

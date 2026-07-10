@@ -60,9 +60,18 @@ export interface ActionResult {
    * baseline tree. Advisory in local mode (flagged, never gates status). In CI
    * mode it DOES gate: when pixels pass but the aria snapshot drifts, the status
    * becomes `changed` and a candidate pair is written, so a drifted committed
-   * `a11y.yaml` stays re-approvable under the sole-writer model. On a
-   * `changed` result with no `diffPath` (no pixel diff), this flag being `true`
-   * marks the drift as a11y-only — pixel drift always carries a `diffPath`.
+   * `a11y.yaml` stays re-approvable under the sole-writer model.
+   *
+   * DISCRIMINATOR CONTRACT. A11y-only drift is identified POSITIVELY by
+   * `a11yChanged === true`, never by the absence of `diffPath` alone. Both
+   * pixel-drift branches (SSIM-fail and size-mismatch) carry a `diffPath` /
+   * `failureMessage` and deliberately leave `a11yChanged` unset, so the two
+   * classes never collide — but the size-mismatch branch's omission of
+   * `a11yChanged` is the load-bearing half of that guarantee and is locked by
+   * runAction's `never carries a11yChanged` test. Consumers MUST branch on
+   * `a11yChanged === true`; a `!diffPath` heuristic would misread a future
+   * result that carries neither, or a size-mismatch result if that omission
+   * ever regressed.
    */
   a11yChanged?: boolean;
   /**

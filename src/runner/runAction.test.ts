@@ -642,6 +642,70 @@ describe('runAction — CI mode a11y-only drift', () => {
     assert.deepEqual(await readFile(join(baselineDir, 'desktop.png')), png);
   });
 
+  it('records the breakpoint-keyed a11y baseline path when the drift came from a breakpoint-source baseline', async () => {
+    // Baseline-source is `breakpoint` (a `desktop.a11y.yaml` exists), so the
+    // recorded a11yBaselinePath must be the breakpoint-keyed file that was
+    // actually diffed against — a real, on-disk path.
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- button "Old"');
+
+    const result = await runAction({
+      page: fakePage(png, '- button "New"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.a11yChanged, true);
+    const keyedA11y = join(baselineDir, 'desktop.a11y.yaml');
+    assert.equal(result.a11yBaselinePath, keyedA11y);
+    // The recorded path is the file that was actually diffed against, so it
+    // exists on disk.
+    assert.equal(await pathExists(result.a11yBaselinePath ?? ''), true);
+  });
+
+  it('records the legacy a11y baseline path when the drift came from a legacy-source baseline', async () => {
+    // Baseline-source is `legacy` (only `0.png` / `a11y.yaml` exist, no
+    // breakpoint-keyed entry). The recorded a11yBaselinePath must mirror the
+    // legacy file that was diffed against — NOT the breakpoint-keyed
+    // `desktop.a11y.yaml`, which does not exist on disk and would be a dangling
+    // pointer for any consumer (report, approve) that reads it back.
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const legacyDir = join(config.paths.baselines, 'open');
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(join(legacyDir, '0.png'), png);
+    await writeFile(join(legacyDir, 'a11y.yaml'), '- button "Old label"');
+
+    const result = await runAction({
+      page: fakePage(png, '- button "New label"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    // A11y-only drift against the legacy companion.
+    assert.equal(result.status, 'changed');
+    assert.equal(result.a11yChanged, true);
+    // The recorded path is the LEGACY a11y file that was diffed against…
+    const legacyA11y = join(legacyDir, 'a11y.yaml');
+    assert.equal(result.a11yBaselinePath, legacyA11y);
+    // …and it exists on disk, unlike the breakpoint-keyed path that the pre-fix
+    // code unconditionally recorded.
+    assert.equal(await pathExists(result.a11yBaselinePath ?? ''), true);
+    assert.equal(await pathExists(join(legacyDir, 'desktop.a11y.yaml')), false);
+  });
+
   it('stays pass with no candidate when CI pixels pass AND the aria snapshot matches', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -809,5 +873,46 @@ describe('runAction — CI mode size-mismatch drift', () => {
         join(config.paths.report, 'candidates', 'open', 'desktop.a11y.yaml'),
       ),
     );
+  });
+
+  it('never carries a11yChanged (locks the a11y-only-drift discriminator)', async () => {
+    // The a11y-only-drift discriminator is POSITIVE: `a11yChanged === true`. This
+    // pixel-drift (size-mismatch) branch carries no `diffPath`, so were it to also
+    // emit `a11yChanged`, a `!diffPath` heuristic consumer would misclassify it.
+    // The branch deliberately omits `a11yChanged`; this test fails if a future
+    // "natural cleanup" adds it back — even when the aria tree genuinely drifted.
+    const config = await makeConfig();
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    // Seed a 2x2 baseline AND a stale a11y tree, so the aria snapshot really does
+    // drift — proving the omission is the branch's own contract, not an artifact
+    // of a matching tree.
+    await writeFile(join(baselineDir, 'desktop.png'), solidPng(10, 20, 30));
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- button "Old"');
+
+    const bigger = new PNG({ width: 4, height: 4 });
+    for (let i = 0; i < bigger.data.length; i += 4) {
+      bigger.data[i] = 10;
+      bigger.data[i + 1] = 20;
+      bigger.data[i + 2] = 30;
+      bigger.data[i + 3] = 255;
+    }
+    const biggerPng = PNG.sync.write(bigger);
+
+    const result = await runAction({
+      page: fakePage(biggerPng, '- button "New"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.status, 'changed');
+    // Pixel drift → a failureMessage is present, but the a11y discriminator stays
+    // unset so the size-mismatch result is never misread as a11y-only drift.
+    assert.ok(result.failureMessage);
+    assert.equal(result.a11yChanged, undefined);
   });
 });

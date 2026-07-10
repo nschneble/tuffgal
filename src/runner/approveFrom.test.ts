@@ -116,27 +116,26 @@ async function writeCandidateResults(
 }
 
 /**
- * Writes a `results.json` overriding `mode` and/or `totals.failed` — the two
- * fields the promotability gate reads. `mode: undefined` omits the key entirely
- * (pre-mode artifact). Everything else is the same clean filler as
- * {@link writeCandidateResults}.
+ * Writes a `results.json` overriding the promotability-gate fields: `mode`,
+ * `totals.failed`, or the whole `totals` object. `mode: undefined` omits the key
+ * entirely (pre-mode artifact). `totals: null` omits the whole `totals` object
+ * (truncated artifact); a raw object (e.g. `{}` for a missing `failed`, or a
+ * non-numeric `failed`) is written verbatim so the shape-guard can be exercised.
+ * Everything else is the same clean filler as {@link writeCandidateResults}.
  */
 async function writeCandidateResultsRaw(
-  overrides: { mode?: 'ci' | 'local' | undefined; failed?: number } = {},
+  overrides: {
+    mode?: 'ci' | 'local' | undefined;
+    failed?: number;
+    totals?: Record<string, unknown> | null;
+  } = {},
 ): Promise<void> {
   const hasMode = 'mode' in overrides;
+  const hasTotals = 'totals' in overrides;
   const results: Record<string, unknown> = {
     startedAt: '2026-06-11T12:00:00.000Z',
     finishedAt: '2026-06-11T12:00:01.000Z',
     durationMs: 1000,
-    totals: {
-      stories: 0,
-      passed: 0,
-      changed: 0,
-      failed: overrides.failed ?? 0,
-      new: 0,
-      deleted: 0,
-    },
     environment: {
       expected: null,
       actual: environment(),
@@ -152,6 +151,22 @@ async function writeCandidateResultsRaw(
   };
   if (!hasMode || overrides.mode !== undefined) {
     results.mode = hasMode ? overrides.mode : 'ci';
+  }
+  // `totals: null` omits the object entirely; any other override is written
+  // verbatim; the default is a clean zero-failure totals block.
+  if (hasTotals) {
+    if (overrides.totals !== null) {
+      results.totals = overrides.totals;
+    }
+  } else {
+    results.totals = {
+      stories: 0,
+      passed: 0,
+      changed: 0,
+      failed: overrides.failed ?? 0,
+      new: 0,
+      deleted: 0,
+    };
   }
   await writeFile(
     join(candidateDir, 'results.json'),
@@ -571,6 +586,52 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
       /2 failed story/,
+    );
+  });
+
+  it('rejects a candidate whose results.json omits totals entirely', async () => {
+    // A truncated/foreign artifact can reach the gate with no `totals` object.
+    // Reading `result.totals.failed` would throw a raw TypeError (not an
+    // ApproveFromError) — the guard must fail closed with the trust-boundary type.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResultsRaw({ totals: null });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /missing a numeric totals\.failed/,
+    );
+  });
+
+  it('rejects a candidate whose totals is present but totals.failed is missing', async () => {
+    // The silent-pass trap: `undefined > 0` is `false`, so an absent `failed`
+    // would sail through the promotability gate. It must be refused, not assumed
+    // zero — a run whose fail count is unknown is not a source of truth.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResultsRaw({
+      totals: { stories: 0, passed: 0, changed: 0, new: 0, deleted: 0 },
+    });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /missing a numeric totals\.failed/,
+    );
+  });
+
+  it('rejects a candidate whose totals.failed is non-numeric', async () => {
+    // A non-numeric `failed` (e.g. a string) is neither `> 0` nor throwing —
+    // another silent-pass shape the shape-guard must catch.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResultsRaw({
+      totals: {
+        stories: 0,
+        passed: 0,
+        changed: 0,
+        failed: 'nope',
+        new: 0,
+        deleted: 0,
+      },
+    });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /missing a numeric totals\.failed/,
     );
   });
 
