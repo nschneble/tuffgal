@@ -41,7 +41,7 @@ const FALSY_CI = new Set(['', '0', 'false']);
  */
 export function resolveRunMode(inputs: RunModeInputs): RunMode {
   if (inputs.ci && inputs.local) {
-    throw new Error('cannot pass both --ci and --local; choose one');
+    throw new Error('Cannot pass both --ci and --local; choose one.');
   }
   if (inputs.ci) return 'ci';
   if (inputs.local) return 'local';

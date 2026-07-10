@@ -168,7 +168,7 @@ function printHelp(): void {
       '',
       'Commands:',
       '  run                 Run every story under the configured stories directory.',
-      '  approve             Promote every "changed" actual to its baseline.',
+      '  approve             Refresh the local comparison cache from the last run.',
       '  init                Scaffold a tuffgal.config.ts in the current directory.',
       '  supervise           Long-running wrapper around devServers.command with',
       '                      healthcheck restart, idle auto-term, and wall-clock cap.',
@@ -185,7 +185,7 @@ function printHelp(): void {
       '',
       'Approve options:',
       '  <story>                    Positional story to approve (name or path); same as --story.',
-      '  --new-only                 Only promote new baselines; skip changed.',
+      '  --new-only                 Only refresh new cache entries; skip changed.',
       '  --breakpoint <name>        Only approve this mode; repeatable. Also --desktop/--mobile/etc.',
       '',
       'Supervise options:',
@@ -273,7 +273,7 @@ async function main(): Promise<void> {
       breakpoints: args.breakpoints,
     });
     process.stdout.write(
-      `\nApproved ${summary.approved} baselines; skipped ${summary.skipped} actions.\n`,
+      `\nRefreshed ${summary.approved} cache entries; skipped ${summary.skipped} actions.\n`,
     );
   }
   if (args.command === 'supervise') {

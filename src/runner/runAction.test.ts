@@ -66,6 +66,7 @@ async function makeConfig(): Promise<ResolvedConfig> {
   return {
     paths: {
       baselines: join(root, 'baselines'),
+      localCache: join(root, 'cache'),
       report: join(root, 'report'),
     },
   } as unknown as ResolvedConfig;
@@ -222,8 +223,8 @@ describe('runAction — CI mode never writes committed baselines', () => {
   });
 });
 
-describe('runAction — local mode still auto-writes committed baselines', () => {
-  it('writes a fresh baseline on a missing-baseline run (legacy behaviour preserved)', async () => {
+describe('runAction — local mode auto-seeds the cache, never baselines', () => {
+  it('auto-seeds a fresh cache entry on a missing-entry run and leaves baselines untouched', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
     const result = await runAction({
@@ -237,21 +238,114 @@ describe('runAction — local mode still auto-writes committed baselines', () =>
     });
 
     assert.equal(result.status, 'new');
-    // Local mode's legacy behaviour: the baseline IS written this wave.
+    // Auto-seed lands in the per-machine cache, not the committed baselines.
     assert.ok(
-      await pathExists(join(config.paths.baselines, 'open', 'desktop.png')),
+      await pathExists(join(config.paths.localCache, 'open', 'desktop.png')),
     );
     assert.ok(
       await pathExists(
-        join(config.paths.baselines, 'open', 'desktop.a11y.yaml'),
+        join(config.paths.localCache, 'open', 'desktop.a11y.yaml'),
       ),
     );
+    // paths.baselines is NEVER read or written in local mode.
+    assert.equal(
+      await pathExists(join(config.paths.baselines, 'open', 'desktop.png')),
+      false,
+    );
+    // The recorded baselinePath points at the cache, so a later `approve` and a
+    // re-run both key off the seeded cache entry.
+    assert.ok(result.baselinePath?.startsWith(config.paths.localCache));
     // Local mode writes no candidate tree — that is a CI artifact.
     assert.equal(
       await pathExists(
         join(config.paths.report, 'candidates', 'open', 'desktop.png'),
       ),
       false,
+    );
+  });
+
+  it('passes on a second run against the seeded cache entry', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const first = await runAction({
+      page: fakePage(png),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.equal(first.status, 'new');
+
+    // Same actual, second run — the cache entry now exists, so it gates a pass.
+    const second = await runAction({
+      page: fakePage(png),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.equal(second.status, 'pass');
+  });
+
+  it('reports changed against the cache without overwriting it (approve does that)', async () => {
+    const config = await makeConfig();
+    // Seed the cache entry, then drift the actual away from it.
+    const cacheDir = join(config.paths.localCache, 'open');
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(join(cacheDir, 'desktop.png'), solidPng(10, 20, 30));
+    await writeFile(join(cacheDir, 'desktop.a11y.yaml'), '- document');
+
+    const result = await runAction({
+      page: fakePage(solidPng(200, 50, 50)),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+
+    assert.equal(result.status, 'changed');
+    // The cache entry is the comparison target, not auto-updated by a run.
+    const cacheBytes = await readFile(join(cacheDir, 'desktop.png'));
+    assert.deepEqual(cacheBytes, solidPng(10, 20, 30));
+  });
+
+  it('never reads a committed baseline in local mode (cache miss => new even with a baseline present)', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    // A committed baseline of the SAME pixels exists — if local mode read it,
+    // this run would pass. It must not: the cache is empty, so the run seeds it
+    // and reports `new`.
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- document');
+    const baselineBefore = await readFile(join(baselineDir, 'desktop.png'));
+
+    const result = await runAction({
+      page: fakePage(png),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+
+    assert.equal(result.status, 'new');
+    // The committed baseline was neither read (else pass) nor written.
+    assert.deepEqual(
+      await readFile(join(baselineDir, 'desktop.png')),
+      baselineBefore,
+    );
+    // The seed landed in the cache instead.
+    assert.ok(
+      await pathExists(join(config.paths.localCache, 'open', 'desktop.png')),
     );
   });
 });
@@ -317,13 +411,13 @@ describe('runAction — ${breakpoint} interpolation', () => {
   });
 });
 
-describe('runAction — legacy baseline fallback', () => {
-  it('compares against the legacy 0.png when the breakpoint baseline is absent and does NOT report new', async () => {
+describe('runAction — legacy baseline fallback (local mode, within the cache root)', () => {
+  it('compares against the legacy 0.png when the breakpoint entry is absent and does NOT report new', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
-    // Seed a pre-breakpoint baseline at <action>/0.png + its a11y companion,
-    // matching what a project committed before this feature existed.
-    const legacyDir = join(config.paths.baselines, 'open');
+    // Seed a pre-breakpoint entry at <action>/0.png + its a11y companion,
+    // within the CACHE root (local mode's comparison target).
+    const legacyDir = join(config.paths.localCache, 'open');
     await mkdir(legacyDir, { recursive: true });
     await writeFile(join(legacyDir, '0.png'), png);
     await writeFile(join(legacyDir, 'a11y.yaml'), '- document');
@@ -337,19 +431,18 @@ describe('runAction — legacy baseline fallback', () => {
       breakpoint: 'desktop',
     });
 
-    // Identical image → pass (NOT new): the legacy baseline gated it.
+    // Identical image → pass (NOT new): the legacy cache entry gated it.
     assert.equal(result.status, 'pass');
     assert.notEqual(result.status, 'new');
     // The legacy file must NOT be auto-promoted to the breakpoint location;
-    // migration is `approve`'s job. baselinePath still points at the bp key so
-    // a later approve writes there.
+    // migration is `approve`'s job. baselinePath still points at the bp key.
     assert.ok(result.baselinePath?.endsWith(join('open', 'desktop.png')));
     assert.equal(await pathExists(join(legacyDir, 'desktop.png')), false);
   });
 
-  it('reports changed against a legacy baseline when the image drifts', async () => {
+  it('reports changed against a legacy cache entry when the image drifts', async () => {
     const config = await makeConfig();
-    const legacyDir = join(config.paths.baselines, 'open');
+    const legacyDir = join(config.paths.localCache, 'open');
     await mkdir(legacyDir, { recursive: true });
     await writeFile(join(legacyDir, '0.png'), solidPng(10, 20, 30));
 
@@ -365,7 +458,7 @@ describe('runAction — legacy baseline fallback', () => {
     assert.equal(result.status, 'changed');
   });
 
-  it('reports new only when neither breakpoint nor legacy baseline exists', async () => {
+  it('reports new only when neither breakpoint nor legacy cache entry exists', async () => {
     const config = await makeConfig();
     const result = await runAction({
       page: fakePage(solidPng(10, 20, 30)),
@@ -381,11 +474,11 @@ describe('runAction — legacy baseline fallback', () => {
   it('reads the legacy a11y companion (a11y.yaml) and flags a11yChanged while pixels pass', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
-    // Legacy-only baseline: matching pixels (→ pass) but a stale a11y tree that
+    // Legacy-only entry: matching pixels (→ pass) but a stale a11y tree that
     // differs from the page's current snapshot. The fallback branch must source
     // the a11y companion from the LEGACY path (`<action>/a11y.yaml`) so the
-    // a11yChanged signal reflects the baseline we actually diffed against.
-    const legacyDir = join(config.paths.baselines, 'open');
+    // a11yChanged signal reflects the entry we actually diffed against.
+    const legacyDir = join(config.paths.localCache, 'open');
     await mkdir(legacyDir, { recursive: true });
     await writeFile(join(legacyDir, '0.png'), png);
     await writeFile(join(legacyDir, 'a11y.yaml'), '- button "Old label"');
@@ -406,11 +499,11 @@ describe('runAction — legacy baseline fallback', () => {
   it('leaves a11yChanged undefined when only a legacy 0.png exists with no a11y companion', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
-    // Legacy pixel baseline present, but no `a11y.yaml` alongside it — an older
+    // Legacy pixel entry present, but no `a11y.yaml` alongside it — an older
     // project that predates a11y snapshots. The fallback read must not throw on
     // the absent companion; with no baseline tree to compare, a11yChanged stays
     // undefined.
-    const legacyDir = join(config.paths.baselines, 'open');
+    const legacyDir = join(config.paths.localCache, 'open');
     await mkdir(legacyDir, { recursive: true });
     await writeFile(join(legacyDir, '0.png'), png);
 
@@ -425,5 +518,127 @@ describe('runAction — legacy baseline fallback', () => {
 
     assert.equal(result.status, 'pass');
     assert.equal(result.a11yChanged, undefined);
+  });
+});
+
+describe('runAction — legacy baseline fallback (CI mode, within paths.baselines)', () => {
+  it('compares against the committed legacy 0.png, passes, and writes NO candidate', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const legacyDir = join(config.paths.baselines, 'open');
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(join(legacyDir, '0.png'), png);
+    await writeFile(join(legacyDir, 'a11y.yaml'), '- document');
+
+    const result = await runAction({
+      page: fakePage(png),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.status, 'pass');
+    // Legacy fallback in CI never promotes to the breakpoint key…
+    assert.equal(
+      await pathExists(join(config.paths.baselines, 'open', 'desktop.png')),
+      false,
+    );
+    // …and a passing action emits no candidate.
+    assert.equal(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+      false,
+    );
+  });
+
+  it('reports changed against a committed legacy baseline, writes a candidate, leaves baselines untouched', async () => {
+    const config = await makeConfig();
+    const legacyDir = join(config.paths.baselines, 'open');
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(join(legacyDir, '0.png'), solidPng(10, 20, 30));
+
+    const result = await runAction({
+      page: fakePage(solidPng(200, 50, 50)),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.status, 'changed');
+    // The legacy committed baseline is the comparison target, never rewritten.
+    assert.deepEqual(
+      await readFile(join(legacyDir, '0.png')),
+      solidPng(10, 20, 30),
+    );
+    // No breakpoint-keyed baseline was written under the committed set.
+    assert.equal(
+      await pathExists(join(config.paths.baselines, 'open', 'desktop.png')),
+      false,
+    );
+    // The drift proposes a candidate for approval instead.
+    assert.ok(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+    );
+  });
+});
+
+describe('runAction — CI mode size-mismatch drift', () => {
+  it('treats a dimension change as changed, writes a candidate, and never rewrites the baseline', async () => {
+    const config = await makeConfig();
+    // Seed a breakpoint-keyed committed baseline whose dimensions the actual
+    // will NOT match — a 2x2 baseline vs a 4x4 actual. `diffPngs` throws
+    // ScreenshotSizeMismatchError, which the runner maps to `changed`.
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    const seededBaseline = solidPng(10, 20, 30);
+    await writeFile(join(baselineDir, 'desktop.png'), seededBaseline);
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- document');
+
+    const bigger = new PNG({ width: 4, height: 4 });
+    for (let i = 0; i < bigger.data.length; i += 4) {
+      bigger.data[i] = 10;
+      bigger.data[i + 1] = 20;
+      bigger.data[i + 2] = 30;
+      bigger.data[i + 3] = 255;
+    }
+    const biggerPng = PNG.sync.write(bigger);
+
+    const result = await runAction({
+      page: fakePage(biggerPng),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.status, 'changed');
+    assert.ok(result.failureMessage);
+    // The seeded baseline bytes are untouched by the run.
+    assert.deepEqual(
+      await readFile(join(baselineDir, 'desktop.png')),
+      seededBaseline,
+    );
+    // A candidate carries the proposed (differently-sized) new baseline.
+    assert.ok(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+    );
+    assert.ok(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.a11y.yaml'),
+      ),
+    );
   });
 });

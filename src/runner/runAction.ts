@@ -43,13 +43,16 @@ export interface RunActionOptions {
   /**
    * Comparison contract for this run (see {@link RunMode}). Optional so
    * pre-existing programmatic callers and tests keep compiling; the run driver
-   * always supplies it. Governs the baseline-write behaviour:
-   *   - `ci` — NEVER write into `paths.baselines`. A missing baseline reads
-   *     `new` and the proposed render lands in the candidate tree only;
-   *     approval (a later wave) is what promotes candidates to baselines.
-   *   - `local` (default when omitted) — legacy behaviour: a missing baseline
-   *     is auto-written as a fresh committed baseline. Wave 4 retargets local
-   *     to a per-machine cache; until then it keeps writing `paths.baselines`.
+   * always supplies it. Governs both the comparison target and the write
+   * behaviour:
+   *   - `ci` — compare against the committed `paths.baselines`, and NEVER write
+   *     into it. A missing baseline reads `new` and the proposed render lands in
+   *     the candidate tree only; `approve --from` is what promotes candidates to
+   *     baselines. `paths.localCache` is never touched.
+   *   - `local` (default when omitted) — compare against the per-machine,
+   *     gitignored `paths.localCache`, and self-manage it: a missing cache entry
+   *     is auto-seeded (written as a fresh cache baseline, status `new`). The
+   *     committed `paths.baselines` is never read or written in local mode.
    */
   mode?: RunMode;
 }
@@ -295,8 +298,20 @@ async function captureAndCompare(
     breakpoint,
     mode,
   } = options;
+  // The comparison target moves with the mode. CI compares against (and, on
+  // approval, promotes into) the committed `paths.baselines`; local mode
+  // self-diffs against — and auto-seeds — the per-machine, gitignored
+  // `paths.localCache`, never reading or writing `paths.baselines`. Report-side
+  // artifacts (actual, diff, candidate) stay report-rooted regardless; only the
+  // baseline/legacy side follows `comparisonRoot`. Legacy `<action>/0.png`
+  // fallback resolves within whichever root is active, so a project migrating
+  // its committed baselines and a developer with a legacy cache each get the
+  // pre-breakpoint fallback within their own root.
+  const comparisonRoot =
+    mode === 'local' ? config.paths.localCache : config.paths.baselines;
   const paths = pathsFor({
     baselinesDir: config.paths.baselines,
+    comparisonRoot,
     reportDir: config.paths.report,
     storyFile,
     actionName: action.action,
@@ -330,9 +345,10 @@ async function captureAndCompare(
   //      silent side effect of a read. Auto-creating here would also clobber
   //      the legacy file's role as the shared fallback for every breakpoint.
   //   3. neither — the missing-baseline branch, and it splits on mode:
-  //        - `local` (legacy): write a fresh breakpoint baseline under the lock
-  //          and report `new`. This is the pre-CI behaviour, kept intact this
-  //          wave; wave 4 retargets it to the per-machine cache.
+  //        - `local`: auto-seed the per-machine cache — write a fresh
+  //          breakpoint baseline under the lock (rooted at `comparisonRoot`,
+  //          i.e. `paths.localCache`) and report `new`. Zero-ceremony first run.
+  //          `paths.baselines` is never touched.
   //        - `ci`: NEVER write `paths.baselines`. Committed baselines are
   //          written only through the approval flow, never as a side effect of
   //          a run. Report `new`; the proposed render is emitted to the
@@ -359,11 +375,10 @@ async function captureAndCompare(
 
   if (found === undefined) {
     // Missing baseline → `new`. In CI mode the proposed render is the candidate
-    // (nothing was written to baselines); in local mode the fresh baseline was
-    // written above and there is no candidate tree.
-    if (mode === 'ci') {
-      await writeCandidate(paths, actualPng, a11yJson);
-    }
+    // (nothing was written to baselines); in local mode the fresh cache entry
+    // was auto-seeded above and there is no candidate tree. `writeCandidate`
+    // no-ops outside CI mode.
+    await writeCandidate(mode, paths, actualPng, a11yJson);
     return finishResult(baseResult, {
       status: 'new',
       baselinePath: paths.baseline,
@@ -404,10 +419,9 @@ async function captureAndCompare(
     await writePng(paths.diff, outcome.diffPng);
     // A `changed` action in CI mode proposes a new baseline — emit it to the
     // candidate tree so approval is a plain tree copy. Local mode does not
-    // (its comparison target is auto-managed, not human-approved).
-    if (mode === 'ci') {
-      await writeCandidate(paths, actualPng, a11yJson);
-    }
+    // (its comparison target is the auto-managed cache, not a human-approved
+    // set); `writeCandidate` no-ops there.
+    await writeCandidate(mode, paths, actualPng, a11yJson);
     return finishResult(baseResult, {
       status: 'changed',
       baselinePath: paths.baseline,
@@ -422,10 +436,9 @@ async function captureAndCompare(
     });
   } catch (error) {
     if (error instanceof ScreenshotSizeMismatchError) {
-      // Dimension drift is still a `changed` outcome — same candidate emission.
-      if (mode === 'ci') {
-        await writeCandidate(paths, actualPng, a11yJson);
-      }
+      // Dimension drift is still a `changed` outcome — same candidate emission
+      // (CI only; `writeCandidate` no-ops in local mode).
+      await writeCandidate(mode, paths, actualPng, a11yJson);
       return finishResult(baseResult, {
         status: 'changed',
         baselinePath: paths.baseline,
@@ -445,13 +458,20 @@ async function captureAndCompare(
  * The layout mirrors `paths.baselines` exactly, so approving a candidate set is
  * a plain tree copy. Routed through the same `writePng`/`writeText` seams as
  * every other write, so candidates inherit the lossless recompress pass for
- * free. Called only in CI mode for `new`/`changed` actions.
+ * free.
+ *
+ * The candidate tree is a CI-only artifact: local mode self-diffs against the
+ * per-machine cache and has no human-approval step, so it never proposes
+ * candidates. The mode guard lives here — a single early-return — rather than
+ * being repeated at each of the three `new`/`changed`/size-mismatch call sites.
  */
 async function writeCandidate(
+  mode: RunMode,
   paths: BaselinePaths,
   actualPng: Buffer,
   a11yJson: string,
 ): Promise<void> {
+  if (mode !== 'ci') return;
   await writePng(paths.candidate, actualPng);
   await writeText(paths.a11yCandidate, a11yJson);
 }
