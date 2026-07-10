@@ -17,7 +17,7 @@ import type { EnvironmentManifest } from './manifest.ts';
 import { CAPTURE_SCHEMA, SCHEMA_VERSION } from './manifest.ts';
 import type { DeletedBaseline, RunResult } from '../schema/result.ts';
 import { pathExists } from '../util.ts';
-import { approveFrom, ApproveFromError } from './approve.ts';
+import { approveFrom, ApproveFromError } from './approveFrom.ts';
 
 let root: string;
 let candidateDir: string;

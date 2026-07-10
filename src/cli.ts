@@ -2,7 +2,8 @@
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { approveAll, approveFrom } from './runner/approve.ts';
+import { approveAll } from './runner/approve.ts';
+import { approveFrom } from './runner/approveFrom.ts';
 import { init } from './commands/init.ts';
 import { BREAKPOINTS, loadConfig } from './config.ts';
 import { deriveExitCode } from './runner/exitCode.ts';
