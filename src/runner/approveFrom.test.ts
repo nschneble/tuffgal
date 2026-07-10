@@ -11,9 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-
 import { PNG } from 'pngjs';
-
 import type { ResolvedConfig } from '../config.ts';
 import type { EnvironmentManifest } from './manifest.ts';
 import { CAPTURE_SCHEMA, SCHEMA_VERSION } from './manifest.ts';
@@ -320,7 +318,7 @@ describe('approveFrom — fail closed (zero writes)', () => {
     await writeFile(join(candidateDir, 'evil.sh'), 'rm -rf /', 'utf8');
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
-      /unexpected top-level file/,
+      /Unexpected top-level file/,
     );
   });
 
@@ -330,7 +328,7 @@ describe('approveFrom — fail closed (zero writes)', () => {
     await writeCandidateResults();
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
-      /unexpected file in candidate tree/,
+      /Unexpected file in candidate tree/,
     );
   });
 
@@ -341,7 +339,7 @@ describe('approveFrom — fail closed (zero writes)', () => {
     await writeCandidateResults();
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
-      /unexpected non-file entry/,
+      /Unexpected non-file entry/,
     );
   });
 
@@ -350,7 +348,7 @@ describe('approveFrom — fail closed (zero writes)', () => {
     await writeCandidateResults();
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
-      /invalid action directory name/,
+      /Invalid action directory name/,
     );
   });
 
@@ -361,7 +359,7 @@ describe('approveFrom — fail closed (zero writes)', () => {
     await writeCandidateResults();
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
-      /invalid breakpoint name/,
+      /Invalid breakpoint name/,
     );
   });
 
@@ -402,7 +400,7 @@ describe('approveFrom — fail closed (zero writes)', () => {
     await writeCandidateResults();
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
-      /symlink not allowed/,
+      /Symlink not allowed/,
     );
   });
 
@@ -412,7 +410,7 @@ describe('approveFrom — fail closed (zero writes)', () => {
     await writeCandidateResults();
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
-      /dotfile/,
+      /Dotfile/,
     );
   });
 
@@ -420,6 +418,79 @@ describe('approveFrom — fail closed (zero writes)', () => {
     await assert.rejects(
       approveFrom(config(), { from: join(root, 'nope') }),
       /directory not found/,
+    );
+  });
+
+  it('rejects a --from path that is a symlink to a directory', async () => {
+    // A symlinked --from is refused outright: even if it points at a real
+    // candidate tree, following it would let a link relocate the trust boundary.
+    const realDir = join(root, 'real-candidates');
+    await mkdir(realDir, { recursive: true });
+    const link = join(root, 'linked-candidates');
+    await symlink(realDir, link);
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: link }),
+      /is a symlink, refusing/,
+    );
+  });
+
+  it('rejects a --from path that is not a directory', async () => {
+    // A plain file passed as --from must abort before any walk/write.
+    const filePath = join(root, 'not-a-dir');
+    await writeFile(filePath, 'i am a file', 'utf8');
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: filePath }),
+      /is not a directory/,
+    );
+  });
+
+  it('commits bytes eagerly, independent of the source after it returns', async () => {
+    // TOCTOU guard, observable half. The fix reads each source ONCE during
+    // validation, retains its bytes on the plan, and writes those retained bytes
+    // — the source is never re-opened. The externally observable consequence is
+    // that promotion is fully eager: once approveFrom returns, the committed
+    // baseline is a pure function of the bytes that passed validation, so
+    // corrupting or deleting the source afterwards cannot change it. (The exact
+    // mid-window swap can't be black-box driven here — `approve.ts` binds
+    // `readFile` as an ESM import, which can't be swapped underneath a running
+    // call — so this asserts the eager-write contract the retained buffer
+    // guarantees rather than reproducing the race itself.)
+    const original = await writeCandidatePng('open', 'desktop', 3);
+    await writeCandidateResults();
+    const source = join(candidateDir, 'open', 'desktop.png');
+
+    await approveFrom(config(), { from: candidateDir });
+
+    // Corrupt, then delete, the source now that promotion has returned. A lazy
+    // or deferred read would surface here; the eager retained-buffer write does
+    // not, so the committed baseline stays the validated pixels.
+    await writeFile(source, 'corrupt-after-promotion', 'utf8');
+    await rm(source);
+    const committed = await readFile(join(baselinesDir, 'open', 'desktop.png'));
+    assert.deepEqual(
+      PNG.sync.read(committed).data,
+      PNG.sync.read(original).data,
+      'committed baseline decodes to the validated pixels',
+    );
+  });
+
+  it('rejects a well-formed results.json with a wrong-shaped environment', async () => {
+    // parseRunResult only checks that `stories` is an array; a false-but-well-
+    // formed environment.actual must still fail the manifest shape check and
+    // abort before any write, so a bad block cannot defeat the drift gate.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({
+      environment: {
+        expected: null,
+        // Missing every manifest field except a bogus one.
+        actual: { platform: 42 } as unknown as EnvironmentManifest,
+        mismatch: false,
+        mismatchKeys: [],
+      },
+    });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /malformed environment block/,
     );
   });
 });

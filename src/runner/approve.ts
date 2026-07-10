@@ -1,22 +1,27 @@
 import { lstat, readFile, readdir, rm } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
-
 import { PNG } from 'pngjs';
-
 import type { ResolvedConfig } from '../config.ts';
 import {
   ACTION_NAME_PATTERN,
   BREAKPOINT_SEGMENT_PATTERN,
-  copyToBaseline,
+  copyRecompressedPng,
   writePng,
   writeText,
 } from '../screenshots/baselineStore.ts';
 import {
+  CAPTURE_SCHEMA,
   MANIFEST_FILENAME,
   SCHEMA_VERSION,
-  CAPTURE_SCHEMA,
+  validateManifestShape,
 } from './manifest.ts';
 import type { EnvironmentManifest } from './manifest.ts';
+import {
+  A11Y_SUFFIX,
+  LEGACY_A11Y,
+  LEGACY_BREAKPOINT,
+  LEGACY_PNG,
+} from './orphanScan.ts';
 import { parseRunResult } from '../schema/result.ts';
 import type { ActionResult, RunResult } from '../schema/result.ts';
 import { pathExists } from '../util.ts';
@@ -116,7 +121,7 @@ export async function approveAll(
         skipped += 1;
         continue;
       }
-      await copyToBaseline(
+      await copyRecompressedPng(
         action.actualPath,
         cacheDestination(config, action.baselinePath),
       );
@@ -125,7 +130,7 @@ export async function approveAll(
         action.a11yBaselinePath &&
         (await pathExists(action.a11yActualPath))
       ) {
-        await copyToBaseline(
+        await copyRecompressedPng(
           action.a11yActualPath,
           cacheDestination(config, action.a11yBaselinePath),
         );
@@ -206,6 +211,17 @@ interface PlannedWrite {
   destination: string;
   /** PNGs are decoded+re-encoded (recompress); yaml companions copied verbatim. */
   kind: 'png' | 'a11y';
+  /**
+   * The source's bytes, read ONCE during the validation phase and retained here.
+   * Phase 2 writes exactly these bytes — it never re-reads `source` — so the
+   * committed baseline is provably the same payload that passed validation (PNG
+   * decode-check for `png`, verbatim copy for `a11y`). Closes the TOCTOU window
+   * where a process with write access to the candidate tree could swap `source`
+   * (for a symlink or a corrupt payload) between validation and commit. Candidate
+   * trees are small (dozens of files, ~100s KB PNGs), so buffering every payload
+   * in memory across the two phases is an accepted cost.
+   */
+  bytes: Buffer;
 }
 
 /**
@@ -214,7 +230,12 @@ interface PlannedWrite {
  * present it plainly; every throw here happens BEFORE any write, so the promise
  * rejecting guarantees `paths.baselines` was not touched.
  */
-export class ApproveFromError extends Error {}
+export class ApproveFromError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApproveFromError';
+  }
+}
 
 /**
  * Promotes a CI candidate tree (`<dir>/<action>/<breakpoint>.png` + optional
@@ -227,9 +248,15 @@ export class ApproveFromError extends Error {}
  * fail-closed and validate-all-then-write:
  *   1. Every tree entry is validated (allowed shape, safe names, no symlinks, no
  *      traversal) and every PNG is decoded to prove it is a real PNG.
- *   2. `results.json` must parse and carry an `environment.actual` block.
+ *   2. `results.json` must parse and carry a well-shaped `environment.actual`
+ *      block (validated against the manifest shape, not just present).
  *   3. ONLY after the whole tree passes are any bytes written. A single bad
  *      entry aborts with {@link ApproveFromError} and zero filesystem changes.
+ *
+ * Every candidate file's bytes are read once during phase 1 and RETAINED for
+ * phase 2, which writes exactly those bytes — the sources are never re-read, so
+ * the committed baseline is provably the payload that passed validation (no
+ * decode-swap / symlink-swap window between the check and the write).
  *
  * PNGs are written through {@link writePng} (decode→recompress→encode), so the
  * promoted baseline is losslessly recompressed and provably decodable in one
@@ -242,7 +269,8 @@ export async function approveFrom(
   const candidateDir = options.from;
   await assertRealDirectory(candidateDir);
 
-  // Phase 1 — validate the whole tree and build a write plan. No writes yet.
+  // Phase 1 — validate the whole tree and build a write plan. Every source is
+  // read exactly ONCE here and its bytes are retained on the plan; no writes yet.
   const result = await readCandidateResults(candidateDir);
   const environment = extractEnvironment(result);
   const plan = await planWrites(candidateDir, config.paths.baselines);
@@ -251,12 +279,14 @@ export async function approveFrom(
     ? computePruneTargets(result, config.paths.baselines)
     : [];
 
-  // Phase 2 — every check passed; commit the plan.
+  // Phase 2 — every check passed; commit the RETAINED bytes. Nothing is re-read
+  // from the candidate tree here, so the bytes committed are exactly the bytes
+  // that were validated (no decode-swap / symlink-swap window).
   for (const write of plan) {
     if (write.kind === 'png') {
-      await writePng(write.destination, await readFile(write.source));
+      await writePng(write.destination, write.bytes);
     } else {
-      await writeText(write.destination, await readFile(write.source, 'utf8'));
+      await writeText(write.destination, write.bytes.toString('utf8'));
     }
   }
   await writeManifest(config.paths.baselines, environment);
@@ -303,7 +333,7 @@ async function readCandidateResults(dir: string): Promise<RunResult> {
     raw = await readFile(resultsPath, 'utf8');
   } catch {
     throw new ApproveFromError(
-      `candidate tree is missing results.json at ${resultsPath}`,
+      `Candidate tree is missing results.json at ${resultsPath}`,
     );
   }
   try {
@@ -317,18 +347,32 @@ async function readCandidateResults(dir: string): Promise<RunResult> {
 
 /**
  * Pulls the captured environment (`environment.actual`) out of the candidate
- * run's results. Missing => fail closed: a candidate artifact produced by a
- * pre-manifest tuffgal cannot populate `<baselines>/manifest.json`, and writing
- * baselines without the manifest that gates them would silently defeat the
- * environment-drift check. The user re-runs with a manifest-aware tuffgal.
+ * run's results and validates its SHAPE before it can be promoted. Two failure
+ * modes, both fail closed:
+ *   - Missing: a candidate artifact produced by a pre-manifest tuffgal cannot
+ *     populate `<baselines>/manifest.json`, and writing baselines without the
+ *     manifest that gates them would silently defeat the environment-drift
+ *     check. The user re-runs with a manifest-aware tuffgal.
+ *   - Present but wrong-shaped: `parseRunResult` only checks that `stories` is
+ *     an array, so a well-formed-but-false `environment.actual` block would
+ *     otherwise flow straight into the committed manifest and defeat the drift
+ *     gate from the inside. It is run through the SAME {@link
+ *     validateManifestShape} check `readManifest` uses (reused, not duplicated),
+ *     so a malformed block aborts before any write.
  */
 function extractEnvironment(result: RunResult): EnvironmentManifest {
   const actual = result.environment?.actual;
   if (!actual) {
     throw new ApproveFromError(
-      'candidate results.json has no environment block — it was produced by a ' +
+      'Candidate results.json has no environment block — it was produced by a ' +
         'pre-manifest tuffgal. Re-run with a manifest-aware version before ' +
         'approving, so baselines/manifest.json can be written.',
+    );
+  }
+  const invalid = validateManifestShape(actual);
+  if (invalid) {
+    throw new ApproveFromError(
+      `Candidate results.json has a malformed environment block: ${invalid}`,
     );
   }
   return actual;
@@ -357,13 +401,13 @@ async function planWrites(
     }
     if (!entry.isDirectory()) {
       throw new ApproveFromError(
-        `unexpected top-level file in candidate tree: ${entry.name} ` +
+        `Unexpected top-level file in candidate tree: ${entry.name} ` +
           '(only results.json and action directories are allowed)',
       );
     }
     if (!ACTION_NAME_PATTERN.test(entry.name)) {
       throw new ApproveFromError(
-        `invalid action directory name "${entry.name}" — must be ` +
+        `Invalid action directory name "${entry.name}" — must be ` +
           'lowercase-kebab ([a-z0-9-]+)',
       );
     }
@@ -372,7 +416,12 @@ async function planWrites(
   return plan;
 }
 
-/** Validates one action directory's contents and returns its planned writes. */
+/**
+ * Validates one action directory's contents and returns its planned writes. Each
+ * source file is read exactly once here (after its symlink/name checks pass) and
+ * its bytes are retained on the {@link PlannedWrite} for phase 2 — the source is
+ * never re-read, closing the validate-then-swap TOCTOU window.
+ */
 async function planActionDir(
   candidateDir: string,
   baselinesDir: string,
@@ -387,25 +436,31 @@ async function planActionDir(
     await assertNotSymlink(source);
     if (!file.isFile()) {
       throw new ApproveFromError(
-        `unexpected non-file entry in candidate tree: ${action}/${file.name} ` +
+        `Unexpected non-file entry in candidate tree: ${action}/${file.name} ` +
           '(action directories hold only PNG + a11y.yaml files)',
       );
     }
     const kind = classifyCandidateFile(file.name, `${action}/${file.name}`);
+    // Read once, after the symlink check, and retain the bytes — phase 2 writes
+    // exactly these, never re-reading `source`.
+    const bytes = await readFile(source);
     // The destination is derived purely from validated names — never from any
     // path string in the artifact — so it always lands inside <baselines>.
     plan.push({
       source,
       destination: join(baselinesDir, action, file.name),
       kind,
+      bytes,
     });
   }
   return plan;
 }
 
 /**
- * Decodes every planned PNG (validation phase) so a corrupt or non-PNG payload
- * aborts the whole approve with zero writes. `writePng`'s own recompress step
+ * Decodes every planned PNG's RETAINED bytes (validation phase) so a corrupt or
+ * non-PNG payload aborts the whole approve with zero writes. Decoding the bytes
+ * already held on the plan (not a fresh read) is what makes the decode-check and
+ * the eventual write see the same payload. `writePng`'s own recompress step
  * SWALLOWS a decode failure (it falls back to writing the given bytes), which is
  * the right behaviour for a trusted capture but wrong for an untrusted artifact
  * — a corrupt candidate PNG must fail closed, not land verbatim as a baseline.
@@ -413,12 +468,11 @@ async function planActionDir(
 async function assertAllPngsDecode(plan: PlannedWrite[]): Promise<void> {
   for (const write of plan) {
     if (write.kind !== 'png') continue;
-    const bytes = await readFile(write.source);
     try {
-      PNG.sync.read(bytes);
+      PNG.sync.read(write.bytes);
     } catch {
       throw new ApproveFromError(
-        `candidate PNG is not a decodable PNG: ${write.source}`,
+        `Candidate PNG is not a decodable PNG: ${write.source}`,
       );
     }
   }
@@ -430,10 +484,10 @@ async function assertAllPngsDecode(plan: PlannedWrite[]): Promise<void> {
  * `0.png` / `a11y.yaml` pair. Anything else aborts.
  */
 function classifyCandidateFile(name: string, label: string): 'png' | 'a11y' {
-  if (name === 'a11y.yaml') return 'a11y'; // legacy companion
-  if (name === '0.png') return 'png'; // legacy PNG
-  if (name.endsWith('.a11y.yaml')) {
-    assertBreakpointStem(name.slice(0, -'.a11y.yaml'.length), label);
+  if (name === LEGACY_A11Y) return 'a11y'; // legacy companion
+  if (name === LEGACY_PNG) return 'png'; // legacy PNG
+  if (name.endsWith(A11Y_SUFFIX)) {
+    assertBreakpointStem(name.slice(0, -A11Y_SUFFIX.length), label);
     return 'a11y';
   }
   if (name.endsWith('.png')) {
@@ -441,7 +495,7 @@ function classifyCandidateFile(name: string, label: string): 'png' | 'a11y' {
     return 'png';
   }
   throw new ApproveFromError(
-    `unexpected file in candidate tree: ${label} ` +
+    `Unexpected file in candidate tree: ${label} ` +
       '(only <breakpoint>.png and <breakpoint>.a11y.yaml are allowed)',
   );
 }
@@ -450,7 +504,7 @@ function classifyCandidateFile(name: string, label: string): 'png' | 'a11y' {
 function assertBreakpointStem(stem: string, label: string): void {
   if (!BREAKPOINT_SEGMENT_PATTERN.test(stem)) {
     throw new ApproveFromError(
-      `invalid breakpoint name in candidate tree: ${label} ` +
+      `Invalid breakpoint name in candidate tree: ${label} ` +
         '(must be [a-z0-9_-]+)',
     );
   }
@@ -464,17 +518,17 @@ function assertBreakpointStem(stem: string, label: string): void {
 function assertSafeName(name: string, context: string): void {
   if (name === '' || name === '.' || name === '..') {
     throw new ApproveFromError(
-      `unsafe entry name "${name}" in candidate tree under ${context}`,
+      `Unsafe entry name "${name}" in candidate tree under ${context}`,
     );
   }
   if (name.startsWith('.')) {
     throw new ApproveFromError(
-      `dotfile "${name}" not allowed in candidate tree under ${context}`,
+      `Dotfile "${name}" not allowed in candidate tree under ${context}`,
     );
   }
   if (name.includes('/') || name.includes('\\') || name.includes(sep)) {
     throw new ApproveFromError(
-      `path separator in candidate entry name "${name}" under ${context}`,
+      `Path separator in candidate entry name "${name}" under ${context}`,
     );
   }
 }
@@ -484,7 +538,7 @@ async function assertNotSymlink(path: string): Promise<void> {
   const stats = await lstat(path);
   if (stats.isSymbolicLink()) {
     throw new ApproveFromError(
-      `symlink not allowed in candidate tree: ${path}`,
+      `Symlink not allowed in candidate tree: ${path}`,
     );
   }
 }
@@ -510,9 +564,9 @@ function computePruneTargets(
     }
     const actionDir = join(baselinesDir, entry.action);
     const paths =
-      entry.breakpoint === 'legacy'
-        ? [join(actionDir, '0.png'), join(actionDir, 'a11y.yaml')]
-        : legacyBreakpointPaths(entry.breakpoint, actionDir);
+      entry.breakpoint === LEGACY_BREAKPOINT
+        ? [join(actionDir, LEGACY_PNG), join(actionDir, LEGACY_A11Y)]
+        : breakpointKeyedPaths(entry.breakpoint, actionDir);
     for (const path of paths) {
       assertInsideBaselines(path, baselinesDir);
     }
@@ -522,10 +576,7 @@ function computePruneTargets(
 }
 
 /** The PNG + a11y companion paths for a breakpoint-keyed orphan. */
-function legacyBreakpointPaths(
-  breakpoint: string,
-  actionDir: string,
-): string[] {
+function breakpointKeyedPaths(breakpoint: string, actionDir: string): string[] {
   if (!BREAKPOINT_SEGMENT_PATTERN.test(breakpoint)) {
     throw new ApproveFromError(
       `results.deleted has an invalid breakpoint name "${breakpoint}"`,
@@ -533,7 +584,7 @@ function legacyBreakpointPaths(
   }
   return [
     join(actionDir, `${breakpoint}.png`),
-    join(actionDir, `${breakpoint}.a11y.yaml`),
+    join(actionDir, `${breakpoint}${A11Y_SUFFIX}`),
   ];
 }
 
@@ -546,7 +597,7 @@ function assertInsideBaselines(path: string, baselinesDir: string): void {
   const rel = relative(baselinesDir, path);
   if (rel === '' || rel.startsWith('..') || rel.includes(`..${sep}`)) {
     throw new ApproveFromError(
-      `refusing to prune a path outside the baselines directory: ${path}`,
+      `Refusing to prune a path outside the baselines directory: ${path}`,
     );
   }
 }

@@ -277,19 +277,20 @@ export async function deleteIfExists(path: string): Promise<void> {
 }
 
 /**
- * Promotes an already-written PNG (the run's `actual`, or a `candidate`) to a
- * baseline by copying it verbatim. No recompress here on purpose: the source was
- * produced by `writePng`, which already ran `recompressPng`, so the bytes on
- * disk are the recompressed ones. Copying them forward keeps the baseline
- * losslessly recompressed for free — including the wave-7 `approve --from` tree
- * copy, which promotes candidates that took the same `writePng` path.
+ * Copies an already-written PNG (the run's `actual`, or a `candidate`) to a new
+ * destination verbatim. No recompress here on purpose: the source was produced
+ * by `writePng`, which already ran `recompressPng`, so the bytes on disk are the
+ * recompressed ones. Copying them forward keeps the destination losslessly
+ * recompressed for free. The only non-test caller is `approve` refreshing the
+ * per-machine cache; `approve --from` does NOT use this — it reads each source
+ * once during validation and writes the retained buffer through {@link writePng}.
  */
-export async function copyToBaseline(
+export async function copyRecompressedPng(
   actualPath: string,
-  baselinePath: string,
+  destinationPath: string,
 ): Promise<void> {
-  await mkdir(dirname(baselinePath), { recursive: true });
-  await copyFile(actualPath, baselinePath);
+  await mkdir(dirname(destinationPath), { recursive: true });
+  await copyFile(actualPath, destinationPath);
 }
 
 /**

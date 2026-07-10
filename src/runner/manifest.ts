@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-
 import type { ResolvedConfig } from '../config.ts';
 
 /**
@@ -139,8 +138,13 @@ export async function readManifest(
  * {@link EnvironmentManifest}, or `undefined` when it passes. Checks every key
  * the comparison reads so a truncated or wrong-typed manifest is caught here
  * (surfaced as `malformed`) rather than producing a garbage per-key delta.
+ *
+ * Exported so `approve --from` can run the same shape check against a candidate
+ * artifact's `environment.actual` before promoting it into the committed
+ * manifest — a well-formed-but-wrong-shaped environment block must fail closed,
+ * not slip into `manifest.json` and silently defeat the drift gate.
  */
-function validateManifestShape(value: unknown): string | undefined {
+export function validateManifestShape(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null) {
     return 'manifest is not an object';
   }

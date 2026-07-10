@@ -1,23 +1,26 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-
 import type { RunMode } from './mode.ts';
 import type { DeletedBaseline, RunResult } from '../schema/result.ts';
 
 /**
  * A11y companion suffix for a breakpoint-keyed baseline PNG. `<action>/<bp>.png`
  * carries `<action>/<bp>.a11y.yaml` beside it (see `baselineStore.pathsFor`).
+ * Exported so `approve --from` derives the same companion filename from the
+ * shared constant instead of re-literalling the suffix at its own producer/
+ * consumer boundary.
  */
-const A11Y_SUFFIX = '.a11y.yaml';
+export const A11Y_SUFFIX = '.a11y.yaml';
 
 /**
  * Pre-breakpoint (legacy) baseline files: a project baselined before the
  * per-breakpoint layout committed `<action>/0.png` + `<action>/a11y.yaml`. The
  * scan keys these under the synthetic breakpoint name `'legacy'` so a prune step
- * can delete them without re-deriving the layout.
+ * can delete them without re-deriving the layout. Exported so `approve --from`
+ * shares the same legacy-layout literals rather than re-declaring them.
  */
-const LEGACY_PNG = '0.png';
-const LEGACY_A11Y = 'a11y.yaml';
+export const LEGACY_PNG = '0.png';
+export const LEGACY_A11Y = 'a11y.yaml';
 export const LEGACY_BREAKPOINT = 'legacy';
 
 /**
