@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { approveAll } from './runner/approve.ts';
 import { init } from './commands/init.ts';
 import { BREAKPOINTS, loadConfig } from './config.ts';
-import { resolveRunMode } from './runner/mode.ts';
+import { deriveExitCode } from './runner/exitCode.ts';
+import { resolveRunMode, type RunMode } from './runner/mode.ts';
 import { runAll } from './runner/run.ts';
 import { normaliseStoryArg } from './runner/storyFilter.ts';
 import { supervise } from './commands/supervise.ts';
@@ -236,7 +237,7 @@ async function main(): Promise<void> {
   }
   const config = await loadConfig(process.cwd());
   if (args.command === 'run') {
-    let mode;
+    let mode: RunMode;
     try {
       mode = resolveRunMode({
         ci: args.ci,
@@ -254,7 +255,7 @@ async function main(): Promise<void> {
       coverage: args.coverage,
       mode,
     });
-    process.exit(result.totals.failed > 0 ? 1 : 0);
+    process.exit(deriveExitCode(mode, result.totals));
   }
   if (args.command === 'approve') {
     // A story may be named positionally (`approve user-logs-in`) or via

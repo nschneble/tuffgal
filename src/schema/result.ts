@@ -1,3 +1,5 @@
+import type { RunMode } from '../runner/mode.ts';
+
 /**
  * Outcome model. The runner emits a `RunResult` per invocation; the reporter
  * consumes it to render the HTML report. Status values map onto the three
@@ -127,6 +129,14 @@ export interface RunResult {
   startedAt: string;
   finishedAt: string;
   durationMs: number;
+  /**
+   * Comparison contract the run executed under (`'ci' | 'local'`). Recorded so
+   * the report, the Action, and `approve --from` can distinguish a committed-
+   * baseline gate run from an advisory local self-diff. Optional in the type
+   * only as a defensive parse guard for older `results.json` artifacts that
+   * predate this field; every result the current runner emits carries it.
+   */
+  mode?: RunMode;
   totals: {
     stories: number;
     passed: number;

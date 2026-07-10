@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import type { ActionResult, RunResult, StoryResult } from '../schema/result.ts';
+import { pathExists } from '../util.ts';
 import {
+  copyResultsIntoCandidates,
   drivingBreakpoints,
   formatResultLine,
   formatSummaryBullet,
@@ -87,6 +92,54 @@ describe('drivingBreakpoints', () => {
       action('mobile', 'new'),
     ]);
     assert.deepEqual(drivingBreakpoints(result), ['mobile']);
+  });
+});
+
+describe('copyResultsIntoCandidates', () => {
+  it('copies results.json into a freshly-created candidates dir', async () => {
+    const reportDir = await mkdtemp(join(tmpdir(), 'tuffgal-run-'));
+    await writeFile(
+      join(reportDir, 'results.json'),
+      JSON.stringify({ mode: 'ci', stories: [] }),
+      'utf8',
+    );
+
+    // candidates/ does not exist yet — an all-pass run writes no candidate
+    // renders — so the copy must create it rather than fail.
+    assert.equal(await pathExists(join(reportDir, 'candidates')), false);
+    await copyResultsIntoCandidates(reportDir);
+
+    const copied = await readFile(
+      join(reportDir, 'candidates', 'results.json'),
+      'utf8',
+    );
+    assert.deepEqual(JSON.parse(copied), { mode: 'ci', stories: [] });
+  });
+
+  it('overwrites an existing candidates/results.json (candidate renders already present)', async () => {
+    const reportDir = await mkdtemp(join(tmpdir(), 'tuffgal-run-'));
+    await writeFile(
+      join(reportDir, 'results.json'),
+      JSON.stringify({ mode: 'ci', totals: { changed: 1 } }),
+      'utf8',
+    );
+    await mkdir(join(reportDir, 'candidates'), { recursive: true });
+    await writeFile(
+      join(reportDir, 'candidates', 'results.json'),
+      'stale',
+      'utf8',
+    );
+
+    await copyResultsIntoCandidates(reportDir);
+
+    const copied = await readFile(
+      join(reportDir, 'candidates', 'results.json'),
+      'utf8',
+    );
+    assert.deepEqual(JSON.parse(copied), {
+      mode: 'ci',
+      totals: { changed: 1 },
+    });
   });
 });
 

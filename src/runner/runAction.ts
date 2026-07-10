@@ -5,6 +5,7 @@ import type { ResolvedConfig } from '../config.ts';
 import { capturePage } from '../screenshots/capture.ts';
 import { diffPngs, ScreenshotSizeMismatchError } from '../screenshots/diff.ts';
 import {
+  type BaselinePaths,
   deleteIfExists,
   pathsFor,
   readBaseline,
@@ -14,6 +15,7 @@ import {
   writeText,
 } from '../screenshots/baselineStore.ts';
 import { sleep } from '../util.ts';
+import type { RunMode } from './mode.ts';
 import { interpolate, interpolateHint } from './interpolate.ts';
 import { LocatorNotFoundError, resolveLocator } from './resolveLocator.ts';
 import { runClick } from './steps/click.ts';
@@ -38,6 +40,18 @@ export interface RunActionOptions {
    * `ActionResult.breakpoint` tag) key per-mode captures apart.
    */
   breakpoint: string;
+  /**
+   * Comparison contract for this run (see {@link RunMode}). Optional so
+   * pre-existing programmatic callers and tests keep compiling; the run driver
+   * always supplies it. Governs the baseline-write behaviour:
+   *   - `ci` — NEVER write into `paths.baselines`. A missing baseline reads
+   *     `new` and the proposed render lands in the candidate tree only;
+   *     approval (a later wave) is what promotes candidates to baselines.
+   *   - `local` (default when omitted) — legacy behaviour: a missing baseline
+   *     is auto-written as a fresh committed baseline. Wave 4 retargets local
+   *     to a per-machine cache; until then it keeps writing `paths.baselines`.
+   */
+  mode?: RunMode;
 }
 
 const DEFAULT_RETRY_ATTEMPTS = 2;
@@ -55,6 +69,7 @@ export async function runAction(
   options: RunActionOptions,
 ): Promise<ActionResult> {
   const { action, page, parameters, storyFile, config, breakpoint } = options;
+  const mode: RunMode = options.mode ?? 'local';
   validateParameters(action, parameters);
   // The current breakpoint name is exposed to interpolation as `${breakpoint}`
   // so a story can key test-created data per mode (e.g. registering
@@ -128,6 +143,7 @@ export async function runAction(
     storyFile,
     startedAt,
     breakpoint,
+    mode,
   });
 }
 
@@ -248,6 +264,8 @@ interface CaptureOptions {
   storyFile: string;
   startedAt: Date;
   breakpoint: string;
+  /** Comparison contract — governs baseline-write vs candidate-write. */
+  mode: RunMode;
 }
 
 /**
@@ -275,6 +293,7 @@ async function captureAndCompare(
     storyFile,
     startedAt,
     breakpoint,
+    mode,
   } = options;
   const paths = pathsFor({
     baselinesDir: config.paths.baselines,
@@ -298,7 +317,7 @@ async function captureAndCompare(
 
   // Read-then-maybe-create the baseline under a per-path lock so two stories
   // sharing this action can't both see "no baseline" and race to write it.
-  // The first holder writes; later holders observe the baseline it produced.
+  // The first holder decides; later holders observe the baseline it produced.
   //
   // Read order under the lock:
   //   1. breakpoint-keyed baseline (`<action>/<bp>.png`) — the canonical
@@ -310,7 +329,15 @@ async function captureAndCompare(
   //      and promotion to the new layout is `tuffgal approve`'s job, not a
   //      silent side effect of a read. Auto-creating here would also clobber
   //      the legacy file's role as the shared fallback for every breakpoint.
-  //   3. neither — write a fresh breakpoint baseline and report `new`.
+  //   3. neither — the missing-baseline branch, and it splits on mode:
+  //        - `local` (legacy): write a fresh breakpoint baseline under the lock
+  //          and report `new`. This is the pre-CI behaviour, kept intact this
+  //          wave; wave 4 retargets it to the per-machine cache.
+  //        - `ci`: NEVER write `paths.baselines`. Committed baselines are
+  //          written only through the approval flow, never as a side effect of
+  //          a run. Report `new`; the proposed render is emitted to the
+  //          candidate tree below (outside the lock, since candidate paths are
+  //          per-report and never raced across stories).
   const found = await withBaselineLock(
     paths.baseline,
     async (): Promise<{ png: Buffer; source: BaselineSource } | undefined> => {
@@ -322,13 +349,21 @@ async function captureAndCompare(
       if (legacy !== undefined) {
         return { png: legacy, source: 'legacy' };
       }
-      await writePng(paths.baseline, actualPng);
-      await writeText(paths.a11yBaseline, a11yJson);
+      if (mode === 'local') {
+        await writePng(paths.baseline, actualPng);
+        await writeText(paths.a11yBaseline, a11yJson);
+      }
       return undefined;
     },
   );
 
   if (found === undefined) {
+    // Missing baseline → `new`. In CI mode the proposed render is the candidate
+    // (nothing was written to baselines); in local mode the fresh baseline was
+    // written above and there is no candidate tree.
+    if (mode === 'ci') {
+      await writeCandidate(paths, actualPng, a11yJson);
+    }
     return finishResult(baseResult, {
       status: 'new',
       baselinePath: paths.baseline,
@@ -367,6 +402,12 @@ async function captureAndCompare(
       });
     }
     await writePng(paths.diff, outcome.diffPng);
+    // A `changed` action in CI mode proposes a new baseline — emit it to the
+    // candidate tree so approval is a plain tree copy. Local mode does not
+    // (its comparison target is auto-managed, not human-approved).
+    if (mode === 'ci') {
+      await writeCandidate(paths, actualPng, a11yJson);
+    }
     return finishResult(baseResult, {
       status: 'changed',
       baselinePath: paths.baseline,
@@ -381,6 +422,10 @@ async function captureAndCompare(
     });
   } catch (error) {
     if (error instanceof ScreenshotSizeMismatchError) {
+      // Dimension drift is still a `changed` outcome — same candidate emission.
+      if (mode === 'ci') {
+        await writeCandidate(paths, actualPng, a11yJson);
+      }
       return finishResult(baseResult, {
         status: 'changed',
         baselinePath: paths.baseline,
@@ -392,6 +437,23 @@ async function captureAndCompare(
     }
     throw error;
   }
+}
+
+/**
+ * Emits the proposed-new-baseline render (PNG + a11y companion) to the
+ * report-rooted candidate tree (`<report>/candidates/<action>/<breakpoint>.*`).
+ * The layout mirrors `paths.baselines` exactly, so approving a candidate set is
+ * a plain tree copy. Routed through the same `writePng`/`writeText` seams as
+ * every other write, so candidates inherit the lossless recompress pass for
+ * free. Called only in CI mode for `new`/`changed` actions.
+ */
+async function writeCandidate(
+  paths: BaselinePaths,
+  actualPng: Buffer,
+  a11yJson: string,
+): Promise<void> {
+  await writePng(paths.candidate, actualPng);
+  await writeText(paths.a11yCandidate, a11yJson);
 }
 
 function resolveMasks(

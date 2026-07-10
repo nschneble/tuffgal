@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
@@ -118,6 +118,141 @@ describe('runAction — breakpoint threading', () => {
     assert.equal(mobile.status, 'new');
     assert.equal(desktop.status, 'new');
     assert.notEqual(mobile.baselinePath, desktop.baselinePath);
+  });
+});
+
+describe('runAction — CI mode never writes committed baselines', () => {
+  it('reports new WITHOUT writing into paths.baselines, and writes the candidate instead', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const result = await runAction({
+      page: fakePage(png),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    // Missing baseline in CI mode => status new, but NOTHING under baselines.
+    assert.equal(result.status, 'new');
+    const baselinePng = join(config.paths.baselines, 'open', 'desktop.png');
+    const baselineA11y = join(
+      config.paths.baselines,
+      'open',
+      'desktop.a11y.yaml',
+    );
+    assert.equal(await pathExists(baselinePng), false);
+    assert.equal(await pathExists(baselineA11y), false);
+
+    // The candidate tree carries the proposed baseline (PNG + a11y companion).
+    const candidatePng = join(
+      config.paths.report,
+      'candidates',
+      'open',
+      'desktop.png',
+    );
+    const candidateA11y = join(
+      config.paths.report,
+      'candidates',
+      'open',
+      'desktop.a11y.yaml',
+    );
+    assert.ok(await pathExists(candidatePng));
+    assert.ok(await pathExists(candidateA11y));
+    assert.equal(await readFile(candidateA11y, 'utf8'), '- document');
+  });
+
+  it('writes a candidate for a changed action but never touches baselines', async () => {
+    const config = await makeConfig();
+    // Seed a breakpoint-keyed committed baseline that the actual will drift from.
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), solidPng(10, 20, 30));
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- document');
+
+    const result = await runAction({
+      page: fakePage(solidPng(200, 50, 50)),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.status, 'changed');
+    // Committed baseline stays exactly as seeded — untouched by the run.
+    const baselineBytes = await readFile(join(baselineDir, 'desktop.png'));
+    assert.deepEqual(baselineBytes, solidPng(10, 20, 30));
+    // Candidate carries the proposed new baseline.
+    assert.ok(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+    );
+  });
+
+  it('writes NO candidate for a passing action in CI mode', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- document');
+
+    const result = await runAction({
+      page: fakePage(png),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.status, 'pass');
+    assert.equal(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+      false,
+    );
+  });
+});
+
+describe('runAction — local mode still auto-writes committed baselines', () => {
+  it('writes a fresh baseline on a missing-baseline run (legacy behaviour preserved)', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const result = await runAction({
+      page: fakePage(png),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+
+    assert.equal(result.status, 'new');
+    // Local mode's legacy behaviour: the baseline IS written this wave.
+    assert.ok(
+      await pathExists(join(config.paths.baselines, 'open', 'desktop.png')),
+    );
+    assert.ok(
+      await pathExists(
+        join(config.paths.baselines, 'open', 'desktop.a11y.yaml'),
+      ),
+    );
+    // Local mode writes no candidate tree — that is a CI artifact.
+    assert.equal(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+      false,
+    );
   });
 });
 

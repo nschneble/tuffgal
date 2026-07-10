@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -37,10 +37,11 @@ export interface RunCliOptions {
   manageServers?: boolean;
   coverage?: boolean;
   /**
-   * Resolved comparison contract (see {@link RunMode}). Threaded through from
-   * the CLI but not yet acted on — CI vs local branching (baseline source,
-   * candidate writes, orphan detection) lands in later waves. Optional so
-   * existing programmatic callers keep compiling; the CLI always supplies it.
+   * Resolved comparison contract (see {@link RunMode}). Governs baseline-write
+   * vs candidate-write in `runAction` and the run's exit-code derivation. The
+   * CLI always supplies it (resolved from `--ci`/`--local`/`$CI`); it stays
+   * optional so existing programmatic callers keep compiling, defaulting to
+   * `local` (the legacy auto-write behaviour) when omitted.
    */
   mode?: RunMode;
 }
@@ -65,6 +66,7 @@ export async function runAll(
   options: RunCliOptions,
 ): Promise<RunResult> {
   const startedAt = new Date();
+  const mode: RunMode = options.mode ?? 'local';
   let managedServers: ManagedDevServers | undefined;
   if (options.manageServers) {
     managedServers = await startManagedDevServers(config);
@@ -132,6 +134,7 @@ export async function runAll(
             options.headed,
             coverage,
             breakpoint,
+            mode,
           ),
         () => {},
         (_item, result) =>
@@ -166,6 +169,7 @@ export async function runAll(
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
       durationMs: finishedAt.getTime() - startedAt.getTime(),
+      mode,
       totals: summarise(results),
       customCoverage: { screens, flows },
       stories: results,
@@ -175,6 +179,15 @@ export async function runAll(
       runResult,
       config.interactiveMode,
     );
+    // In CI mode the `<report>/candidates/` tree is the self-contained approval
+    // artifact — copy the run's `results.json` beside the candidate renders so a
+    // downstream `approve --from <candidates>` has the outcome data (which
+    // actions are new/changed, and later the environment/deleted blocks) without
+    // needing the rest of the report dir. Only meaningful in CI mode, where the
+    // candidate tree exists.
+    if (mode === 'ci') {
+      await copyResultsIntoCandidates(config.paths.report);
+    }
     writeRunSummary(passSummaries, reportPath);
     if (coverage) {
       const coveragePath = await coverage.generate();
@@ -195,6 +208,7 @@ function runScheduledStory(
   headed: boolean,
   coverage: CoverageCollector | undefined,
   breakpoint: ResolvedBreakpoint,
+  mode: RunMode,
 ): Promise<StoryResult> {
   return runStory({
     story: item.story,
@@ -206,6 +220,7 @@ function runScheduledStory(
     headed,
     coverage,
     breakpoint,
+    mode,
   });
 }
 
@@ -242,6 +257,26 @@ async function touchHeartbeat(config: ResolvedConfig): Promise<void> {
     // The heartbeat is opportunistic — a missing parent dir or a disk
     // hiccup should not fail the entire run.
   }
+}
+
+/**
+ * Copies the just-written `results.json` into `<report>/candidates/` so the
+ * candidate tree is a self-contained approval artifact. `writeReport` has
+ * already written `<report>/results.json`; this places a sibling copy under
+ * candidates. The candidates dir may not exist yet (a run where every action
+ * passed writes no candidate renders), so it is created first — an empty
+ * `candidates/` carrying only `results.json` still correctly describes "nothing
+ * to approve".
+ */
+export async function copyResultsIntoCandidates(
+  reportDir: string,
+): Promise<void> {
+  const candidatesDir = join(reportDir, 'candidates');
+  await mkdir(candidatesDir, { recursive: true });
+  await copyFile(
+    join(reportDir, 'results.json'),
+    join(candidatesDir, 'results.json'),
+  );
 }
 
 function summarise(results: StoryResult[]): RunResult['totals'] {
