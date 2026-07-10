@@ -70,6 +70,26 @@ describe('parseArguments — approve filters', () => {
   });
 });
 
+describe('parseArguments — run mode flags', () => {
+  it('captures --ci', () => {
+    const args = parseArguments(['run', '--ci']);
+    assert.equal(args.ci, true);
+    assert.equal(args.local, false);
+  });
+
+  it('captures --local', () => {
+    const args = parseArguments(['run', '--local']);
+    assert.equal(args.local, true);
+    assert.equal(args.ci, false);
+  });
+
+  it('defaults both mode flags to false', () => {
+    const args = parseArguments(['run']);
+    assert.equal(args.ci, false);
+    assert.equal(args.local, false);
+  });
+});
+
 describe('isMainEntry — entry-point detection', () => {
   it('matches when argv[1] is a symlink resolving to the module file', () => {
     const directory = mkdtempSync(join(tmpdir(), 'tuffgal-entry-'));

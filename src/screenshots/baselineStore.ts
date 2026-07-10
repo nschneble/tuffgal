@@ -25,10 +25,29 @@ export interface BaselinePaths {
   legacyBaseline: string;
   /** Pre-breakpoint a11y baseline (`<action>/a11y.yaml`); see `legacyBaseline`. */
   legacyA11yBaseline: string;
+  /**
+   * Proposed-new-baseline PNG for CI mode, under
+   * `<report>/candidates/<action>/<breakpoint>.png`. Mirrors the `baseline`
+   * layout exactly (action dir + breakpoint filename) so approving a candidate
+   * set is a plain tree copy into `paths.baselines`. Always report-rooted —
+   * never affected by the comparison root, which only moves the baseline side.
+   */
+  candidate: string;
+  /** Candidate a11y snapshot (`<report>/candidates/<action>/<breakpoint>.a11y.yaml`). */
+  a11yCandidate: string;
 }
 
 export interface StoreOptions {
   baselinesDir: string;
+  /**
+   * Root the baseline-side paths (`baseline`, `a11yBaseline`, and the two
+   * `legacy*` fallbacks) resolve under. Defaults to `baselinesDir`, so an
+   * omitted root reproduces the committed-baselines layout byte-for-byte — the
+   * zero-behaviour-change default. Local mode passes the per-machine cache dir
+   * here to self-diff against it instead. Report-side artifacts (actual, diff,
+   * candidate, a11yActual, a11yCandidate) ignore this and stay report-rooted.
+   */
+  comparisonRoot?: string;
   reportDir: string;
   storyFile: string;
   actionName: string;
@@ -53,23 +72,30 @@ function breakpointSegment(breakpoint: string): string {
 }
 
 /**
- * Computes deterministic paths for the baseline (committed), actual
- * (regenerated each run), and diff (regenerated when a baseline existed and
- * the diff was non-zero) PNGs. Centralised so the runner and the CLI's
- * `approve` command agree on layout.
+ * Computes deterministic paths for the baseline (the comparison target —
+ * committed baselines by default, or the local cache when `comparisonRoot` is
+ * supplied), actual (regenerated each run), diff (regenerated when a baseline
+ * existed and the diff was non-zero), and candidate (proposed-new-baseline for
+ * CI approval) PNGs. Centralised so the runner and the CLI's `approve` command
+ * agree on layout.
  *
  * Every path is keyed by both action name and breakpoint so per-breakpoint
- * captures of the same action stay isolated: baselines nest the breakpoint as a
- * filename under the action directory (`<action>/<breakpoint>.png`), while
- * report-side artifacts splice it into the filename
- * (`<action>.<breakpoint>.actual.png`) since they already share one per-story
- * directory.
+ * captures of the same action stay isolated: baseline- and candidate-side paths
+ * nest the breakpoint as a filename under the action directory
+ * (`<action>/<breakpoint>.png`), while report-side actual/diff artifacts splice
+ * it into the filename (`<action>.<breakpoint>.actual.png`) since they already
+ * share one per-story directory.
+ *
+ * The baseline side resolves under `comparisonRoot` (default `baselinesDir`), so
+ * omitting the root reproduces the committed-baselines layout unchanged; the
+ * candidate and report-side paths are always report-rooted and ignore it.
  */
 export function pathsFor(options: StoreOptions): BaselinePaths {
   const storySlug = options.storyFile.replace(/\.json$/i, '');
   const bp = breakpointSegment(options.breakpoint);
+  const comparisonRoot = options.comparisonRoot ?? options.baselinesDir;
   return {
-    baseline: join(options.baselinesDir, options.actionName, `${bp}.png`),
+    baseline: join(comparisonRoot, options.actionName, `${bp}.png`),
     actual: join(
       options.reportDir,
       'screenshots',
@@ -82,27 +108,34 @@ export function pathsFor(options: StoreOptions): BaselinePaths {
       storySlug,
       `${options.actionName}.${bp}.diff.png`,
     ),
-    a11yBaseline: join(
-      options.baselinesDir,
-      options.actionName,
-      `${bp}.a11y.yaml`,
-    ),
+    a11yBaseline: join(comparisonRoot, options.actionName, `${bp}.a11y.yaml`),
     a11yActual: join(
       options.reportDir,
       'screenshots',
       storySlug,
       `${options.actionName}.${bp}.a11y.yaml`,
     ),
+    // Candidate tree mirrors the baseline layout under the report so a CI
+    // approval is a plain copy of `<report>/candidates/` into `paths.baselines`.
+    candidate: join(
+      options.reportDir,
+      'candidates',
+      options.actionName,
+      `${bp}.png`,
+    ),
+    a11yCandidate: join(
+      options.reportDir,
+      'candidates',
+      options.actionName,
+      `${bp}.a11y.yaml`,
+    ),
     // Pre-breakpoint locations. A project baselined before this feature has
     // its only committed snapshot here; the runner reads `baseline` first and
     // falls back to these when the breakpoint-keyed file is absent, so existing
-    // baselines keep matching instead of all reading as `new`.
-    legacyBaseline: join(options.baselinesDir, options.actionName, '0.png'),
-    legacyA11yBaseline: join(
-      options.baselinesDir,
-      options.actionName,
-      'a11y.yaml',
-    ),
+    // baselines keep matching instead of all reading as `new`. Rooted at the
+    // comparison root like the breakpoint-keyed baseline above.
+    legacyBaseline: join(comparisonRoot, options.actionName, '0.png'),
+    legacyA11yBaseline: join(comparisonRoot, options.actionName, 'a11y.yaml'),
   };
 }
 

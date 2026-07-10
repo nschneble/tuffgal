@@ -57,6 +57,18 @@ describe('assertValidConfig', () => {
     assert.throws(() => assertValidConfig(config, SOURCE), /paths\.report/);
   });
 
+  it('accepts an optional string paths.localCache', () => {
+    const config = validConfig();
+    (config.paths as Record<string, unknown>).localCache = 'tuffgal/.cache';
+    assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+  });
+
+  it('rejects a non-string paths.localCache', () => {
+    const config = validConfig();
+    (config.paths as Record<string, unknown>).localCache = 42;
+    assert.throws(() => assertValidConfig(config, SOURCE), /paths\.localCache/);
+  });
+
   it('requires a string baseUrl', () => {
     const config = validConfig();
     config.baseUrl = 123;
@@ -190,6 +202,30 @@ describe('loadConfig breakpoint resolution', () => {
   it('resolves an explicit interactiveMode', async () => {
     const resolved = await load('interactiveMode: true,');
     assert.equal(resolved.interactiveMode, true);
+  });
+
+  it('defaults paths.localCache to .cache under the config dir', async () => {
+    const resolved = await load('');
+    assert.equal(resolved.paths.localCache, join(dir, '.cache'));
+  });
+
+  it('resolves an explicit paths.localCache relative to the config dir', async () => {
+    // `load` hardcodes its own `paths` block, so an explicit localCache can't
+    // ride in via `extra` (a second `paths` key would clobber it). Write the
+    // config directly for this one case.
+    const body = `export default {
+      paths: {
+        actions: 'tuffgal/actions',
+        stories: 'tuffgal/stories',
+        baselines: 'tuffgal/baselines',
+        report: 'tuffgal/report',
+        localCache: 'custom/cache',
+      },
+      baseUrl: 'http://localhost:3000',
+    };`;
+    await writeFile(join(dir, 'tuffgal.config.js'), body, 'utf8');
+    const resolved = await loadConfig(dir);
+    assert.equal(resolved.paths.localCache, join(dir, 'custom/cache'));
   });
 
   it('defaults to a single desktop breakpoint when nothing is set', async () => {

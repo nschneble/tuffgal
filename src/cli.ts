@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { approveAll } from './runner/approve.ts';
 import { init } from './commands/init.ts';
 import { BREAKPOINTS, loadConfig } from './config.ts';
+import { resolveRunMode } from './runner/mode.ts';
 import { runAll } from './runner/run.ts';
 import { normaliseStoryArg } from './runner/storyFilter.ts';
 import { supervise } from './commands/supervise.ts';
@@ -24,6 +25,10 @@ interface ParsedArguments {
   maxRespawns?: number;
   maxRuntimeMs?: number;
   newOnly: boolean;
+  /** `--ci` flag: force CI comparison mode. Mutually exclusive with `--local`. */
+  ci: boolean;
+  /** `--local` flag: force local (advisory) mode. Mutually exclusive with `--ci`. */
+  local: boolean;
   storyFilter?: string;
   /** Bare positional argument (e.g. `approve user-logs-in`). */
   positional?: string;
@@ -42,6 +47,8 @@ export function parseArguments(argv: string[]): ParsedArguments {
     manageServers: false,
     coverage: false,
     newOnly: false,
+    ci: false,
+    local: false,
     breakpoints: [],
   };
 
@@ -90,6 +97,10 @@ export function parseArguments(argv: string[]): ParsedArguments {
       parsed.coverage = true;
     } else if (arg === '--new-only') {
       parsed.newOnly = true;
+    } else if (arg === '--ci') {
+      parsed.ci = true;
+    } else if (arg === '--local') {
+      parsed.local = true;
     } else if (arg === '--healthcheck-interval') {
       parsed.healthcheckIntervalMs = numericFlag(
         '--healthcheck-interval',
@@ -164,6 +175,8 @@ function printHelp(): void {
       '',
       'Options:',
       '  --story <name>             Filter to a single story (filename or story text).',
+      '  --ci                       Force CI mode (compare vs committed baselines). Default when $CI is set.',
+      '  --local                    Force local advisory mode (self-diff vs per-machine cache).',
       '  --headed                   Show the browser while running.',
       '  --workers N                Override the worker pool size (default min(cpus/2, 4)).',
       '  --manage-servers           Spawn devServers.command, wait, run, then kill it.',
@@ -207,6 +220,12 @@ async function main(): Promise<void> {
     }
   }
 
+  // `--ci` / `--local` pick the comparison contract; they only mean anything on
+  // `run`.
+  if (args.command !== 'run' && (args.ci || args.local)) {
+    failExit('--ci and --local are only valid with the `run` subcommand');
+  }
+
   if (args.command === 'help') {
     printHelp();
     return;
@@ -217,12 +236,23 @@ async function main(): Promise<void> {
   }
   const config = await loadConfig(process.cwd());
   if (args.command === 'run') {
+    let mode;
+    try {
+      mode = resolveRunMode({
+        ci: args.ci,
+        local: args.local,
+        env: process.env,
+      });
+    } catch (error) {
+      failExit(error instanceof Error ? error.message : String(error));
+    }
     const result = await runAll(config, {
       storyFilter: args.storyFilter,
       headed: args.headed,
       workers: args.workers,
       manageServers: args.manageServers,
       coverage: args.coverage,
+      mode,
     });
     process.exit(result.totals.failed > 0 ? 1 : 0);
   }

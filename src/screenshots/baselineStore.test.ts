@@ -129,6 +129,90 @@ describe('pathsFor — legacy fallback', () => {
   });
 });
 
+describe('pathsFor — comparison root', () => {
+  it('defaults every baseline-side path to baselinesDir when no root is given', () => {
+    // Zero behaviour change: omitting comparisonRoot must reproduce the exact
+    // pre-parameter layout under baselinesDir.
+    const paths = pathsFor({
+      baselinesDir: base,
+      reportDir: report,
+      storyFile: 'login.json',
+      actionName: 'submit',
+      breakpoint: 'desktop',
+    });
+    assert.equal(paths.baseline, join(base, 'submit', 'desktop.png'));
+    assert.equal(paths.a11yBaseline, join(base, 'submit', 'desktop.a11y.yaml'));
+    assert.equal(paths.legacyBaseline, join(base, 'submit', '0.png'));
+    assert.equal(paths.legacyA11yBaseline, join(base, 'submit', 'a11y.yaml'));
+  });
+
+  it('roots every baseline-side path at comparisonRoot when supplied', () => {
+    // Local mode points the comparison at the per-machine cache dir; the same
+    // action/breakpoint layout is reused verbatim, just under a different root.
+    const cache = '/cache';
+    const paths = pathsFor({
+      baselinesDir: base,
+      comparisonRoot: cache,
+      reportDir: report,
+      storyFile: 'login.json',
+      actionName: 'submit',
+      breakpoint: 'desktop',
+    });
+    assert.equal(paths.baseline, join(cache, 'submit', 'desktop.png'));
+    assert.equal(
+      paths.a11yBaseline,
+      join(cache, 'submit', 'desktop.a11y.yaml'),
+    );
+    assert.equal(paths.legacyBaseline, join(cache, 'submit', '0.png'));
+    assert.equal(paths.legacyA11yBaseline, join(cache, 'submit', 'a11y.yaml'));
+    // Report-side artifacts are unaffected by the comparison root.
+    assert.equal(
+      paths.actual,
+      join(report, 'screenshots', 'login', 'submit.desktop.actual.png'),
+    );
+  });
+});
+
+describe('pathsFor — candidate paths', () => {
+  it('derives candidate png + a11y under <report>/candidates/<action>/<breakpoint>', () => {
+    // Candidates mirror the baselines/ layout so approval is a plain tree copy.
+    const paths = pathsFor({
+      baselinesDir: base,
+      reportDir: report,
+      storyFile: 'login.json',
+      actionName: 'submit',
+      breakpoint: 'mobile',
+    });
+    assert.equal(
+      paths.candidate,
+      join(report, 'candidates', 'submit', 'mobile.png'),
+    );
+    assert.equal(
+      paths.a11yCandidate,
+      join(report, 'candidates', 'submit', 'mobile.a11y.yaml'),
+    );
+  });
+
+  it('keys candidates by breakpoint and is independent of the comparison root', () => {
+    const common = {
+      baselinesDir: base,
+      comparisonRoot: '/cache',
+      reportDir: report,
+      storyFile: 'login.json',
+      actionName: 'submit',
+    };
+    const desktop = pathsFor({ ...common, breakpoint: 'desktop' });
+    const mobile = pathsFor({ ...common, breakpoint: 'mobile' });
+    assert.notEqual(desktop.candidate, mobile.candidate);
+    assert.notEqual(desktop.a11yCandidate, mobile.a11yCandidate);
+    // Candidates live under report, never the comparison root.
+    assert.equal(
+      desktop.candidate,
+      join(report, 'candidates', 'submit', 'desktop.png'),
+    );
+  });
+});
+
 describe('withBaselineLock — per-breakpoint isolation', () => {
   it('serializes callers sharing a key but lets distinct keys run in parallel', async () => {
     // Same key (one breakpoint's baseline): the second critical section must

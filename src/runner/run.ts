@@ -28,6 +28,7 @@ import {
   storyRendersAt,
 } from './breakpointPasses.ts';
 import { storyMatchesFilter } from './storyFilter.ts';
+import type { RunMode } from './mode.ts';
 
 export interface RunCliOptions {
   storyFilter?: string;
@@ -35,6 +36,13 @@ export interface RunCliOptions {
   workers?: number;
   manageServers?: boolean;
   coverage?: boolean;
+  /**
+   * Resolved comparison contract (see {@link RunMode}). Threaded through from
+   * the CLI but not yet acted on — CI vs local branching (baseline source,
+   * candidate writes, orphan detection) lands in later waves. Optional so
+   * existing programmatic callers keep compiling; the CLI always supplies it.
+   */
+  mode?: RunMode;
 }
 
 /** One Summary bullet's data: a breakpoint name and that pass's own counts. */
