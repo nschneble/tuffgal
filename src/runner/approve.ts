@@ -246,10 +246,13 @@ export class ApproveFromError extends Error {
  * TRUST BOUNDARY. `<dir>` is an untrusted artifact — a human or bot unzipped it
  * from CI. This is the only path that writes committed baselines, so it is
  * fail-closed and validate-all-then-write:
- *   1. Every tree entry is validated (allowed shape, safe names, no symlinks, no
+ *   1. `results.json` must parse, describe a clean CI run (`mode: 'ci'` with
+ *      `totals.failed === 0` — never promote a local or broken run's partial
+ *      tree, see {@link assertPromotableRun}), and carry a well-shaped
+ *      `environment.actual` block (validated against the manifest shape, not
+ *      just present).
+ *   2. Every tree entry is validated (allowed shape, safe names, no symlinks, no
  *      traversal) and every PNG is decoded to prove it is a real PNG.
- *   2. `results.json` must parse and carry a well-shaped `environment.actual`
- *      block (validated against the manifest shape, not just present).
  *   3. ONLY after the whole tree passes are any bytes written. A single bad
  *      entry aborts with {@link ApproveFromError} and zero filesystem changes.
  *
@@ -272,6 +275,7 @@ export async function approveFrom(
   // Phase 1 — validate the whole tree and build a write plan. Every source is
   // read exactly ONCE here and its bytes are retained on the plan; no writes yet.
   const result = await readCandidateResults(candidateDir);
+  assertPromotableRun(result);
   const environment = extractEnvironment(result);
   const plan = await planWrites(candidateDir, config.paths.baselines);
   await assertAllPngsDecode(plan);
@@ -341,6 +345,38 @@ async function readCandidateResults(dir: string): Promise<RunResult> {
   } catch (error) {
     throw new ApproveFromError(
       error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+/**
+ * Refuses to promote a candidate tree that did not come from a clean CI run.
+ * Two fail-closed gates, both derived from the candidate's own `results.json`:
+ *   - `mode !== 'ci'` — a local (advisory) run's candidate tree is rendered
+ *     against the per-machine cache on the developer's own platform, so
+ *     promoting it commits cross-platform pixels the CI gate would immediately
+ *     re-flag. Only a CI-mode run's renders are eligible for the committed set.
+ *   - `totals.failed > 0` — a run with failed stories produced a PARTIAL tree
+ *     (broken stories wrote no candidate, or wrote a candidate mid-failure), so
+ *     promoting it would commit an incomplete baseline set. A broken run is
+ *     never a source of truth.
+ * Both abort before any write. `mode` is read defensively (older artifacts may
+ * omit it) — a missing `mode` is treated as non-`ci` and refused, since only a
+ * current CI run stamps `mode: 'ci'`.
+ */
+function assertPromotableRun(result: RunResult): void {
+  if (result.mode !== 'ci') {
+    throw new ApproveFromError(
+      `Candidate results.json was produced by a ${result.mode ?? 'pre-mode'} ` +
+        'run, not a CI run — only `mode: "ci"` candidates may be promoted into ' +
+        'committed baselines. Re-run under `tuffgal run --ci`.',
+    );
+  }
+  if (result.totals.failed > 0) {
+    throw new ApproveFromError(
+      `Candidate results.json reports ${result.totals.failed} failed ` +
+        'story(ies) — a broken run produces a partial candidate tree that must ' +
+        'never be promoted. Fix the failures and re-run before approving.',
     );
   }
 }

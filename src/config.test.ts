@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import {
@@ -204,9 +204,18 @@ describe('loadConfig breakpoint resolution', () => {
     assert.equal(resolved.interactiveMode, true);
   });
 
-  it('defaults paths.localCache to .cache under the config dir', async () => {
+  it('defaults paths.localCache to the cache dir the scaffolded .gitignore covers', async () => {
     const resolved = await load('');
-    assert.equal(resolved.paths.localCache, join(dir, '.cache'));
+    // The default must resolve INSIDE the `tuffgal/` subtree, where the
+    // scaffolded `tuffgal/.gitignore`'s `.cache/` entry actually ignores it —
+    // not `<configDir>/.cache`, which sits a level up and is un-ignored, so a
+    // consumer omitting the key would stage hundreds of per-machine PNGs. Derive
+    // the covered path from `paths.baselines` (its parent is the `tuffgal/` dir
+    // the gitignore lives in) rather than restating a literal, so this asserts
+    // the REAL resolved default against what the gitignore covers.
+    const gitignoreCovers = join(dirname(resolved.paths.baselines), '.cache');
+    assert.equal(resolved.paths.localCache, gitignoreCovers);
+    assert.equal(resolved.paths.localCache, join(dir, 'tuffgal', '.cache'));
   });
 
   it('resolves an explicit paths.localCache relative to the config dir', async () => {

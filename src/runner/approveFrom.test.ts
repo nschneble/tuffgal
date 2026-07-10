@@ -115,6 +115,51 @@ async function writeCandidateResults(
   );
 }
 
+/**
+ * Writes a `results.json` overriding `mode` and/or `totals.failed` — the two
+ * fields the promotability gate reads. `mode: undefined` omits the key entirely
+ * (pre-mode artifact). Everything else is the same clean filler as
+ * {@link writeCandidateResults}.
+ */
+async function writeCandidateResultsRaw(
+  overrides: { mode?: 'ci' | 'local' | undefined; failed?: number } = {},
+): Promise<void> {
+  const hasMode = 'mode' in overrides;
+  const results: Record<string, unknown> = {
+    startedAt: '2026-06-11T12:00:00.000Z',
+    finishedAt: '2026-06-11T12:00:01.000Z',
+    durationMs: 1000,
+    totals: {
+      stories: 0,
+      passed: 0,
+      changed: 0,
+      failed: overrides.failed ?? 0,
+      new: 0,
+      deleted: 0,
+    },
+    environment: {
+      expected: null,
+      actual: environment(),
+      mismatch: false,
+      mismatchKeys: [],
+    },
+    deleted: [],
+    customCoverage: {
+      screens: { total: 0, covered: 0, ratio: 1, missing: [] },
+      flows: { total: 0, covered: 0, ratio: 1, missing: [] },
+    },
+    stories: [],
+  };
+  if (!hasMode || overrides.mode !== undefined) {
+    results.mode = hasMode ? overrides.mode : 'ci';
+  }
+  await writeFile(
+    join(candidateDir, 'results.json'),
+    JSON.stringify(results),
+    'utf8',
+  );
+}
+
 /** Writes a candidate PNG (+ optional a11y companion) under `<action>/`. */
 async function writeCandidatePng(
   action: string,
@@ -491,6 +536,57 @@ describe('approveFrom — fail closed (zero writes)', () => {
     await assertZeroWrites(
       () => approveFrom(config(), { from: candidateDir }),
       /malformed environment block/,
+    );
+  });
+});
+
+describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
+  it('rejects a local-mode candidate tree', async () => {
+    // A local run renders against the per-machine cache on the developer's own
+    // platform; its pixels must never become committed baselines.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResultsRaw({ mode: 'local' });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /not a CI run/,
+    );
+  });
+
+  it('rejects a candidate tree with no recorded mode (pre-mode artifact)', async () => {
+    // An older artifact predating the `mode` field is treated as non-ci and
+    // refused — only a current `mode: 'ci'` run is eligible.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResultsRaw({ mode: undefined });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /pre-mode run, not a CI run/,
+    );
+  });
+
+  it('rejects a candidate tree from a run with failed stories', async () => {
+    // A failed run produces a PARTIAL candidate tree — promoting it would commit
+    // an incomplete baseline set.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResultsRaw({ failed: 2 });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /2 failed story/,
+    );
+  });
+
+  it('rejects malformed JSON in results.json through approveFrom', async () => {
+    // The shared reader has its own malformed-JSON test, but approveFrom must
+    // surface it as an ApproveFromError with zero writes — exercise that path
+    // here, not just the reader in isolation.
+    await writeCandidatePng('open', 'desktop');
+    await writeFile(
+      join(candidateDir, 'results.json'),
+      '{ this is not valid json',
+      'utf8',
+    );
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /Malformed results file/,
     );
   });
 });

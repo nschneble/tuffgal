@@ -121,8 +121,9 @@ export interface PathsConfig {
   /**
    * Per-machine, gitignored comparison cache for local (advisory) mode. Local
    * runs self-diff against this instead of the committed `baselines` set, so a
-   * developer's platform pixels never fight CI's. Defaults to `.cache` relative
-   * to the config dir (i.e. `tuffgal/.cache` in a standard project). Committed
+   * developer's platform pixels never fight CI's. Defaults to `tuffgal/.cache`
+   * (relative to the config dir) — inside the same `tuffgal/` subtree as the
+   * scaffolded `tuffgal/.gitignore`, whose `.cache/` entry ignores it. Committed
    * baselines are never written here.
    */
   localCache?: string;
@@ -234,7 +235,7 @@ const DEFAULTS = {
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',
   authStateRelative: '.auth',
-  localCacheRelative: '.cache',
+  localCacheRelative: 'tuffgal/.cache',
   interactiveMode: false,
 } as const;
 

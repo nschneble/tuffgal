@@ -45,6 +45,7 @@ import {
   captureEnvironment,
   compareEnvironment,
   readManifest,
+  type CapturedBrowser,
   type EnvironmentManifest,
 } from './manifest.ts';
 import type { DeletedBaseline } from '../schema/result.ts';
@@ -180,8 +181,17 @@ export async function runAll(
     );
 
     const finishedAt = new Date();
+    // Screen coverage measures how many screens have a baseline in the set this
+    // run compares against — the committed `paths.baselines` in CI mode, the
+    // per-machine `paths.localCache` in local mode. Local runs never read
+    // `paths.baselines` (PRD invariant), so the metric points at the same
+    // comparison root `runAction` uses; its meaning ("screens with a baseline to
+    // diff against") is preserved rather than blanked.
     const [screens, flows] = await Promise.all([
-      computeScreenCoverage(config.paths.actions, config.paths.baselines),
+      computeScreenCoverage(
+        config.paths.actions,
+        coverageComparisonRoot(config, mode),
+      ),
       computeFlowCoverage(config.flowInventory, allStories),
     ]);
     // Orphan scan: committed baselines whose action ran no story this run are
@@ -321,6 +331,23 @@ export async function copyResultsIntoCandidates(
 }
 
 /**
+ * The baseline root the screen-coverage metric measures against: committed
+ * `paths.baselines` in CI mode, per-machine `paths.localCache` in local mode.
+ * Mirrors `runAction`'s own comparison-root selection so the metric counts
+ * screens against the SAME set the run diffed against. Enforces the PRD
+ * invariant that a local run never reads `paths.baselines` — a local run's
+ * coverage is measured against its cache, keeping the metric meaningful (screens
+ * with a baseline to diff against) instead of pointing at a set local mode must
+ * never touch.
+ */
+export function coverageComparisonRoot(
+  config: ResolvedConfig,
+  mode: RunMode,
+): string {
+  return mode === 'ci' ? config.paths.baselines : config.paths.localCache;
+}
+
+/**
  * Reads the launched Chromium's `browser.version()` so the run's environment
  * manifest records the exact browser build the baselines were rendered against —
  * the single pixel-affecting fact that only a live browser can report. Launched
@@ -328,10 +355,7 @@ export async function copyResultsIntoCandidates(
  * schedule) because the version is invariant across stories, so one probe covers
  * the whole run. Kept narrow: launch, read, close.
  */
-async function captureBrowserIdentity(): Promise<{
-  name: string;
-  version: string;
-}> {
+async function captureBrowserIdentity(): Promise<CapturedBrowser> {
   const browser = await chromium.launch({ headless: true });
   try {
     return { name: 'chromium', version: browser.version() };
@@ -341,26 +365,50 @@ async function captureBrowserIdentity(): Promise<{
 }
 
 /**
+ * The browser identity stamped into a LOCAL run's environment block. Local mode
+ * skips the live probe (see {@link resolveEnvironmentReport}), so `version` is an
+ * empty sentinel: it is shape-valid for the manifest, never compared (local
+ * `expected` is always null), and never promoted (local candidates are refused
+ * by `approve --from`). Kept as chromium's name for provenance, since that is
+ * still the browser a local run renders under.
+ */
+const LOCAL_BROWSER_IDENTITY = { name: 'chromium', version: '' } as const;
+
+/**
  * Builds the run's {@link EnvironmentReport}: the environment this run captured
  * under (`actual`), and — in CI mode — the committed `<baselines>/manifest.json`
  * (`expected`) plus whether their pixel-affecting keys diverge.
  *
- * Local mode never reads `paths.baselines`, so `expected` is `null` and mismatch
- * is always `false` — a local self-diff has no committed manifest to violate. In
- * CI mode a missing manifest is the bootstrap case (no expectation yet, no
+ * The live browser-version probe ({@link captureBrowserIdentity}) runs in CI
+ * mode ONLY. Local mode never reads `paths.baselines`, so `expected` is always
+ * `null` and `browserVersion` is never compared against anything — launching a
+ * throwaway chromium just to stamp a value nothing reads is pure cost, so local
+ * mode fills the browser identity with an empty sentinel and skips the probe.
+ *
+ * In CI mode a missing manifest is the bootstrap case (no expectation yet, no
  * mismatch); a malformed one surfaces as a mismatch note (see
  * {@link compareEnvironment}). `expected` carries the parsed manifest only when
  * it read cleanly, so a malformed file reports `null` here while still driving a
  * mismatch.
+ *
+ * `probe` is the live browser-identity reader, injected (defaulting to the real
+ * {@link captureBrowserIdentity}) so a test can assert it is invoked in CI mode
+ * and NEVER invoked in local mode without launching a real chromium.
  */
 export async function resolveEnvironmentReport(
   config: ResolvedConfig,
   mode: RunMode,
+  probe: () => Promise<CapturedBrowser> = captureBrowserIdentity,
 ): Promise<EnvironmentReport> {
-  const actual = captureEnvironment(config, await captureBrowserIdentity());
   if (mode !== 'ci') {
+    // Local mode never gates on `browserVersion` (expected is always null), so
+    // skip the browser launch entirely. The empty sentinel is shape-valid and
+    // never promoted — a local run writes no candidate tree, and `approve --from`
+    // refuses non-ci candidates outright.
+    const actual = captureEnvironment(config, LOCAL_BROWSER_IDENTITY);
     return { expected: null, actual, mismatch: false, mismatchKeys: [] };
   }
+  const actual = captureEnvironment(config, await probe());
   const read = await readManifest(config.paths.baselines);
   const { mismatch, mismatchKeys } = compareEnvironment(read, actual);
   const expected: EnvironmentManifest | null =
