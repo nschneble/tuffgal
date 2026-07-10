@@ -65,15 +65,16 @@ and [reporting.md](reporting.md#exit-code).
 npx tuffgal approve [story] [options]
 ```
 
-Re-reads the previous run's `results.json` and promotes each captured actual so
-the next run compares against the accepted image. Prints
-`Approved N baselines; skipped M actions.`
+Re-reads the previous run's `results.json` and refreshes the **local cache**
+(`paths.localCache`) from each captured actual, so your next local run compares
+against your own accepted image. Prints
+`Refreshed N cache entries; skipped M actions.`
 
-Under the CI-owned-baselines model, plain `approve` targets the **local cache**
-(`paths.localCache`), not the committed baselines — it accepts your own local
-self-diff so your next local run is clean. Committed baselines are written only
-by `approve --from` (below), so a developer running `approve` locally can never
-overwrite the source-of-truth set.
+Under the CI-owned-baselines model, this cache refresh never touches the
+committed baselines — it accepts your own local self-diff so your next local run
+is clean, nothing more. Committed baselines are written only by `approve --from`
+(below), so a developer running `approve` locally can never overwrite the
+source-of-truth set.
 
 The optional filters narrow the set as an **AND**: an action is promoted only
 when it clears every filter you pass. With none, every `changed` and `new`
@@ -96,7 +97,8 @@ whose `results.json` reports `mode !== 'ci'` or `totals.failed > 0` — only a
 clean CI run is a source of truth — and it writes or refreshes
 `<baselines>/manifest.json` from the candidate run's captured environment, so
 the next `run --ci` can detect environment drift. Add `--prune` to also retire
-the orphaned baselines the run flagged as `deleted`.
+the orphaned baselines the run flagged as `deleted`. Prints
+`Promoted N baselines; pruned M orphans.`
 
 `--new-only`, `--prune`, and the breakpoint filters are valid only on `approve`.
 Passing them (or a stray positional) to `run`, `supervise`, or `init` exits `1`
