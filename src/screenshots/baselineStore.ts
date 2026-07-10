@@ -8,6 +8,8 @@ import {
 } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 
+import { PNG } from 'pngjs';
+
 export interface BaselinePaths {
   baseline: string;
   actual: string;
@@ -198,9 +200,47 @@ export async function writeText(path: string, content: string): Promise<void> {
   await writeFile(path, content, 'utf8');
 }
 
+/**
+ * Losslessly recompresses a PNG buffer. Playwright emits PNGs tuned for capture
+ * speed, not size; re-encoding through pngjs applies its default
+ * `deflateLevel: 9` plus adaptive per-scanline filtering (filter type chosen per
+ * row from the full `[0..4]` set), which typically shrinks the file with zero
+ * pixel change. The decode→re-encode round-trip is lossless: pngjs reads and
+ * writes 8-bit RGBA, so the recompressed buffer decodes to a byte-identical
+ * pixel array (`recompress.test.ts` asserts this).
+ *
+ * Two safety guarantees:
+ *   - Never grows a file. A source that is already densely packed (e.g. a
+ *     future oxipng-optimised baseline flowing through `approve --from`) can
+ *     re-encode *larger*; in that case the original buffer is returned unchanged.
+ *   - Never corrupts. Any decode/encode failure (a non-PNG buffer, a codec edge
+ *     case) is swallowed and the original buffer is returned, so a recompress
+ *     miss degrades to "write the bytes we were given" rather than a torn file.
+ *
+ * This is the single lossless-recompress seam for every PNG the tool writes:
+ * `writePng` routes through it, so baseline, candidate, cache, actual, and diff
+ * writes all inherit it without per-callsite wiring. Deterministic — pngjs's
+ * encoder is a pure function of the pixel data and the fixed options above.
+ *
+ * Deliberately NOT palette-quantised and never lossy: colour type and bit depth
+ * are preserved by the RGBA round-trip.
+ */
+export function recompressPng(png: Buffer): Buffer {
+  let recompressed: Buffer;
+  try {
+    recompressed = PNG.sync.write(PNG.sync.read(png));
+  } catch {
+    // Not a decodable PNG, or an encoder edge case — write what we were given
+    // rather than risk emitting a corrupt or truncated file.
+    return png;
+  }
+  // A recompress that grows the file is a loss, not a win — keep the smaller.
+  return recompressed.length < png.length ? recompressed : png;
+}
+
 export async function writePng(path: string, png: Buffer): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, png);
+  await writeFile(path, recompressPng(png));
 }
 
 export async function deleteIfExists(path: string): Promise<void> {
@@ -211,6 +251,14 @@ export async function deleteIfExists(path: string): Promise<void> {
   }
 }
 
+/**
+ * Promotes an already-written PNG (the run's `actual`, or a `candidate`) to a
+ * baseline by copying it verbatim. No recompress here on purpose: the source was
+ * produced by `writePng`, which already ran `recompressPng`, so the bytes on
+ * disk are the recompressed ones. Copying them forward keeps the baseline
+ * losslessly recompressed for free — including the wave-7 `approve --from` tree
+ * copy, which promotes candidates that took the same `writePng` path.
+ */
 export async function copyToBaseline(
   actualPath: string,
   baselinePath: string,
