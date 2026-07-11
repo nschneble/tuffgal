@@ -10,9 +10,11 @@ import { pathExists } from '../util.ts';
 import { approveAll } from './approve.ts';
 
 let report: string;
+let cache: string;
 
 beforeEach(async () => {
   report = await mkdtemp(join(tmpdir(), 'tuffgal-approve-'));
+  cache = join(report, 'cache');
 });
 
 afterEach(async () => {
@@ -20,7 +22,22 @@ afterEach(async () => {
 });
 
 function config(): ResolvedConfig {
-  return { paths: { report } } as unknown as ResolvedConfig;
+  return {
+    paths: { report, localCache: cache },
+  } as unknown as ResolvedConfig;
+}
+
+/**
+ * Where a recorded `baselinePath` actually lands after a plain `approve`: the
+ * cache root, keeping the `<action>/<file>` tail. Every assertion that seeded a
+ * `report/baselines/<action>/<file>` path checks the copy under this instead —
+ * plain approve refreshes the cache, never the committed baselines.
+ */
+function inCache(baselinePath: string): string {
+  const file = baselinePath.slice(baselinePath.lastIndexOf('/') + 1);
+  const rest = baselinePath.slice(0, baselinePath.lastIndexOf('/'));
+  const actionDir = rest.slice(rest.lastIndexOf('/') + 1);
+  return join(cache, actionDir, file);
 }
 
 async function actual(name: string): Promise<string> {
@@ -51,11 +68,13 @@ async function writeResults(stories: RunResult['stories']): Promise<void> {
       changed: 0,
       failed: 0,
       new: 0,
+      deleted: 0,
     },
     customCoverage: {
       screens: { total: 0, covered: 0, ratio: 1, missing: [] },
       flows: { total: 0, covered: 0, ratio: 1, missing: [] },
     },
+    deleted: [],
     stories,
   } satisfies RunResult;
   await writeFile(join(report, 'results.json'), JSON.stringify(result), 'utf8');
@@ -114,8 +133,15 @@ describe('approveAll — promotion', () => {
     const summary = await approveAll(config(), {});
     assert.equal(summary.approved, 2);
     assert.equal(summary.skipped, 1);
-    assert.equal(await readFile(changedBaseline, 'utf8'), 'pixels-changed');
-    assert.equal(await readFile(newBaseline, 'utf8'), 'pixels-new');
+    // Plain approve refreshes the cache, not the committed baselines.
+    assert.equal(
+      await readFile(inCache(changedBaseline), 'utf8'),
+      'pixels-changed',
+    );
+    assert.equal(await readFile(inCache(newBaseline), 'utf8'), 'pixels-new');
+    // The committed baselines dir is never a destination for plain approve.
+    assert.equal(await pathExists(changedBaseline), false);
+    assert.equal(await pathExists(newBaseline), false);
   });
 
   it('newOnly promotes new baselines and skips changed', async () => {
@@ -143,8 +169,8 @@ describe('approveAll — promotion', () => {
     const summary = await approveAll(config(), { newOnly: true });
     assert.equal(summary.approved, 1);
     assert.equal(summary.skipped, 1);
-    assert.equal(await pathExists(changedBaseline), false);
-    assert.equal(await pathExists(newBaseline), true);
+    assert.equal(await pathExists(inCache(changedBaseline)), false);
+    assert.equal(await pathExists(inCache(newBaseline)), true);
   });
 
   it('promotes breakpoint-keyed actuals to their matching baselines + a11y pair', async () => {
@@ -197,15 +223,21 @@ describe('approveAll — promotion', () => {
     const summary = await approveAll(config(), {});
     assert.equal(summary.approved, 2);
     assert.equal(
-      await readFile(desktopBaseline, 'utf8'),
+      await readFile(inCache(desktopBaseline), 'utf8'),
       'pixels-submit.desktop',
     );
     assert.equal(
-      await readFile(mobileBaseline, 'utf8'),
+      await readFile(inCache(mobileBaseline), 'utf8'),
       'pixels-submit.mobile',
     );
-    assert.equal(await readFile(desktopA11yBaseline, 'utf8'), 'tree-desktop');
-    assert.equal(await readFile(mobileA11yBaseline, 'utf8'), 'tree-mobile');
+    assert.equal(
+      await readFile(inCache(desktopA11yBaseline), 'utf8'),
+      'tree-desktop',
+    );
+    assert.equal(
+      await readFile(inCache(mobileA11yBaseline), 'utf8'),
+      'tree-mobile',
+    );
   });
 
   it('breakpoints filter promotes only the named modes', async () => {
@@ -235,8 +267,8 @@ describe('approveAll — promotion', () => {
     const summary = await approveAll(config(), { breakpoints: ['desktop'] });
     assert.equal(summary.approved, 1);
     assert.equal(summary.skipped, 1);
-    assert.equal(await pathExists(desktopBaseline), true);
-    assert.equal(await pathExists(mobileBaseline), false);
+    assert.equal(await pathExists(inCache(desktopBaseline)), true);
+    assert.equal(await pathExists(inCache(mobileBaseline)), false);
   });
 
   it('breakpoints filter composes with newOnly as an AND', async () => {
@@ -286,9 +318,9 @@ describe('approveAll — promotion', () => {
     });
     assert.equal(summary.approved, 1);
     assert.equal(summary.skipped, 2);
-    assert.equal(await pathExists(desktopNewBaseline), true);
-    assert.equal(await pathExists(mobileNewBaseline), false);
-    assert.equal(await pathExists(desktopChangedBaseline), false);
+    assert.equal(await pathExists(inCache(desktopNewBaseline)), true);
+    assert.equal(await pathExists(inCache(mobileNewBaseline)), false);
+    assert.equal(await pathExists(inCache(desktopChangedBaseline)), false);
   });
 
   it('an empty breakpoints list approves every mode', async () => {
@@ -345,7 +377,7 @@ describe('approveAll — promotion', () => {
 
     const summary = await approveAll(config(), { storyFilter: 'keep.json' });
     assert.equal(summary.approved, 1);
-    assert.equal(await pathExists(keepBaseline), true);
-    assert.equal(await pathExists(dropBaseline), false);
+    assert.equal(await pathExists(inCache(keepBaseline)), true);
+    assert.equal(await pathExists(inCache(dropBaseline)), false);
   });
 });

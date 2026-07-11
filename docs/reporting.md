@@ -107,31 +107,37 @@ One entry per story run. Order is dependency/completion order.
 One entry per action, per breakpoint it rendered at. A story run at two
 breakpoints contributes two entries per action, each tagged with its mode.
 
-| Field                                  | Type           | Meaning                                                                                                             |
-| -------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `action`                               | string         | Action name.                                                                                                        |
-| `status`                               | `ActionStatus` | `pass` \| `new` \| `changed` \| `failed` \| `skipped`. `skipped` means an earlier action in this breakpoint failed. |
-| `breakpoint`                           | string?        | Mode name (`mobile` / `desktop` / …).                                                                               |
-| `breakpointWidth` / `breakpointHeight` | number?        | The actual capture viewport, including per-story or per-config overrides.                                           |
-| `parameters`                           | object?        | Author-declared parameters, verbatim.                                                                               |
-| `startedAt` / `finishedAt`             | string         | ISO 8601 window.                                                                                                    |
-| `durationMs`                           | number         | Wall-clock for the action.                                                                                          |
-| `baselinePath`                         | string?        | Committed baseline PNG compared against.                                                                            |
-| `actualPath`                           | string?        | Screenshot captured this run.                                                                                       |
-| `diffPath`                             | string?        | Pixel-diff overlay PNG. Present only on a `changed` action with matching dimensions.                                |
-| `diffPixels`                           | number?        | Count of differing pixels.                                                                                          |
-| `diffRatio`                            | number?        | `diffPixels / totalPixels`, `0`–`1`. Absent when dimensions mismatched (no diff could be computed).                 |
-| `ssimScore`                            | number?        | Mean structural similarity, `0`–`1`. `1.0` = identical. This is the gate that drives `pass` vs `changed`.           |
-| `failedStepIndex`                      | number?        | 0-based index of the step that threw.                                                                               |
-| `failureMessage`                       | string?        | Error or mismatch message (also surfaced in the report).                                                            |
-| `a11yChanged`                          | boolean?       | `true` when the captured accessibility tree differs from baseline. Informational; does not gate `pass`/`changed`.   |
-| `a11yBaselinePath` / `a11yActualPath`  | string?        | Accessibility-tree snapshots (`a11y.yaml`).                                                                         |
+| Field                                  | Type           | Meaning                                                                                                                                                                                                                                                      |
+| -------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `action`                               | string         | Action name.                                                                                                                                                                                                                                                 |
+| `status`                               | `ActionStatus` | `pass` \| `new` \| `changed` \| `failed` \| `skipped`. `skipped` means an earlier action in this breakpoint failed.                                                                                                                                          |
+| `breakpoint`                           | string?        | Mode name (`mobile` / `desktop` / …).                                                                                                                                                                                                                        |
+| `breakpointWidth` / `breakpointHeight` | number?        | The actual capture viewport, including per-story or per-config overrides.                                                                                                                                                                                    |
+| `parameters`                           | object?        | Author-declared parameters, verbatim.                                                                                                                                                                                                                        |
+| `startedAt` / `finishedAt`             | string         | ISO 8601 window.                                                                                                                                                                                                                                             |
+| `durationMs`                           | number         | Wall-clock for the action.                                                                                                                                                                                                                                   |
+| `baselinePath`                         | string?        | Committed baseline PNG compared against.                                                                                                                                                                                                                     |
+| `actualPath`                           | string?        | Screenshot captured this run.                                                                                                                                                                                                                                |
+| `diffPath`                             | string?        | Pixel-diff overlay PNG. Present only on a pixel-drifted `changed` action with matching dimensions — an a11y-only `changed` row (pixels matched, aria snapshot drifted) has no `diffPath`.                                                                    |
+| `diffPixels`                           | number?        | Count of differing pixels.                                                                                                                                                                                                                                   |
+| `diffRatio`                            | number?        | `diffPixels / totalPixels`, `0`–`1`. Absent when dimensions mismatched (no diff could be computed).                                                                                                                                                          |
+| `ssimScore`                            | number?        | Mean structural similarity, `0`–`1`. `1.0` = identical. Drives `pass` vs `changed` on pixels — but it is not the sole gate in CI mode, where a drifted accessibility tree also flips a pixel-passing action to `changed` (see `a11yChanged`).                |
+| `failedStepIndex`                      | number?        | 0-based index of the step that threw.                                                                                                                                                                                                                        |
+| `failureMessage`                       | string?        | Error or mismatch message (also surfaced in the report).                                                                                                                                                                                                     |
+| `a11yChanged`                          | boolean?       | `true` when the captured accessibility tree differs from baseline. In CI mode this gates status: pixels can match while the aria snapshot drifts, and that flips the action to `changed`. In local (advisory) mode it stays informational and does not gate. |
+| `a11yBaselinePath` / `a11yActualPath`  | string?        | Accessibility-tree snapshots (`a11y.yaml`).                                                                                                                                                                                                                  |
 
 ## Exit code
 
-`tuffgal run` exits `1` when `totals.failed > 0`, otherwise `0`. **`new` and
-`changed` do not fail the process** — they are review states, not errors. Read
-`results.json` when you want to act on those:
+`tuffgal run`'s exit code depends on the run mode. **Local (advisory) mode**
+exits `1` when `totals.failed > 0`, otherwise `0` — `new`, `changed`, and
+`deleted` never fail a local run, they are review states surfaced in the report
+and `results.json`. **CI mode** adds two gating codes: `3` when the committed
+environment manifest diverged (`environment.mismatch`), and `2` when there are
+pending baseline changes (`new`, `changed`, or `deleted`) a human must approve.
+Precedence, highest wins: `1` > `3` > `2` > `0`. See [cli.md](cli.md#exit-codes)
+for the full table. Read `results.json` when you want to act on the review
+states directly:
 
 ```bash
 # Is there drift to review (independent of the exit code)?

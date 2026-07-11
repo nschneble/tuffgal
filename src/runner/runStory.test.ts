@@ -9,6 +9,7 @@ import type { Browser, BrowserContext, Page } from 'playwright';
 import type { ResolvedConfig } from '../config.ts';
 import type { Action } from '../schema/action.ts';
 import type { Story } from '../schema/story.ts';
+import { pathExists } from '../util.ts';
 import {
   mergeStoryStatus,
   resolveRunSet,
@@ -294,6 +295,7 @@ async function makeConfig(): Promise<ResolvedConfig> {
     ],
     paths: {
       baselines: join(root, 'baselines'),
+      localCache: join(root, 'cache'),
       report: join(root, 'report'),
       authState: join(root, 'auth'),
     },
@@ -446,5 +448,71 @@ describe('runStoryWithBrowser — per-breakpoint loop', () => {
     assert.equal(first.record.closeCount, 1);
     // The story aborted: the second breakpoint never opened a context.
     assert.equal(second.record.closeCount, 0);
+  });
+});
+
+describe('runStoryWithBrowser — mode threads into the candidate/cache decision', () => {
+  it('a local-mode run seeds the cache and creates NO candidates/ tree', async () => {
+    const config = await makeConfig();
+    const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
+    const browser = fakeBrowser([only.context]);
+
+    const result = await runStoryWithBrowser(
+      browser,
+      makeOptions(config, {
+        breakpoint: { name: 'desktop', width: 1280, height: 800 },
+        mode: 'local',
+      }),
+      new Date(),
+    );
+
+    // First local run of a fresh cache → the story's action reads `new`.
+    assert.equal(result.status, 'new');
+    // The auto-seed lands in the per-machine cache…
+    assert.ok(
+      await pathExists(join(config.paths.localCache, 'open', 'desktop.png')),
+    );
+    // …and NOT in the committed baselines.
+    assert.equal(
+      await pathExists(join(config.paths.baselines, 'open', 'desktop.png')),
+      false,
+    );
+    // Local mode never produces the CI approval artifact.
+    assert.equal(
+      await pathExists(join(config.paths.report, 'candidates')),
+      false,
+    );
+  });
+
+  it('a ci-mode run writes a candidate and never touches the cache', async () => {
+    const config = await makeConfig();
+    const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
+    const browser = fakeBrowser([only.context]);
+
+    const result = await runStoryWithBrowser(
+      browser,
+      makeOptions(config, {
+        breakpoint: { name: 'desktop', width: 1280, height: 800 },
+        mode: 'ci',
+      }),
+      new Date(),
+    );
+
+    assert.equal(result.status, 'new');
+    // CI proposes a candidate for the missing baseline…
+    assert.ok(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+    );
+    // …and writes neither the committed baseline nor the local cache.
+    assert.equal(
+      await pathExists(join(config.paths.baselines, 'open', 'desktop.png')),
+      false,
+    );
+    assert.equal(
+      await pathExists(join(config.paths.localCache, 'open', 'desktop.png')),
+      false,
+    );
   });
 });

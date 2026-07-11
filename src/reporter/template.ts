@@ -2,6 +2,7 @@ import { relative } from 'node:path';
 import type {
   ActionResult,
   ActionStatus,
+  DeletedBaseline,
   RunResult,
   StoryResult,
 } from '../schema/result.ts';
@@ -26,6 +27,13 @@ const STATUS_MARKERS: Record<ActionStatus, string> = {
  * Static HTML report. Rocks a terminal, dev-tool aesthetic. Dark mode by
  * default, monospace font for data, sharp borders, and minimal but
  * evocative icons + neon colors to indicate statuses.
+ *
+ * `<main>` reading order: an optional environment-mismatch banner (first, only
+ * when `environment.mismatch`), then the summary, the stories, and an optional
+ * deleted (orphaned-baseline) section last. The banner and deleted section are
+ * peer `<h2>` landmarks; the two supplementary per-action notes (candidate /
+ * a11y-drift) contribute no heading levels, so the outline stays
+ * H1 → summary → stories → deleted.
  */
 export function renderReport(
   result: RunResult,
@@ -53,8 +61,10 @@ export function renderReport(
       </p>
     </header>
     <main id="main" tabindex="-1">
+      ${renderEnvMismatch(result)}
       ${renderSummary(result)}
       ${renderStories(result, reportDir, interactiveMode)}
+      ${renderDeleted(result)}
     </main>
     <script src="assets/report.js"></script>
   </body>
@@ -116,6 +126,83 @@ function summaryFilter(
   <span class="bulk-sep" aria-hidden="true">·</span>
 </li>
 `;
+}
+
+/**
+ * Environment-mismatch banner, rendered first inside `<main>` (above the
+ * summary) ONLY when `environment.mismatch === true` — i.e. a CI run whose
+ * committed baselines were captured under a different, pixel-affecting
+ * environment, or whose committed manifest could not be read at all.
+ *
+ * `role="alert"` is an explicit acceptance criterion. It does NOT auto-announce
+ * on content present at load, so the real discoverability comes from the banner
+ * being first in reading order behind a `<h2>` landmark. Kept because it is
+ * harmless and specified.
+ *
+ * The "warning" meaning is carried by the TEXT (the heading word and body copy),
+ * never by color alone (WCAG 1.4.1): body text stays `--text` / amber
+ * `--changed`, and the red accent lives only on the section's left border (a
+ * non-text ≥3:1 cue, mirroring `.action-error`).
+ *
+ * Two copy branches: the `['manifest']` sentinel (committed manifest unreadable,
+ * so the diverging keys can't be enumerated) drops the key list for a plain
+ * "can't be verified" message; any other mismatch lists the diverging keys.
+ */
+function renderEnvMismatch(result: RunResult): string {
+  const environment = result.environment;
+  if (environment?.mismatch !== true) {
+    return '';
+  }
+  const isManifestSentinel =
+    environment.mismatchKeys.length === 1 &&
+    environment.mismatchKeys[0] === 'manifest';
+  const body = isManifestSentinel
+    ? `<p>The committed baseline manifest could not be read, so the capture environment can't be verified. Expect a full re-approve.</p>`
+    : `<p>Expect a full re-approve — baselines were captured under a different environment.</p>
+    <ul aria-label="Changed environment keys">
+      ${environment.mismatchKeys
+        .map((key) => `<li><code>${escapeHtml(key)}</code></li>`)
+        .join('\n      ')}
+    </ul>`;
+  return `
+<section class="env-mismatch" role="alert" aria-labelledby="env-mismatch-heading">
+  <h2 id="env-mismatch-heading">capture environment changed</h2>
+  ${body}
+</section>
+`;
+}
+
+/**
+ * Deleted (orphaned committed baselines) section — a peer landmark rendered
+ * AFTER the stories section, inside `<main>`, ONLY when `deleted` is non-empty.
+ * Lists each orphaned baseline (action + breakpoint) that `approve --prune`
+ * would remove. A `'legacy'` breakpoint (the pre-breakpoint `<action>/0.png`
+ * layout) reads cryptically on its own, so it carries an sr-only clarifier.
+ */
+function renderDeleted(result: RunResult): string {
+  if (result.deleted.length === 0) {
+    return '';
+  }
+  const items = result.deleted
+    .map((entry) => renderDeletedEntry(entry))
+    .join('\n    ');
+  return `
+<section class="deleted" aria-labelledby="deleted-heading">
+  <h2 id="deleted-heading">deleted</h2>
+  <p>These committed baselines have no matching story this run. <code>tuffgal approve --prune</code> removes them.</p>
+  <ul aria-label="Orphaned baselines to be pruned on approve">
+    ${items}
+  </ul>
+</section>
+`;
+}
+
+function renderDeletedEntry(entry: DeletedBaseline): string {
+  const breakpoint =
+    entry.breakpoint === 'legacy'
+      ? 'legacy<span class="sr-only"> (pre-breakpoint layout)</span>'
+      : escapeHtml(entry.breakpoint);
+  return `<li><code>${escapeHtml(entry.action)}</code> ${breakpoint}</li>`;
 }
 
 function renderStories(
@@ -335,13 +422,60 @@ ${statusBadge(action.status)}
 </div>
 `;
 
+  const notes = renderActionNotes(action, reportDir);
+
   return `
 <li class="action" data-status="${action.status}">
   ${row}
   ${parameters}
   ${errorBlock}
+  ${notes}
 </li>
 `;
+}
+
+/**
+ * Supplementary per-action prose, rendered inside `li.action` after the
+ * row/screenshots/error block. Both are plain `<p role="note">` — NOT headings:
+ * they live in the story `<ol>` subtree, so a heading would orphan under a
+ * list-item (same rationale as {@link renderBreakpointGroup}'s caption). Neither
+ * is a live region (present at load), so an a11y-only `changed` row can carry
+ * BOTH with no double-announce.
+ *
+ *   - candidate note: on `changed`/`new` rows only — supplementary prose flagging
+ *     "this render is the proposed new baseline". No aria wiring; it does not
+ *     duplicate the status badge's sr-only label.
+ *   - a11y-drift note: gated STRICTLY on `a11yChanged === true`, NEVER inferred
+ *     from a missing `diffPath` (a size-mismatch `changed` row also lacks a
+ *     diffPath yet deliberately omits `a11yChanged`; keying on `!diffPath` would
+ *     misfire on it — the load-bearing discriminator, per the ActionResult
+ *     contract). Renders the recorded `a11yBaselinePath` as plain escaped
+ *     `<code>` TEXT, not a link (the report is portable / opened over file://),
+ *     relativized like the other paths when absolute.
+ *
+ * Order: candidate note first, then a11y-drift note, so an a11y-only changed row
+ * reads "proposed new baseline" before the a11y specifics.
+ */
+function renderActionNotes(action: ActionResult, reportDir: string): string {
+  const notes: string[] = [];
+  if (action.status === 'changed' || action.status === 'new') {
+    notes.push(
+      `<p class="candidate-note" role="note">This render is the proposed new baseline.</p>`,
+    );
+  }
+  if (action.a11yChanged === true) {
+    const path = action.a11yBaselinePath;
+    const displayPath =
+      path !== undefined ? toReportRelative(reportDir, path) : undefined;
+    const pathMarkup =
+      displayPath !== undefined
+        ? ` Proposed a11y baseline written to <code>${escapeHtml(displayPath)}</code>.`
+        : '';
+    notes.push(
+      `<p class="a11y-drift-note" role="note">Accessibility snapshot changed.${pathMarkup}</p>`,
+    );
+  }
+  return notes.join('\n  ');
 }
 
 function renderParameters(

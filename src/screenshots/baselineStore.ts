@@ -8,6 +8,8 @@ import {
 } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 
+import { PNG } from 'pngjs';
+
 export interface BaselinePaths {
   baseline: string;
   actual: string;
@@ -25,10 +27,29 @@ export interface BaselinePaths {
   legacyBaseline: string;
   /** Pre-breakpoint a11y baseline (`<action>/a11y.yaml`); see `legacyBaseline`. */
   legacyA11yBaseline: string;
+  /**
+   * Proposed-new-baseline PNG for CI mode, under
+   * `<report>/candidates/<action>/<breakpoint>.png`. Mirrors the `baseline`
+   * layout exactly (action dir + breakpoint filename) so approving a candidate
+   * set is a plain tree copy into `paths.baselines`. Always report-rooted —
+   * never affected by the comparison root, which only moves the baseline side.
+   */
+  candidate: string;
+  /** Candidate a11y snapshot (`<report>/candidates/<action>/<breakpoint>.a11y.yaml`). */
+  a11yCandidate: string;
 }
 
 export interface StoreOptions {
   baselinesDir: string;
+  /**
+   * Root the baseline-side paths (`baseline`, `a11yBaseline`, and the two
+   * `legacy*` fallbacks) resolve under. Defaults to `baselinesDir`, so an
+   * omitted root reproduces the committed-baselines layout byte-for-byte — the
+   * zero-behaviour-change default. Local mode passes the per-machine cache dir
+   * here to self-diff against it instead. Report-side artifacts (actual, diff,
+   * candidate, a11yActual, a11yCandidate) ignore this and stay report-rooted.
+   */
+  comparisonRoot?: string;
   reportDir: string;
   storyFile: string;
   actionName: string;
@@ -53,23 +74,57 @@ function breakpointSegment(breakpoint: string): string {
 }
 
 /**
- * Computes deterministic paths for the baseline (committed), actual
- * (regenerated each run), and diff (regenerated when a baseline existed and
- * the diff was non-zero) PNGs. Centralised so the runner and the CLI's
- * `approve` command agree on layout.
+ * The single owner of the `<report>/candidates/` path. The runner writes the
+ * candidate tree + a `results.json` copy here, and `approve --from` reads that
+ * same tree back. Centralised so the literal `'candidates'` segment has one
+ * definition instead of drifting across the runner, the store, and approve.
+ */
+export function candidatesDir(reportDir: string): string {
+  return join(reportDir, 'candidates');
+}
+
+/**
+ * The action-name shape the action schema enforces (`/^[a-z0-9-]+$/`,
+ * lowercase-kebab). Re-exported here so the trust boundary in `approve --from`
+ * can reject a directory name from an untrusted candidate artifact against the
+ * exact same invariant the runner produced its layout under, without importing
+ * the zod schema. Kept in lock-step with `schema/action.ts` by intent.
+ */
+export const ACTION_NAME_PATTERN = /^[a-z0-9-]+$/;
+
+/**
+ * The filesystem-safe breakpoint segment shape (`/^[a-z0-9_-]+$/`) that {@link
+ * breakpointSegment} emits. `approve --from` validates a candidate PNG's
+ * breakpoint stem against this so a name outside the runner's own output shape
+ * (path separators, dots, traversal) can never reach a write.
+ */
+export const BREAKPOINT_SEGMENT_PATTERN = /^[a-z0-9_-]+$/;
+
+/**
+ * Computes deterministic paths for the baseline (the comparison target —
+ * committed baselines by default, or the local cache when `comparisonRoot` is
+ * supplied), actual (regenerated each run), diff (regenerated when a baseline
+ * existed and the diff was non-zero), and candidate (proposed-new-baseline for
+ * CI approval) PNGs. Centralised so the runner and the CLI's `approve` command
+ * agree on layout.
  *
  * Every path is keyed by both action name and breakpoint so per-breakpoint
- * captures of the same action stay isolated: baselines nest the breakpoint as a
- * filename under the action directory (`<action>/<breakpoint>.png`), while
- * report-side artifacts splice it into the filename
- * (`<action>.<breakpoint>.actual.png`) since they already share one per-story
- * directory.
+ * captures of the same action stay isolated: baseline- and candidate-side paths
+ * nest the breakpoint as a filename under the action directory
+ * (`<action>/<breakpoint>.png`), while report-side actual/diff artifacts splice
+ * it into the filename (`<action>.<breakpoint>.actual.png`) since they already
+ * share one per-story directory.
+ *
+ * The baseline side resolves under `comparisonRoot` (default `baselinesDir`), so
+ * omitting the root reproduces the committed-baselines layout unchanged; the
+ * candidate and report-side paths are always report-rooted and ignore it.
  */
 export function pathsFor(options: StoreOptions): BaselinePaths {
   const storySlug = options.storyFile.replace(/\.json$/i, '');
   const bp = breakpointSegment(options.breakpoint);
+  const comparisonRoot = options.comparisonRoot ?? options.baselinesDir;
   return {
-    baseline: join(options.baselinesDir, options.actionName, `${bp}.png`),
+    baseline: join(comparisonRoot, options.actionName, `${bp}.png`),
     actual: join(
       options.reportDir,
       'screenshots',
@@ -82,27 +137,32 @@ export function pathsFor(options: StoreOptions): BaselinePaths {
       storySlug,
       `${options.actionName}.${bp}.diff.png`,
     ),
-    a11yBaseline: join(
-      options.baselinesDir,
-      options.actionName,
-      `${bp}.a11y.yaml`,
-    ),
+    a11yBaseline: join(comparisonRoot, options.actionName, `${bp}.a11y.yaml`),
     a11yActual: join(
       options.reportDir,
       'screenshots',
       storySlug,
       `${options.actionName}.${bp}.a11y.yaml`,
     ),
+    // Candidate tree mirrors the baseline layout under the report so a CI
+    // approval is a plain copy of `<report>/candidates/` into `paths.baselines`.
+    candidate: join(
+      candidatesDir(options.reportDir),
+      options.actionName,
+      `${bp}.png`,
+    ),
+    a11yCandidate: join(
+      candidatesDir(options.reportDir),
+      options.actionName,
+      `${bp}.a11y.yaml`,
+    ),
     // Pre-breakpoint locations. A project baselined before this feature has
     // its only committed snapshot here; the runner reads `baseline` first and
     // falls back to these when the breakpoint-keyed file is absent, so existing
-    // baselines keep matching instead of all reading as `new`.
-    legacyBaseline: join(options.baselinesDir, options.actionName, '0.png'),
-    legacyA11yBaseline: join(
-      options.baselinesDir,
-      options.actionName,
-      'a11y.yaml',
-    ),
+    // baselines keep matching instead of all reading as `new`. Rooted at the
+    // comparison root like the breakpoint-keyed baseline above.
+    legacyBaseline: join(comparisonRoot, options.actionName, '0.png'),
+    legacyA11yBaseline: join(comparisonRoot, options.actionName, 'a11y.yaml'),
   };
 }
 
@@ -165,9 +225,47 @@ export async function writeText(path: string, content: string): Promise<void> {
   await writeFile(path, content, 'utf8');
 }
 
+/**
+ * Losslessly recompresses a PNG buffer. Playwright emits PNGs tuned for capture
+ * speed, not size; re-encoding through pngjs applies its default
+ * `deflateLevel: 9` plus adaptive per-scanline filtering (filter type chosen per
+ * row from the full `[0..4]` set), which typically shrinks the file with zero
+ * pixel change. The decode→re-encode round-trip is lossless: pngjs reads and
+ * writes 8-bit RGBA, so the recompressed buffer decodes to a byte-identical
+ * pixel array (`recompress.test.ts` asserts this).
+ *
+ * Two safety guarantees:
+ *   - Never grows a file. A source that is already densely packed (e.g. a
+ *     future oxipng-optimised baseline flowing through `approve --from`) can
+ *     re-encode *larger*; in that case the original buffer is returned unchanged.
+ *   - Never corrupts. Any decode/encode failure (a non-PNG buffer, a codec edge
+ *     case) is swallowed and the original buffer is returned, so a recompress
+ *     miss degrades to "write the bytes we were given" rather than a torn file.
+ *
+ * This is the single lossless-recompress seam for every PNG the tool writes:
+ * `writePng` routes through it, so baseline, candidate, cache, actual, and diff
+ * writes all inherit it without per-callsite wiring. Deterministic — pngjs's
+ * encoder is a pure function of the pixel data and the fixed options above.
+ *
+ * Deliberately NOT palette-quantised and never lossy: colour type and bit depth
+ * are preserved by the RGBA round-trip.
+ */
+export function recompressPng(png: Buffer): Buffer {
+  let recompressed: Buffer;
+  try {
+    recompressed = PNG.sync.write(PNG.sync.read(png));
+  } catch {
+    // Not a decodable PNG, or an encoder edge case — write what we were given
+    // rather than risk emitting a corrupt or truncated file.
+    return png;
+  }
+  // A recompress that grows the file is a loss, not a win — keep the smaller.
+  return recompressed.length < png.length ? recompressed : png;
+}
+
 export async function writePng(path: string, png: Buffer): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, png);
+  await writeFile(path, recompressPng(png));
 }
 
 export async function deleteIfExists(path: string): Promise<void> {
@@ -178,12 +276,21 @@ export async function deleteIfExists(path: string): Promise<void> {
   }
 }
 
-export async function copyToBaseline(
+/**
+ * Copies an already-written PNG (the run's `actual`, or a `candidate`) to a new
+ * destination verbatim. No recompress here on purpose: the source was produced
+ * by `writePng`, which already ran `recompressPng`, so the bytes on disk are the
+ * recompressed ones. Copying them forward keeps the destination losslessly
+ * recompressed for free. The only non-test caller is `approve` refreshing the
+ * per-machine cache; `approve --from` does NOT use this — it reads each source
+ * once during validation and writes the retained buffer through {@link writePng}.
+ */
+export async function copyRecompressedPng(
   actualPath: string,
-  baselinePath: string,
+  destinationPath: string,
 ): Promise<void> {
-  await mkdir(dirname(baselinePath), { recursive: true });
-  await copyFile(actualPath, baselinePath);
+  await mkdir(dirname(destinationPath), { recursive: true });
+  await copyFile(actualPath, destinationPath);
 }
 
 /**

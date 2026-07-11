@@ -1,11 +1,21 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
+import type { ResolvedConfig } from '../config.ts';
+import type { CapturedBrowser } from './manifest.ts';
 import type { ActionResult, RunResult, StoryResult } from '../schema/result.ts';
+import { pathExists } from '../util.ts';
 import {
+  copyResultsIntoCandidates,
+  coverageComparisonRoot,
   drivingBreakpoints,
   formatResultLine,
   formatSummaryBullet,
+  resolveEnvironmentReport,
+  summarise,
 } from './run.ts';
 
 function action(
@@ -90,6 +100,77 @@ describe('drivingBreakpoints', () => {
   });
 });
 
+describe('summarise', () => {
+  it('counts new-status stories distinctly from changed', () => {
+    const results = [
+      story('new', [action('desktop', 'new')]),
+      story('new', [action('desktop', 'new')]),
+      story('changed', [action('desktop', 'changed')]),
+      story('pass', [action('desktop', 'pass')]),
+    ];
+    const totals = summarise(results);
+    assert.equal(totals.new, 2);
+    assert.equal(totals.changed, 1);
+    assert.equal(totals.passed, 1);
+    assert.equal(totals.stories, 4);
+  });
+
+  it('seeds deleted at 0 — orphans are a run-level count, not a story outcome', () => {
+    assert.equal(
+      summarise([story('pass', [action('desktop', 'pass')])]).deleted,
+      0,
+    );
+  });
+});
+
+describe('copyResultsIntoCandidates', () => {
+  it('copies results.json into a freshly-created candidates dir', async () => {
+    const reportDir = await mkdtemp(join(tmpdir(), 'tuffgal-run-'));
+    await writeFile(
+      join(reportDir, 'results.json'),
+      JSON.stringify({ mode: 'ci', stories: [] }),
+      'utf8',
+    );
+
+    // candidates/ does not exist yet — an all-pass run writes no candidate
+    // renders — so the copy must create it rather than fail.
+    assert.equal(await pathExists(join(reportDir, 'candidates')), false);
+    await copyResultsIntoCandidates(reportDir);
+
+    const copied = await readFile(
+      join(reportDir, 'candidates', 'results.json'),
+      'utf8',
+    );
+    assert.deepEqual(JSON.parse(copied), { mode: 'ci', stories: [] });
+  });
+
+  it('overwrites an existing candidates/results.json (candidate renders already present)', async () => {
+    const reportDir = await mkdtemp(join(tmpdir(), 'tuffgal-run-'));
+    await writeFile(
+      join(reportDir, 'results.json'),
+      JSON.stringify({ mode: 'ci', totals: { changed: 1 } }),
+      'utf8',
+    );
+    await mkdir(join(reportDir, 'candidates'), { recursive: true });
+    await writeFile(
+      join(reportDir, 'candidates', 'results.json'),
+      'stale',
+      'utf8',
+    );
+
+    await copyResultsIntoCandidates(reportDir);
+
+    const copied = await readFile(
+      join(reportDir, 'candidates', 'results.json'),
+      'utf8',
+    );
+    assert.deepEqual(JSON.parse(copied), {
+      mode: 'ci',
+      totals: { changed: 1 },
+    });
+  });
+});
+
 describe('formatResultLine', () => {
   it('leads with the symbol for each status', () => {
     assert.match(formatResultLine('pass', 1, 1000, 'f.json'), /^✓ /);
@@ -134,6 +215,7 @@ describe('formatSummaryBullet', () => {
     changed: 0,
     failed: 0,
     new: 0,
+    deleted: 0,
     ...over,
   });
 
@@ -163,5 +245,71 @@ describe('formatSummaryBullet', () => {
       formatSummaryBullet('laptop', counts({})),
       '• 0 passed on "laptop" breakpoint',
     );
+  });
+});
+
+/** A ResolvedConfig stub carrying just the fields the mode-gated seams read. */
+function envConfig(): ResolvedConfig {
+  return {
+    paths: {
+      baselines: '/repo/tuffgal/baselines',
+      localCache: '/repo/tuffgal/.cache',
+    },
+    captureMode: 'viewport',
+    frozenTime: '2026-01-15T12:00:00.000Z',
+    breakpoints: [{ name: 'desktop', width: 1280, height: 800 }],
+  } as unknown as ResolvedConfig;
+}
+
+describe('coverageComparisonRoot', () => {
+  it('measures against committed baselines in CI mode', () => {
+    assert.equal(
+      coverageComparisonRoot(envConfig(), 'ci'),
+      '/repo/tuffgal/baselines',
+    );
+  });
+
+  it('measures against the per-machine cache in local mode (never paths.baselines)', () => {
+    // PRD invariant: a local run never reads paths.baselines. The metric must
+    // point at the cache it actually diffed against.
+    assert.equal(
+      coverageComparisonRoot(envConfig(), 'local'),
+      '/repo/tuffgal/.cache',
+    );
+  });
+});
+
+describe('resolveEnvironmentReport — browser probe gating', () => {
+  it('does NOT launch the browser probe in local mode', async () => {
+    let probed = 0;
+    const probe = async (): Promise<CapturedBrowser> => {
+      probed += 1;
+      return { name: 'chromium', version: '131.0.0.0' };
+    };
+    const report = await resolveEnvironmentReport(envConfig(), 'local', probe);
+
+    // The whole point: local mode never gates on browserVersion, so it must not
+    // pay for a throwaway chromium launch.
+    assert.equal(probed, 0, 'probe must not run in local mode');
+    assert.equal(report.expected, null);
+    assert.equal(report.mismatch, false);
+    // The env block is still recorded (provenance), with an empty sentinel
+    // version standing in for the skipped probe.
+    assert.equal(report.actual.browserVersion, '');
+    assert.equal(report.actual.browser, 'chromium');
+  });
+
+  it('DOES launch the browser probe in CI mode', async () => {
+    let probed = 0;
+    const probe = async (): Promise<CapturedBrowser> => {
+      probed += 1;
+      return { name: 'chromium', version: '131.0.0.0' };
+    };
+    // Bootstrap case: no manifest on disk under this fake baselines dir, so the
+    // comparison is missing → no mismatch, but the probe still ran.
+    const report = await resolveEnvironmentReport(envConfig(), 'ci', probe);
+
+    assert.equal(probed, 1, 'probe must run once in CI mode');
+    assert.equal(report.actual.browserVersion, '131.0.0.0');
   });
 });

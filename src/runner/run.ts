@@ -1,10 +1,16 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { chromium } from 'playwright';
 import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
 import type { Action } from '../schema/action.ts';
-import type { RunResult, StoryResult, StoryStatus } from '../schema/result.ts';
+import type {
+  EnvironmentReport,
+  RunResult,
+  StoryResult,
+  StoryStatus,
+} from '../schema/result.ts';
 import { loadActions, loadStories } from '../schema/load.ts';
 import { writeReport } from '../reporter/writeReport.ts';
 import { computeFlowCoverage } from '../coverage/flows.ts';
@@ -28,6 +34,21 @@ import {
   storyRendersAt,
 } from './breakpointPasses.ts';
 import { storyMatchesFilter } from './storyFilter.ts';
+import { candidatesDir } from '../screenshots/baselineStore.ts';
+import {
+  executedActionNames,
+  scanOrphanedBaselines,
+  shouldScanForOrphans,
+} from './orphanScan.ts';
+import { comparisonRootFor, type RunMode } from './mode.ts';
+import {
+  captureEnvironment,
+  compareEnvironment,
+  readManifest,
+  type CapturedBrowser,
+  type EnvironmentManifest,
+} from './manifest.ts';
+import type { DeletedBaseline } from '../schema/result.ts';
 
 export interface RunCliOptions {
   storyFilter?: string;
@@ -35,6 +56,14 @@ export interface RunCliOptions {
   workers?: number;
   manageServers?: boolean;
   coverage?: boolean;
+  /**
+   * Resolved comparison contract (see {@link RunMode}). Governs baseline-write
+   * vs candidate-write in `runAction` and the run's exit-code derivation. The
+   * CLI always supplies it (resolved from `--ci`/`--local`/`$CI`); it stays
+   * optional so existing programmatic callers keep compiling, defaulting to
+   * `local` (the legacy auto-write behaviour) when omitted.
+   */
+  mode?: RunMode;
 }
 
 /** One Summary bullet's data: a breakpoint name and that pass's own counts. */
@@ -57,6 +86,7 @@ export async function runAll(
   options: RunCliOptions,
 ): Promise<RunResult> {
   const startedAt = new Date();
+  const mode: RunMode = options.mode ?? 'local';
   let managedServers: ManagedDevServers | undefined;
   if (options.manageServers) {
     managedServers = await startManagedDevServers(config);
@@ -124,6 +154,7 @@ export async function runAll(
             options.headed,
             coverage,
             breakpoint,
+            mode,
           ),
         () => {},
         (_item, result) =>
@@ -150,16 +181,52 @@ export async function runAll(
     );
 
     const finishedAt = new Date();
+    // Screen coverage measures how many screens have a baseline in the set this
+    // run compares against — the committed `paths.baselines` in CI mode, the
+    // per-machine `paths.localCache` in local mode. Local runs never read
+    // `paths.baselines` (PRD invariant). Both the metric and `runAction` pick
+    // their root through the shared `comparisonRootFor`, so the metric measures
+    // against the exact set the run diffed against; its meaning ("screens with a
+    // baseline to diff against") is preserved rather than blanked.
     const [screens, flows] = await Promise.all([
-      computeScreenCoverage(config.paths.actions, config.paths.baselines),
+      computeScreenCoverage(
+        config.paths.actions,
+        coverageComparisonRoot(config, mode),
+      ),
       computeFlowCoverage(config.flowInventory, allStories),
     ]);
+    // Orphan scan: committed baselines whose action ran no story this run are
+    // retired candidates (status `deleted`). Only meaningful for an UNFILTERED
+    // CI run — a `--story` filter runs a deliberate subset, so unselected
+    // stories' baselines would look orphaned when they are merely unvisited; we
+    // skip the scan rather than mark live baselines deleted. Local mode never
+    // reads `paths.baselines`, so it never scans. Detection only — pruning is a
+    // later wave, so the baselines directory stays untouched here.
+    const deleted: DeletedBaseline[] = shouldScanForOrphans(
+      mode,
+      options.storyFilter,
+    )
+      ? await scanOrphanedBaselines(
+          config.paths.baselines,
+          executedActionNames(results),
+        )
+      : [];
+    const totals = summarise(results);
+    totals.deleted = deleted.length;
+    // Capture-environment provenance: what this run rendered under, and — in CI
+    // mode — whether it drifted from the committed baselines' manifest. Local
+    // mode never reads `paths.baselines`, so `expected` stays null and mismatch
+    // is always false (see resolveEnvironmentReport).
+    const environment = await resolveEnvironmentReport(config, mode);
     const runResult: RunResult = {
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
       durationMs: finishedAt.getTime() - startedAt.getTime(),
-      totals: summarise(results),
+      mode,
+      totals,
+      environment,
       customCoverage: { screens, flows },
+      deleted,
       stories: results,
     };
     const reportPath = await writeReport(
@@ -167,6 +234,15 @@ export async function runAll(
       runResult,
       config.interactiveMode,
     );
+    // In CI mode the `<report>/candidates/` tree is the self-contained approval
+    // artifact — copy the run's `results.json` beside the candidate renders so a
+    // downstream `approve --from <candidates>` has the outcome data (which
+    // actions are new/changed, and later the environment/deleted blocks) without
+    // needing the rest of the report dir. Only meaningful in CI mode, where the
+    // candidate tree exists.
+    if (mode === 'ci') {
+      await copyResultsIntoCandidates(config.paths.report);
+    }
     writeRunSummary(passSummaries, reportPath);
     if (coverage) {
       const coveragePath = await coverage.generate();
@@ -187,6 +263,7 @@ function runScheduledStory(
   headed: boolean,
   coverage: CoverageCollector | undefined,
   breakpoint: ResolvedBreakpoint,
+  mode: RunMode,
 ): Promise<StoryResult> {
   return runStory({
     story: item.story,
@@ -198,6 +275,7 @@ function runScheduledStory(
     headed,
     coverage,
     breakpoint,
+    mode,
   });
 }
 
@@ -236,13 +314,123 @@ async function touchHeartbeat(config: ResolvedConfig): Promise<void> {
   }
 }
 
-function summarise(results: StoryResult[]): RunResult['totals'] {
+/**
+ * Copies the just-written `results.json` into `<report>/candidates/` so the
+ * candidate tree is a self-contained approval artifact. `writeReport` has
+ * already written `<report>/results.json`; this places a sibling copy under
+ * candidates. The candidates dir may not exist yet (a run where every action
+ * passed writes no candidate renders), so it is created first — an empty
+ * `candidates/` carrying only `results.json` still correctly describes "nothing
+ * to approve".
+ */
+export async function copyResultsIntoCandidates(
+  reportDir: string,
+): Promise<void> {
+  const dir = candidatesDir(reportDir);
+  await mkdir(dir, { recursive: true });
+  await copyFile(join(reportDir, 'results.json'), join(dir, 'results.json'));
+}
+
+/**
+ * The baseline root the screen-coverage metric measures against: committed
+ * `paths.baselines` in CI mode, per-machine `paths.localCache` in local mode.
+ * A thin, coverage-named alias over the shared {@link comparisonRootFor} so the
+ * metric counts screens against the SAME set the run (via `runAction`) diffed
+ * against — the mode→root mapping now lives once, in `mode.ts`. Preserved as a
+ * named export because the coverage metric's PRD invariant (a local run never
+ * reads `paths.baselines`) reads most clearly against a coverage-specific name.
+ */
+export function coverageComparisonRoot(
+  config: ResolvedConfig,
+  mode: RunMode,
+): string {
+  return comparisonRootFor(config, mode);
+}
+
+/**
+ * Reads the launched Chromium's `browser.version()` so the run's environment
+ * manifest records the exact browser build the baselines were rendered against —
+ * the single pixel-affecting fact that only a live browser can report. Launched
+ * throwaway (not the per-story browsers, which spin up and tear down inside the
+ * schedule) because the version is invariant across stories, so one probe covers
+ * the whole run. Kept narrow: launch, read, close.
+ */
+async function captureBrowserIdentity(): Promise<CapturedBrowser> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    return { name: 'chromium', version: browser.version() };
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * The browser identity stamped into a LOCAL run's environment block. Local mode
+ * skips the live probe (see {@link resolveEnvironmentReport}), so `version` is an
+ * empty sentinel: it is shape-valid for the manifest, never compared (local
+ * `expected` is always null), and never promoted (local candidates are refused
+ * by `approve --from`). Kept as chromium's name for provenance, since that is
+ * still the browser a local run renders under.
+ */
+const LOCAL_BROWSER_IDENTITY = { name: 'chromium', version: '' } as const;
+
+/**
+ * Builds the run's {@link EnvironmentReport}: the environment this run captured
+ * under (`actual`), and — in CI mode — the committed `<baselines>/manifest.json`
+ * (`expected`) plus whether their pixel-affecting keys diverge.
+ *
+ * The live browser-version probe ({@link captureBrowserIdentity}) runs in CI
+ * mode ONLY. Local mode never reads `paths.baselines`, so `expected` is always
+ * `null` and `browserVersion` is never compared against anything — launching a
+ * throwaway chromium just to stamp a value nothing reads is pure cost, so local
+ * mode fills the browser identity with an empty sentinel and skips the probe.
+ *
+ * In CI mode a missing manifest is the bootstrap case (no expectation yet, no
+ * mismatch); a malformed one surfaces as a mismatch note (see
+ * {@link compareEnvironment}). `expected` carries the parsed manifest only when
+ * it read cleanly, so a malformed file reports `null` here while still driving a
+ * mismatch.
+ *
+ * `probe` is the live browser-identity reader, injected (defaulting to the real
+ * {@link captureBrowserIdentity}) so a test can assert it is invoked in CI mode
+ * and NEVER invoked in local mode without launching a real chromium.
+ */
+export async function resolveEnvironmentReport(
+  config: ResolvedConfig,
+  mode: RunMode,
+  probe: () => Promise<CapturedBrowser> = captureBrowserIdentity,
+): Promise<EnvironmentReport> {
+  if (mode !== 'ci') {
+    // Local mode never gates on `browserVersion` (expected is always null), so
+    // skip the browser launch entirely. The empty sentinel is shape-valid and
+    // never promoted — a local run writes no candidate tree, and `approve --from`
+    // refuses non-ci candidates outright.
+    const actual = captureEnvironment(config, LOCAL_BROWSER_IDENTITY);
+    return { expected: null, actual, mismatch: false, mismatchKeys: [] };
+  }
+  const actual = captureEnvironment(config, await probe());
+  const read = await readManifest(config.paths.baselines);
+  const { mismatch, mismatchKeys } = compareEnvironment(read, actual);
+  const expected: EnvironmentManifest | null =
+    read.status === 'ok' ? read.manifest : null;
+  return { expected, actual, mismatch, mismatchKeys };
+}
+
+/**
+ * Rolls a set of story results into the outcome counts. `deleted` counts
+ * orphaned baselines, which are a run-level detection (not a per-story outcome),
+ * so it always seeds `0` here; `runAll` overwrites the run-total `deleted` from
+ * the orphan scan. Per-breakpoint pass summaries keep `0`, which is correct —
+ * an orphan is not attributable to a single breakpoint pass.
+ */
+export function summarise(results: StoryResult[]): RunResult['totals'] {
   return {
     stories: results.length,
     passed: results.filter((result) => result.status === 'pass').length,
     changed: results.filter((result) => result.status === 'changed').length,
     failed: results.filter((result) => result.status === 'failed').length,
     new: results.filter((result) => result.status === 'new').length,
+    deleted: 0,
   };
 }
 

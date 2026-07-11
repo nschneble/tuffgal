@@ -8,6 +8,62 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.2.0-alpha.1] — 2026-07-10
+
+CI-owned baselines. CI is now the sole writer of committed baselines. Local
+runs are advisory self-diffs. Committed visual changes are a PR review
+gate, approved from a CI candidate tree rather than by any local `approve`.
+
+### Added
+
+- Run modes. `tuffgal run` resolves `--ci` / `--local`
+  - Explicit flag wins
+  - With neither, CI when `$CI` is truth-y, else local
+- CI mode writes a self-contained candidate tree with a `results.json` copy
+  - Never writes committed baselines
+  - A missing baseline is `new` (candidate only)
+  - An orphaned one is `deleted`
+- `approve --from <dir>` promotes a CI candidate tree into `paths.baselines`
+  - The only code path that writes committed baselines
+  - Refuses any candidate whose `results.json` is not a clean CI run (`mode !== 'ci'` or `totals.failed > 0`)
+  - `--prune` retires baselines marked `deleted`
+- Environment manifest at `baselines/manifest.json`
+  - Written by `approve --from` and checked by `run --ci`
+  - Pixel-affecting mismatch still runs the comparison but banners the report and exits `3`
+- Local advisory mode compares against a git-ignored per-machine cache
+  - Plain `approve` now refreshes that cache
+- CI exit codes
+  - `2` (pending `new`/`changed`/`deleted` to approve)
+  - `3` (environment mismatch)
+  - Precedence `1` > `3` > `2`
+- `results.json` fields
+  - `mode`
+  - `environment` (`expected`/`actual`/`mismatch`/`mismatchKeys`)
+  - `deleted[]`
+  - `totals.deleted`
+  - `totals.new`
+- Report additions
+  - Environment-mismatch banner
+  - Deleted baselines section
+  - Per-action candidate + a11y-only-drift notes
+
+### Changed
+
+- **Breaking:** `tuffgal approve` no longer writes committed baselines
+  - Plain `approve` targets the local cache only
+  - Committed baselines are written solely by `approve --from` (CI/bot promo path)
+  - Local runs are advisory
+    - Exit `0` on visual drift
+    - Exit `1` on failed stories only
+    - Exit codes `2` and `3` are CI-mode only
+- In CI mode an accessibility-tree drift now gates status
+  - Pixels can match while the aria snapshot differs
+  - Flips the action to `changed`
+  - Stays advisory (informational) in local mode
+- Every committed baseline, candidate, and cache write is losslessly recompressed
+  - pngjs, deflate level 9 + adaptive filtering
+  - Never lossy, never quantized
+
 ## [0.1.0-alpha.14] — 2026-07-04
 
 ### Fixed
@@ -193,7 +249,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.1.0-alpha.14...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.1...HEAD
+[0.2.0-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.1
 [0.1.0-alpha.14]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.14
 [0.1.0-alpha.13]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.13
 [0.1.0-alpha.12]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.12

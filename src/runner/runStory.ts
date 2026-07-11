@@ -20,6 +20,7 @@ import type {
 } from '../schema/result.ts';
 import { applyFixture } from './bridges/database.ts';
 import type { CoverageCollector } from './coverage.ts';
+import type { RunMode } from './mode.ts';
 import { runAction } from './runAction.ts';
 
 export interface RunStoryOptions {
@@ -38,6 +39,13 @@ export interface RunStoryOptions {
    * back to the story's full resolved run set.
    */
   breakpoint?: ResolvedBreakpoint;
+  /**
+   * Comparison contract for this run (see {@link RunMode}). Threaded down to
+   * `runAction`, which uses it to decide whether a missing/changed baseline
+   * auto-writes `paths.baselines` (local) or emits a candidate only (CI).
+   * Optional so direct callers/tests keep compiling; the run driver supplies it.
+   */
+  mode?: RunMode;
 }
 
 const TRACE_SUBDIR = 'traces';
@@ -296,6 +304,7 @@ async function runActionsForBreakpoint(
       storyFile: file,
       config,
       breakpoint: breakpoint.name,
+      mode: options.mode,
     });
     results.push(result);
     // `new`/`changed`/`failed` each fold in by precedence; `new` keeps its own

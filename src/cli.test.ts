@@ -11,7 +11,8 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-import { isMainEntry, parseArguments } from './cli.ts';
+import { isMainEntry, parseArguments, validateCommandFlags } from './cli.ts';
+import { resolveRunMode } from './runner/mode.ts';
 
 describe('parseArguments — approve filters', () => {
   it('captures a bare positional story argument', () => {
@@ -66,6 +67,181 @@ describe('parseArguments — approve filters', () => {
     assert.throws(
       () => parseArguments(['approve', '--breakpoint']),
       /--breakpoint requires a mode name/,
+    );
+  });
+});
+
+describe('parseArguments — run mode flags', () => {
+  it('captures --ci', () => {
+    const args = parseArguments(['run', '--ci']);
+    assert.equal(args.ci, true);
+    assert.equal(args.local, false);
+  });
+
+  it('captures --local', () => {
+    const args = parseArguments(['run', '--local']);
+    assert.equal(args.local, true);
+    assert.equal(args.ci, false);
+  });
+
+  it('defaults both mode flags to false', () => {
+    const args = parseArguments(['run']);
+    assert.equal(args.ci, false);
+    assert.equal(args.local, false);
+  });
+});
+
+describe('validateCommandFlags — cross-command flag placement', () => {
+  it('accepts --ci on the run command', () => {
+    assert.equal(
+      validateCommandFlags(parseArguments(['run', '--ci'])),
+      undefined,
+    );
+  });
+
+  it('accepts --local on the run command', () => {
+    assert.equal(
+      validateCommandFlags(parseArguments(['run', '--local'])),
+      undefined,
+    );
+  });
+
+  it('rejects --ci on a non-run command (approve)', () => {
+    const error = validateCommandFlags(parseArguments(['approve', '--ci']));
+    assert.match(
+      String(error),
+      /--ci and --local are only valid with the `run`/,
+    );
+  });
+
+  it('rejects --local on a non-run command (help falls through)', () => {
+    // An unknown command parses to `help`; --local there is still illegal.
+    const error = validateCommandFlags(parseArguments(['bogus', '--local']));
+    assert.match(
+      String(error),
+      /--ci and --local are only valid with the `run`/,
+    );
+  });
+
+  it('rejects --new-only outside approve', () => {
+    const error = validateCommandFlags(parseArguments(['run', '--new-only']));
+    assert.match(String(error), /--new-only is only valid with the `approve`/);
+  });
+
+  it('rejects a breakpoint filter outside approve', () => {
+    const error = validateCommandFlags(parseArguments(['run', '--desktop']));
+    assert.match(
+      String(error),
+      /--breakpoint .* is only valid with the `approve`/,
+    );
+  });
+
+  it('rejects a stray positional outside approve', () => {
+    const error = validateCommandFlags(parseArguments(['run', 'extra']));
+    assert.match(String(error), /unexpected argument "extra"/);
+  });
+
+  it('accepts a clean run invocation', () => {
+    assert.equal(validateCommandFlags(parseArguments(['run'])), undefined);
+  });
+
+  it('does NOT itself block both --ci and --local — resolveRunMode owns that', () => {
+    // The both-flags error is routed through resolveRunMode (which `main`
+    // catches and sends to failExit), not this pre-flight validator: the flags
+    // are individually legal on `run`, and their mutual exclusivity is a
+    // mode-resolution concern.
+    const args = parseArguments(['run', '--ci', '--local']);
+    assert.equal(validateCommandFlags(args), undefined);
+    assert.throws(
+      () => resolveRunMode({ ci: args.ci, local: args.local, env: {} }),
+      /both --ci and --local/,
+    );
+  });
+});
+
+describe('parseArguments — approve --from / --prune', () => {
+  it('parses --from <dir> and --prune', () => {
+    const args = parseArguments(['approve', '--from', 'candidates', '--prune']);
+    assert.equal(args.from, 'candidates');
+    assert.equal(args.prune, true);
+  });
+
+  it('parses --from=dir form', () => {
+    const args = parseArguments(['approve', '--from=candidates']);
+    assert.equal(args.from, 'candidates');
+  });
+
+  it('throws when --from has no value', () => {
+    assert.throws(
+      () => parseArguments(['approve', '--from']),
+      /--from requires a value/,
+    );
+  });
+
+  it('throws when --from is followed by another flag', () => {
+    assert.throws(
+      () => parseArguments(['approve', '--from', '--prune']),
+      /--from requires a value/,
+    );
+  });
+});
+
+describe('validateCommandFlags — --from / --prune placement', () => {
+  it('rejects --from outside approve', () => {
+    assert.match(
+      validateCommandFlags(parseArguments(['run', '--from', 'x'])) ?? '',
+      /--from is only valid with the `approve`/,
+    );
+  });
+
+  it('rejects --prune without --from', () => {
+    assert.match(
+      validateCommandFlags(parseArguments(['approve', '--prune'])) ?? '',
+      /--prune requires --from/,
+    );
+  });
+
+  it('rejects --from combined with a story filter', () => {
+    assert.match(
+      validateCommandFlags(
+        parseArguments(['approve', '--from', 'x', '--story', 's']),
+      ) ?? '',
+      /--from cannot be combined with a story filter/,
+    );
+  });
+
+  it('rejects --from combined with a positional story', () => {
+    assert.match(
+      validateCommandFlags(parseArguments(['approve', '--from', 'x', 's'])) ??
+        '',
+      /--from cannot be combined with a story filter/,
+    );
+  });
+
+  it('rejects --from combined with --new-only', () => {
+    assert.match(
+      validateCommandFlags(
+        parseArguments(['approve', '--from', 'x', '--new-only']),
+      ) ?? '',
+      /--from cannot be combined with --new-only/,
+    );
+  });
+
+  it('rejects --from combined with --breakpoint', () => {
+    assert.match(
+      validateCommandFlags(
+        parseArguments(['approve', '--from', 'x', '--desktop']),
+      ) ?? '',
+      /--from cannot be combined with --breakpoint/,
+    );
+  });
+
+  it('accepts a clean approve --from --prune', () => {
+    assert.equal(
+      validateCommandFlags(
+        parseArguments(['approve', '--from', 'x', '--prune']),
+      ),
+      undefined,
     );
   });
 });

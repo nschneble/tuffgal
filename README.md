@@ -18,9 +18,78 @@ Tuffgal sits between component tests (which are fast but mocked) and
 end-to-end tests (which are real but verbose). You write **actions**
 (atomic user steps) and **stories** (chains of actions) as pure JSON. The
 harness runs them in a real browser, captures a screenshot after each
-story, and pixel-diffs against a baseline you commit alongside your code.
+action, and pixel-diffs against a committed baseline.
 
 When a screenshot changes, a human reviews the diff and decides what to do.
+
+## CI owns the baselines
+
+Committed baselines are the source of truth for what your UI is supposed to look
+like, and **CI is their only writer**. That makes a visual change a pull-request
+review gate, exactly like a code change: CI renders the current UI, diffs it
+against the committed baselines, and if anything drifted it fails the check and
+publishes the new screenshots as an artifact. A human looks at the diff and,
+if the change is intended, promotes those screenshots into the committed set. No
+local run can overwrite the baselines your reviewers rely on.
+
+A `tuffgal run` executes under one of two modes:
+
+- **CI mode** compares against the committed baselines (`paths.baselines`) and
+  never writes them. A missing baseline is `new`, an orphaned one is `deleted`,
+  and drift is `changed` — all of which are written into a self-contained
+  **candidate tree** under `<report>/candidates/` for approval, not committed in
+  place. CI mode gates: pending changes exit `2`.
+- **Local mode** is advisory. It compares against a gitignored, per-machine
+  cache (`paths.localCache`) so you can self-diff while you iterate, seeding a
+  missing entry on first sight. A local run **never reads or writes the
+  committed baselines**, and never fails your build on visual drift — it surfaces
+  the signal in the report and on stdout and **exits `0`**. Only a failed story
+  (a step that threw) exits `1`; the CI-gating codes `2` and `3` never fire
+  locally.
+
+Mode resolves from `--ci` / `--local` (an explicit flag always wins). With
+neither, Tuffgal picks CI when `$CI` is truthy and local otherwise, so the same
+`tuffgal run` does the right thing on a laptop and in a workflow.
+
+### Approving a visual change
+
+Two ways to accept a `changed`/`new` candidate into the committed baselines,
+both writing through the single `approve --from` promotion path:
+
+- **Download and commit.** Grab the `candidates` artifact CI uploaded, run
+  `tuffgal approve --from <dir>` against it, and commit the resulting baselines.
+  `--from` refuses any candidate that is not a clean CI run (`mode !== 'ci'` or a
+  failed story), so a local or broken run can never be promoted. Add `--prune`
+  to also retire baselines the run flagged as `deleted`.
+- **Comment on the PR.** The intended flow is a `@tuffgal approve` PR comment
+  that runs the same promotion on the CI side. The Action that handles this is a
+  downstream, not-yet-shipped repo, so treat this as the direction of travel
+  rather than a shipped button today.
+
+Plain `tuffgal approve` (no `--from`) targets your **local cache** only — it
+accepts your own self-diff so your next local run is clean. It does not touch the
+committed set.
+
+### The environment manifest
+
+`approve --from` also writes `baselines/manifest.json` recording the environment
+the promoted baselines were captured under (capture schema, browser version,
+platform, capture mode, breakpoints, device scale factor, frozen time). On the
+next `run --ci` Tuffgal checks the live capture environment against it. A
+pixel-affecting mismatch still runs the comparison, but banners the report and
+exits `3` — the signal is "expect a full re-approve", distinct from ordinary
+pending changes.
+
+### Exit codes
+
+| Code | Mode | Meaning                                                                   |
+| ---- | ---- | ------------------------------------------------------------------------- |
+| `0`  | both | Clean: no failures; in CI, no pending changes and the environment matched |
+| `1`  | both | One or more stories failed (a step threw). Highest precedence             |
+| `3`  | CI   | Committed environment manifest diverged from this run's environment       |
+| `2`  | CI   | Pending baseline changes to approve (`new`, `changed`, or `deleted`)      |
+
+Precedence is `1` > `3` > `2` > `0`. Local mode only ever exits `1` or `0`.
 
 ## What ships in v1
 
@@ -31,7 +100,10 @@ When a screenshot changes, a human reviews the diff and decides what to do.
   Tailwind widths. Pick which to run per project or per story. Each mode
   gets its own baseline and a per-mode group in the HTML report
 - DAG scheduler with `needs`/`produces` labels and parallel workers
-- SSIM-gated visual diff + pixelmatch overlay + a11y-tree snapshots
+- CI-owned baselines: CI is the sole writer, local runs are advisory self-diff,
+  approval flows through a CI candidate tree + environment manifest
+- SSIM-gated visual diff + pixelmatch overlay + a11y-tree snapshots (in CI an
+  a11y-tree drift also flips a pixel-passing action to `changed`)
 - Trace zip on failure (Playwright trace viewer)
 - Clock freeze (`page.clock.install`)
 - Storage-state persistence across stories

@@ -1,12 +1,16 @@
+import type { RunMode } from '../runner/mode.ts';
+import type { EnvironmentManifest } from '../runner/manifest.ts';
+
 /**
  * Outcome model. The runner emits a `RunResult` per invocation; the reporter
  * consumes it to render the HTML report. Status values map onto the three
  * outcomes the framework distinguishes:
  *
  * - `pass`  — action succeeded and screenshot matched baseline (or no baseline).
- * - `changed` — action succeeded but screenshot drifted past the threshold.
- *   The story does not fail. The user reviews and either approves the new
- *   baseline or files a bug.
+ * - `changed` — action succeeded but the baseline drifted: the screenshot moved
+ *   past the threshold, or (CI mode) pixels matched while the accessibility-tree
+ *   snapshot drifted. The story does not fail. The user reviews and either
+ *   approves the new baseline or files a bug.
  * - `new` — no baseline existed; one was written this run. Informational, not a
  *   regression — there is nothing to compare against yet.
  * - `failed` — a step threw. The story fails fast and skips any later actions.
@@ -53,8 +57,21 @@ export interface ActionResult {
   ssimScore?: number;
   /**
    * `true` when the captured page accessibility tree differs from the
-   * baseline tree. Informational only — does not gate pass/changed by
-   * itself; pixel/SSIM still drives the status.
+   * baseline tree. Advisory in local mode (flagged, never gates status). In CI
+   * mode it DOES gate: when pixels pass but the aria snapshot drifts, the status
+   * becomes `changed` and a candidate pair is written, so a drifted committed
+   * `a11y.yaml` stays re-approvable under the sole-writer model.
+   *
+   * DISCRIMINATOR CONTRACT. A11y-only drift is identified POSITIVELY by
+   * `a11yChanged === true`, never by the absence of `diffPath` alone. Both
+   * pixel-drift branches (SSIM-fail and size-mismatch) carry a `diffPath` /
+   * `failureMessage` and deliberately leave `a11yChanged` unset, so the two
+   * classes never collide — but the size-mismatch branch's omission of
+   * `a11yChanged` is the load-bearing half of that guarantee and is locked by
+   * runAction's `never carries a11yChanged` test. Consumers MUST branch on
+   * `a11yChanged === true`; a `!diffPath` heuristic would misread a future
+   * result that carries neither, or a size-mismatch result if that omission
+   * ever regressed.
    */
   a11yChanged?: boolean;
   /**
@@ -95,6 +112,27 @@ export interface CoverageMetric {
 }
 
 /**
+ * One orphaned committed baseline: an entry under `paths.baselines` whose action
+ * ran no story this run, so nothing compared against it. Recorded (CI mode,
+ * unfiltered runs only) so the report can surface it and a later `approve
+ * --prune` can delete it — this wave detects, it never removes.
+ *
+ * Keyed per breakpoint rather than per action so a partially-orphaned action
+ * (some breakpoints retired, others still live) could in principle be expressed;
+ * today an orphan action is retired wholesale, one entry per baseline file group
+ * it left behind. `breakpoint` is the mode name (`mobile`/`desktop`/…) for the
+ * breakpoint-keyed `<action>/<breakpoint>.png` layout, or `'legacy'` for the
+ * pre-breakpoint `<action>/0.png` layout. `baselinePaths` are the absolute paths
+ * the prune step deletes — the PNG plus its a11y companion when one exists — so
+ * wave 7 prunes a flat path list without re-deriving layout.
+ */
+export interface DeletedBaseline {
+  action: string;
+  breakpoint: string;
+  baselinePaths: string[];
+}
+
+/**
  * Parses and shape-checks a `results.json` blob. `approve` re-reads the run's
  * own output, the one JSON re-entry point that skips the zod validation every
  * input file gets. A truncated or stale-schema artifact would otherwise throw
@@ -123,10 +161,42 @@ export function parseRunResult(raw: string, sourcePath: string): RunResult {
   return parsed as RunResult;
 }
 
+/**
+ * The capture-environment block recorded on every run. Lets the report, the
+ * Action, and a human diagnose an environment drift between the committed
+ * baselines and the run that compared against them.
+ *
+ * - `expected` — the committed `<baselines>/manifest.json` when one exists and
+ *   parses, else `null`. `null` covers both the bootstrap case (no manifest
+ *   written yet — the first `approve --from` creates it) and local mode, which
+ *   never reads `paths.baselines` at all.
+ * - `actual` — the environment this run actually captured under.
+ * - `mismatch` — `true` when a pixel-affecting key diverged (CI mode with a
+ *   present manifest), or when the committed manifest was unreadable. Always
+ *   `false` in local mode and on the bootstrap (missing-manifest) case.
+ * - `mismatchKeys` — the specific diverging keys (see `PIXEL_AFFECTING_KEYS`),
+ *   or `['manifest']` when the committed manifest could not be parsed. Empty
+ *   when `mismatch` is `false`.
+ */
+export interface EnvironmentReport {
+  expected: EnvironmentManifest | null;
+  actual: EnvironmentManifest;
+  mismatch: boolean;
+  mismatchKeys: string[];
+}
+
 export interface RunResult {
   startedAt: string;
   finishedAt: string;
   durationMs: number;
+  /**
+   * Comparison contract the run executed under (`'ci' | 'local'`). Recorded so
+   * the report, the Action, and `approve --from` can distinguish a committed-
+   * baseline gate run from an advisory local self-diff. Optional in the type
+   * only as a defensive parse guard for older `results.json` artifacts that
+   * predate this field; every result the current runner emits carries it.
+   */
+  mode?: RunMode;
   totals: {
     stories: number;
     passed: number;
@@ -134,7 +204,30 @@ export interface RunResult {
     failed: number;
     /** Stories whose rollup status is `new` (wrote a fresh baseline, no drift). */
     new: number;
+    /**
+     * Orphaned committed baselines detected this run — the length of `deleted`.
+     * CI mode + unfiltered runs only; `0` in local mode and on any filtered run
+     * (where unselected stories' baselines are not orphans, merely unvisited).
+     */
+    deleted: number;
   };
+  /**
+   * Orphaned committed baselines: entries under `paths.baselines` whose action
+   * ran no story this run. Populated only for an unfiltered CI run (see
+   * {@link DeletedBaseline}); empty in local mode and on filtered runs, where a
+   * baseline going unvisited says nothing about whether its story still exists.
+   * Detection only — pruning is a later wave.
+   */
+  deleted: DeletedBaseline[];
+  /**
+   * Capture-environment provenance for this run (see {@link EnvironmentReport}).
+   * `expected` is the committed manifest (null in local mode / bootstrap),
+   * `actual` is what this run captured under, and `mismatch`/`mismatchKeys`
+   * drive the report banner and the `3` exit code. Optional in the type only as
+   * a defensive parse guard for older `results.json` artifacts that predate this
+   * block; every result the current runner emits carries it.
+   */
+  environment?: EnvironmentReport;
   /**
    * Custom coverage metrics layered on top of V8 line coverage:
    * `screens` = baselined visit-* actions / declared screens,

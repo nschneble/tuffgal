@@ -1,0 +1,646 @@
+import assert from 'node:assert/strict';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, it } from 'node:test';
+import { PNG } from 'pngjs';
+import type { ResolvedConfig } from '../config.ts';
+import type { EnvironmentManifest } from './manifest.ts';
+import { CAPTURE_SCHEMA, SCHEMA_VERSION } from './manifest.ts';
+import type { DeletedBaseline, RunResult } from '../schema/result.ts';
+import { pathExists } from '../util.ts';
+import { approveFrom, ApproveFromError } from './approveFrom.ts';
+
+let root: string;
+let candidateDir: string;
+let baselinesDir: string;
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'tuffgal-approvefrom-'));
+  candidateDir = join(root, 'candidates');
+  baselinesDir = join(root, 'baselines');
+  await mkdir(candidateDir, { recursive: true });
+});
+
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+function config(): ResolvedConfig {
+  return {
+    paths: { baselines: baselinesDir },
+  } as unknown as ResolvedConfig;
+}
+
+/** A real, decodable PNG whose pixels vary per position (a non-trivial image). */
+function realPng(seed: number): Buffer {
+  const png = new PNG({ width: 4, height: 4 });
+  for (let y = 0; y < 4; y += 1) {
+    for (let x = 0; x < 4; x += 1) {
+      const i = (y * 4 + x) * 4;
+      png.data[i] = (x * 31 + seed) % 256;
+      png.data[i + 1] = (y * 17 + seed) % 256;
+      png.data[i + 2] = (x * y + seed) % 256;
+      png.data[i + 3] = 255;
+    }
+  }
+  return PNG.sync.write(png);
+}
+
+function environment(): EnvironmentManifest {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    captureSchema: CAPTURE_SCHEMA,
+    tuffgalVersion: '9.9.9',
+    playwrightVersion: '1.49.0',
+    browser: 'chromium',
+    browserVersion: '131.0.0.0',
+    platform: 'linux',
+    captureMode: 'viewport',
+    breakpoints: [{ name: 'desktop', width: 1280, height: 800 }],
+    deviceScaleFactor: 1,
+    frozenTime: '2026-01-15T12:00:00.000Z',
+  };
+}
+
+/**
+ * Overrides accepted by {@link writeCandidateResults}. Every field is optional;
+ * an absent field takes the clean-filler default. The subtle ones are keyed on
+ * PRESENCE, not value, so a caller can force an explicitly-empty/omitted shape:
+ *   - `environment`: absent → the default well-shaped block; present (incl.
+ *     `undefined`) → written verbatim, so `{ environment: undefined }` omits the
+ *     block entirely (pre-manifest artifact).
+ *   - `mode`: absent → `'ci'`; present `undefined` → the key is omitted entirely
+ *     (pre-mode artifact); any string → written verbatim.
+ *   - `totals`: absent → a clean zero-failure block whose `failed` is
+ *     `overrides.failed ?? 0`; present `null` → the whole `totals` object is
+ *     omitted (truncated artifact); a raw object → written verbatim (exercise the
+ *     shape-guard, e.g. `{}` for a missing `failed` or a non-numeric one).
+ */
+interface CandidateResultsOverrides {
+  environment?: RunResult['environment'];
+  deleted?: DeletedBaseline[];
+  mode?: 'ci' | 'local' | undefined;
+  failed?: number;
+  totals?: Record<string, unknown> | null;
+}
+
+/**
+ * Writes a `results.json` into the candidate tree. Everything not overridden is
+ * inert filler that clears `parseRunResult`'s shallow shape check; the overrides
+ * (see {@link CandidateResultsOverrides}) let a test force the exact promotability
+ * -gate shape it exercises — including omitting the `mode`, `totals`, or
+ * `environment` keys entirely.
+ */
+async function writeCandidateResults(
+  overrides: CandidateResultsOverrides = {},
+): Promise<void> {
+  const hasEnvironment = 'environment' in overrides;
+  const hasMode = 'mode' in overrides;
+  const hasTotals = 'totals' in overrides;
+  const results: Record<string, unknown> = {
+    startedAt: '2026-06-11T12:00:00.000Z',
+    finishedAt: '2026-06-11T12:00:01.000Z',
+    durationMs: 1000,
+    environment: hasEnvironment
+      ? overrides.environment
+      : {
+          expected: null,
+          actual: environment(),
+          mismatch: false,
+          mismatchKeys: [],
+        },
+    deleted: overrides.deleted ?? [],
+    customCoverage: {
+      screens: { total: 0, covered: 0, ratio: 1, missing: [] },
+      flows: { total: 0, covered: 0, ratio: 1, missing: [] },
+    },
+    stories: [],
+  };
+  // `mode` absent → 'ci'; present `undefined` → omit the key (pre-mode artifact).
+  if (!hasMode || overrides.mode !== undefined) {
+    results.mode = hasMode ? overrides.mode : 'ci';
+  }
+  // `totals: null` omits the object entirely; any other override is written
+  // verbatim; the default is a clean zero-failure block.
+  if (hasTotals) {
+    if (overrides.totals !== null) {
+      results.totals = overrides.totals;
+    }
+  } else {
+    results.totals = {
+      stories: 0,
+      passed: 0,
+      changed: 0,
+      failed: overrides.failed ?? 0,
+      new: 0,
+      deleted: 0,
+    };
+  }
+  await writeFile(
+    join(candidateDir, 'results.json'),
+    JSON.stringify(results),
+    'utf8',
+  );
+}
+
+/** Writes a candidate PNG (+ optional a11y companion) under `<action>/`. */
+async function writeCandidatePng(
+  action: string,
+  breakpoint: string,
+  seed = 1,
+  a11y?: string,
+): Promise<Buffer> {
+  const dir = join(candidateDir, action);
+  await mkdir(dir, { recursive: true });
+  const bytes = realPng(seed);
+  await writeFile(join(dir, `${breakpoint}.png`), bytes);
+  if (a11y !== undefined) {
+    await writeFile(join(dir, `${breakpoint}.a11y.yaml`), a11y, 'utf8');
+  }
+  return bytes;
+}
+
+/** Recursively lists a directory tree as a sorted snapshot of `relpath => bytes`. */
+async function snapshot(dir: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  async function walk(current: string, prefix: string): Promise<void> {
+    let entries;
+    try {
+      entries = await readdir(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const abs = join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(abs, rel);
+      } else {
+        out.set(rel, (await readFile(abs)).toString('base64'));
+      }
+    }
+  }
+  await walk(dir, '');
+  return out;
+}
+
+/**
+ * Asserts a failing `approveFrom` left `baselinesDir` byte-identical. Seeds a
+ * pre-existing baseline so "zero writes" is a real invariant, not a vacuous
+ * empty-vs-empty check.
+ */
+async function assertZeroWrites(
+  run: () => Promise<unknown>,
+  message: RegExp,
+): Promise<void> {
+  await mkdir(join(baselinesDir, 'existing'), { recursive: true });
+  await writeFile(join(baselinesDir, 'existing', 'desktop.png'), 'keep-me');
+  const before = await snapshot(baselinesDir);
+  await assert.rejects(run(), (error: unknown) => {
+    assert.ok(error instanceof ApproveFromError, 'expected ApproveFromError');
+    assert.match(error.message, message);
+    return true;
+  });
+  const after = await snapshot(baselinesDir);
+  assert.deepEqual([...after.entries()].sort(), [...before.entries()].sort());
+}
+
+describe('approveFrom — happy path', () => {
+  it('promotes a candidate tree into baselines and writes the manifest', async () => {
+    const bytes = await writeCandidatePng('open', 'desktop', 1, 'tree-open');
+    await writeCandidateResults();
+
+    const summary = await approveFrom(config(), { from: candidateDir });
+    assert.equal(summary.written, 1);
+    assert.equal(summary.pruned, 0);
+
+    // Pixels round-trip identically through the recompress write path.
+    const written = await readFile(join(baselinesDir, 'open', 'desktop.png'));
+    assert.deepEqual(
+      PNG.sync.read(written).data,
+      PNG.sync.read(bytes).data,
+      'promoted PNG decodes to the same pixels',
+    );
+    // a11y companion travels alongside.
+    assert.equal(
+      await readFile(join(baselinesDir, 'open', 'desktop.a11y.yaml'), 'utf8'),
+      'tree-open',
+    );
+    // Manifest written from environment.actual, schema stamped from constants.
+    const manifest = JSON.parse(
+      await readFile(join(baselinesDir, 'manifest.json'), 'utf8'),
+    ) as EnvironmentManifest;
+    assert.equal(manifest.schemaVersion, SCHEMA_VERSION);
+    assert.equal(manifest.captureSchema, CAPTURE_SCHEMA);
+    assert.equal(manifest.platform, 'linux');
+    assert.equal(manifest.browserVersion, '131.0.0.0');
+  });
+
+  it('overwrites an existing baseline entry', async () => {
+    await mkdir(join(baselinesDir, 'open'), { recursive: true });
+    await writeFile(join(baselinesDir, 'open', 'desktop.png'), 'stale');
+    const bytes = await writeCandidatePng('open', 'desktop', 2);
+    await writeCandidateResults();
+
+    await approveFrom(config(), { from: candidateDir });
+    const written = await readFile(join(baselinesDir, 'open', 'desktop.png'));
+    assert.deepEqual(PNG.sync.read(written).data, PNG.sync.read(bytes).data);
+  });
+
+  it('refreshes a pre-existing manifest with the new environment', async () => {
+    await mkdir(baselinesDir, { recursive: true });
+    await writeFile(
+      join(baselinesDir, 'manifest.json'),
+      JSON.stringify({ ...environment(), platform: 'darwin' }),
+      'utf8',
+    );
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+
+    await approveFrom(config(), { from: candidateDir });
+    const manifest = JSON.parse(
+      await readFile(join(baselinesDir, 'manifest.json'), 'utf8'),
+    ) as EnvironmentManifest;
+    assert.equal(manifest.platform, 'linux');
+  });
+});
+
+describe('approveFrom — prune', () => {
+  it('deletes orphaned baselines listed in results.deleted', async () => {
+    // Seed an orphan (PNG + companion) plus a live baseline that must survive.
+    await mkdir(join(baselinesDir, 'gone'), { recursive: true });
+    await writeFile(join(baselinesDir, 'gone', 'desktop.png'), 'orphan');
+    await writeFile(join(baselinesDir, 'gone', 'desktop.a11y.yaml'), 'orphan');
+    await mkdir(join(baselinesDir, 'keep'), { recursive: true });
+    await writeFile(join(baselinesDir, 'keep', 'desktop.png'), 'live');
+
+    await writeCandidatePng('open', 'desktop');
+    const deleted: DeletedBaseline[] = [
+      {
+        action: 'gone',
+        breakpoint: 'desktop',
+        // Absolute paths from another machine — must be IGNORED by prune.
+        baselinePaths: ['/evil/gone/desktop.png'],
+      },
+    ];
+    await writeCandidateResults({ deleted });
+
+    const summary = await approveFrom(config(), {
+      from: candidateDir,
+      prune: true,
+    });
+    assert.equal(summary.pruned, 1);
+    assert.equal(
+      await pathExists(join(baselinesDir, 'gone', 'desktop.png')),
+      false,
+    );
+    assert.equal(
+      await pathExists(join(baselinesDir, 'gone', 'desktop.a11y.yaml')),
+      false,
+    );
+    // Non-listed baseline untouched.
+    assert.equal(
+      await pathExists(join(baselinesDir, 'keep', 'desktop.png')),
+      true,
+    );
+  });
+
+  it('prunes legacy (0.png / a11y.yaml) orphans', async () => {
+    await mkdir(join(baselinesDir, 'old'), { recursive: true });
+    await writeFile(join(baselinesDir, 'old', '0.png'), 'legacy');
+    await writeFile(join(baselinesDir, 'old', 'a11y.yaml'), 'legacy');
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({
+      deleted: [{ action: 'old', breakpoint: 'legacy', baselinePaths: [] }],
+    });
+
+    await approveFrom(config(), { from: candidateDir, prune: true });
+    assert.equal(await pathExists(join(baselinesDir, 'old', '0.png')), false);
+    assert.equal(
+      await pathExists(join(baselinesDir, 'old', 'a11y.yaml')),
+      false,
+    );
+  });
+
+  it('does not prune when --prune is absent', async () => {
+    await mkdir(join(baselinesDir, 'gone'), { recursive: true });
+    await writeFile(join(baselinesDir, 'gone', 'desktop.png'), 'orphan');
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({
+      deleted: [{ action: 'gone', breakpoint: 'desktop', baselinePaths: [] }],
+    });
+
+    const summary = await approveFrom(config(), { from: candidateDir });
+    assert.equal(summary.pruned, 0);
+    assert.equal(
+      await pathExists(join(baselinesDir, 'gone', 'desktop.png')),
+      true,
+    );
+  });
+});
+
+describe('approveFrom — fail closed (zero writes)', () => {
+  it('rejects a stray top-level file (.sh)', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+    await writeFile(join(candidateDir, 'evil.sh'), 'rm -rf /', 'utf8');
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /Unexpected top-level file/,
+    );
+  });
+
+  it('rejects a stray file inside an action dir (.html)', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeFile(join(candidateDir, 'open', 'x.html'), '<b>', 'utf8');
+    await writeCandidateResults();
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /Unexpected file in candidate tree/,
+    );
+  });
+
+  it('rejects a nested-too-deep path', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await mkdir(join(candidateDir, 'open', 'deeper'), { recursive: true });
+    await writeFile(join(candidateDir, 'open', 'deeper', 'x.png'), 'x');
+    await writeCandidateResults();
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /Unexpected non-file entry/,
+    );
+  });
+
+  it('rejects an invalid action name (uppercase)', async () => {
+    await writeCandidatePng('BadName', 'desktop');
+    await writeCandidateResults();
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /Invalid action directory name/,
+    );
+  });
+
+  it('rejects an invalid breakpoint stem', async () => {
+    const dir = join(candidateDir, 'open');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'has spaces.png'), realPng(1));
+    await writeCandidateResults();
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /Invalid breakpoint name/,
+    );
+  });
+
+  it('rejects a corrupt PNG payload', async () => {
+    const dir = join(candidateDir, 'open');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'desktop.png'), 'not-a-png', 'utf8');
+    await writeCandidateResults();
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /not a decodable PNG/,
+    );
+  });
+
+  it('rejects a missing results.json', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /missing results\.json/,
+    );
+  });
+
+  it('rejects results.json with no environment block', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({ environment: undefined });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /no environment block/,
+    );
+  });
+
+  it('rejects a symlinked candidate file', async () => {
+    const dir = join(candidateDir, 'open');
+    await mkdir(dir, { recursive: true });
+    const target = join(root, 'outside.png');
+    await writeFile(target, realPng(1));
+    await symlink(target, join(dir, 'desktop.png'));
+    await writeCandidateResults();
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /Symlink not allowed/,
+    );
+  });
+
+  it('rejects a dotfile', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeFile(join(candidateDir, '.env'), 'SECRET=1', 'utf8');
+    await writeCandidateResults();
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /Dotfile/,
+    );
+  });
+
+  it('rejects a --from directory that does not exist', async () => {
+    await assert.rejects(
+      approveFrom(config(), { from: join(root, 'nope') }),
+      /directory not found/,
+    );
+  });
+
+  it('rejects a --from path that is a symlink to a directory', async () => {
+    // A symlinked --from is refused outright: even if it points at a real
+    // candidate tree, following it would let a link relocate the trust boundary.
+    const realDir = join(root, 'real-candidates');
+    await mkdir(realDir, { recursive: true });
+    const link = join(root, 'linked-candidates');
+    await symlink(realDir, link);
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: link }),
+      /is a symlink, refusing/,
+    );
+  });
+
+  it('rejects a --from path that is not a directory', async () => {
+    // A plain file passed as --from must abort before any walk/write.
+    const filePath = join(root, 'not-a-dir');
+    await writeFile(filePath, 'i am a file', 'utf8');
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: filePath }),
+      /is not a directory/,
+    );
+  });
+
+  it('commits bytes eagerly, independent of the source after it returns', async () => {
+    // TOCTOU guard, observable half. The fix reads each source ONCE during
+    // validation, retains its bytes on the plan, and writes those retained bytes
+    // — the source is never re-opened. The externally observable consequence is
+    // that promotion is fully eager: once approveFrom returns, the committed
+    // baseline is a pure function of the bytes that passed validation, so
+    // corrupting or deleting the source afterwards cannot change it. (The exact
+    // mid-window swap can't be black-box driven here — `approve.ts` binds
+    // `readFile` as an ESM import, which can't be swapped underneath a running
+    // call — so this asserts the eager-write contract the retained buffer
+    // guarantees rather than reproducing the race itself.)
+    const original = await writeCandidatePng('open', 'desktop', 3);
+    await writeCandidateResults();
+    const source = join(candidateDir, 'open', 'desktop.png');
+
+    await approveFrom(config(), { from: candidateDir });
+
+    // Corrupt, then delete, the source now that promotion has returned. A lazy
+    // or deferred read would surface here; the eager retained-buffer write does
+    // not, so the committed baseline stays the validated pixels.
+    await writeFile(source, 'corrupt-after-promotion', 'utf8');
+    await rm(source);
+    const committed = await readFile(join(baselinesDir, 'open', 'desktop.png'));
+    assert.deepEqual(
+      PNG.sync.read(committed).data,
+      PNG.sync.read(original).data,
+      'committed baseline decodes to the validated pixels',
+    );
+  });
+
+  it('rejects a well-formed results.json with a wrong-shaped environment', async () => {
+    // parseRunResult only checks that `stories` is an array; a false-but-well-
+    // formed environment.actual must still fail the manifest shape check and
+    // abort before any write, so a bad block cannot defeat the drift gate.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({
+      environment: {
+        expected: null,
+        // Missing every manifest field except a bogus one.
+        actual: { platform: 42 } as unknown as EnvironmentManifest,
+        mismatch: false,
+        mismatchKeys: [],
+      },
+    });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /malformed environment block/,
+    );
+  });
+});
+
+describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
+  it('rejects a local-mode candidate tree', async () => {
+    // A local run renders against the per-machine cache on the developer's own
+    // platform; its pixels must never become committed baselines.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({ mode: 'local' });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /not a CI run/,
+    );
+  });
+
+  it('rejects a candidate tree with no recorded mode (pre-mode artifact)', async () => {
+    // An older artifact predating the `mode` field is treated as non-ci and
+    // refused — only a current `mode: 'ci'` run is eligible.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({ mode: undefined });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /pre-mode run, not a CI run/,
+    );
+  });
+
+  it('rejects a candidate tree from a run with failed stories', async () => {
+    // A failed run produces a PARTIAL candidate tree — promoting it would commit
+    // an incomplete baseline set.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({ failed: 2 });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /2 failed story/,
+    );
+  });
+
+  it('rejects a candidate whose results.json omits totals entirely', async () => {
+    // A truncated/foreign artifact can reach the gate with no `totals` object.
+    // Reading `result.totals.failed` would throw a raw TypeError (not an
+    // ApproveFromError) — the guard must fail closed with the trust-boundary type.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({ totals: null });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /missing a numeric totals\.failed/,
+    );
+  });
+
+  it('rejects a candidate whose totals is present but totals.failed is missing', async () => {
+    // The silent-pass trap: `undefined > 0` is `false`, so an absent `failed`
+    // would sail through the promotability gate. It must be refused, not assumed
+    // zero — a run whose fail count is unknown is not a source of truth.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({
+      totals: { stories: 0, passed: 0, changed: 0, new: 0, deleted: 0 },
+    });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /missing a numeric totals\.failed/,
+    );
+  });
+
+  it('rejects a candidate whose totals.failed is non-numeric', async () => {
+    // A non-numeric `failed` (e.g. a string) is neither `> 0` nor throwing —
+    // another silent-pass shape the shape-guard must catch.
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({
+      totals: {
+        stories: 0,
+        passed: 0,
+        changed: 0,
+        failed: 'nope',
+        new: 0,
+        deleted: 0,
+      },
+    });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /missing a numeric totals\.failed/,
+    );
+  });
+
+  it('rejects malformed JSON in results.json through approveFrom', async () => {
+    // The shared reader has its own malformed-JSON test, but approveFrom must
+    // surface it as an ApproveFromError with zero writes — exercise that path
+    // here, not just the reader in isolation.
+    await writeCandidatePng('open', 'desktop');
+    await writeFile(
+      join(candidateDir, 'results.json'),
+      '{ this is not valid json',
+      'utf8',
+    );
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir }),
+      /Malformed results file/,
+    );
+  });
+});
+
+describe('approveFrom — prune safety', () => {
+  it('never deletes outside baselines even for a traversal action name', async () => {
+    await writeCandidatePng('open', 'desktop');
+    // An invalid action name in results.deleted must abort before any delete.
+    await writeCandidateResults({
+      deleted: [
+        { action: '../../etc', breakpoint: 'desktop', baselinePaths: [] },
+      ],
+    });
+    await assertZeroWrites(
+      () => approveFrom(config(), { from: candidateDir, prune: true }),
+      /invalid action name/,
+    );
+  });
+});

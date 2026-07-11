@@ -10,7 +10,7 @@ const ASSETS_SOURCE_DIR = join(moduleDir, 'assets');
 /**
  * Writes the HTML report, the static CSS/JS assets, and the raw `results.json`
  * to the configured report directory. The JSON file is what `tuffgal approve`
- * reads to locate actuals that should be promoted to baselines.
+ * reads to locate the actuals it copies into the local comparison cache.
  */
 export async function writeReport(
   reportDir: string,

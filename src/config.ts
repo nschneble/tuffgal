@@ -118,6 +118,15 @@ export interface PathsConfig {
   report: string;
   /** Storage state cache for `produces`/`needs` label inheritance. */
   authState?: string;
+  /**
+   * Per-machine, gitignored comparison cache for local (advisory) mode. Local
+   * runs self-diff against this instead of the committed `baselines` set, so a
+   * developer's platform pixels never fight CI's. Defaults to `tuffgal/.cache`
+   * (relative to the config dir) — inside the same `tuffgal/` subtree as the
+   * scaffolded `tuffgal/.gitignore`, whose `.cache/` entry ignores it. Committed
+   * baselines are never written here.
+   */
+  localCache?: string;
 }
 
 /**
@@ -226,6 +235,7 @@ const DEFAULTS = {
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',
   authStateRelative: '.auth',
+  localCacheRelative: 'tuffgal/.cache',
   interactiveMode: false,
 } as const;
 
@@ -298,6 +308,9 @@ export function assertValidConfig(input: unknown, source: string): void {
   }
   if (paths.authState !== undefined && typeof paths.authState !== 'string') {
     fail('`paths.authState` must be a string when provided.');
+  }
+  if (paths.localCache !== undefined && typeof paths.localCache !== 'string') {
+    fail('`paths.localCache` must be a string when provided.');
   }
 
   if (typeof config.baseUrl !== 'string') {
@@ -387,6 +400,10 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
       authState: resolve(
         rootDir,
         input.paths.authState ?? DEFAULTS.authStateRelative,
+      ),
+      localCache: resolve(
+        rootDir,
+        input.paths.localCache ?? DEFAULTS.localCacheRelative,
       ),
     },
     baseUrl: input.baseUrl,
