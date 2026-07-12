@@ -4,9 +4,12 @@
  *
  * Builds a fixture `RunResult` covering passed, new, changed, and failed
  * stories, each run at both the `mobile` and `desktop` breakpoints, and
- * opens the report in your web browser.
+ * opens the report in your web browser. By default the fixture also trips
+ * every conditional report section — the environment-mismatch banner and the
+ * deleted (orphaned-baseline) list — so a preview shows the whole surface.
  *
- * `npm run preview`
+ * `npm run preview`             — everything, including banner + deleted
+ * `npm run preview -- --clean`  — happy path: no mismatch, nothing orphaned
  *
  * Outputs to a (throwaway) temp directory.
  */
@@ -15,6 +18,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
+import type { EnvironmentManifest } from '../src/runner/manifest.ts';
 import type { RunResult } from '../src/schema/result.ts';
 import { writeReport } from '../src/reporter/writeReport.ts';
 import { diffPngs } from '../src/screenshots/diff.ts';
@@ -106,7 +110,30 @@ const BP = {
   },
 } as const;
 
+function manifest(
+  overrides: Partial<EnvironmentManifest> = {},
+): EnvironmentManifest {
+  return {
+    schemaVersion: 1,
+    captureSchema: 1,
+    tuffgalVersion: '0.2.0-alpha.1',
+    playwrightVersion: '1.49.0',
+    browser: 'chromium',
+    browserVersion: 'chromium 131.0.6778.33',
+    platform: 'linux',
+    captureMode: 'headless',
+    breakpoints: [
+      { name: 'mobile', width: 375, height: 667 },
+      { name: 'desktop', width: 1280, height: 800 },
+    ],
+    deviceScaleFactor: 1,
+    frozenTime: '2026-06-19T13:58:17.000Z',
+    ...overrides,
+  };
+}
+
 async function main(): Promise<void> {
+  const clean = process.argv.includes('--clean');
   const dir = mkdtempSync(join(tmpdir(), 'tuffgal-preview-'));
   const writeShot = (name: string, png: Buffer): string => {
     const path = join(dir, `${name}.png`);
@@ -131,11 +158,48 @@ async function main(): Promise<void> {
   );
   const settingsDiff = diffPngs(settingsBase, settingsActual, 0.1);
 
+  const actual = manifest();
+  const expected = clean
+    ? actual
+    : manifest({
+        browserVersion: 'chromium 129.0.6668.100',
+        platform: 'darwin',
+      });
+  const deleted = clean
+    ? []
+    : [
+        {
+          action: 'visit-blog',
+          breakpoint: 'desktop',
+          baselinePaths: ['baselines/visit-blog/desktop/0.png'],
+        },
+        {
+          action: 'visit-blog',
+          breakpoint: 'legacy',
+          baselinePaths: ['baselines/visit-blog/0.png'],
+        },
+      ];
+
   const result: RunResult = {
     startedAt: '2026-06-19T13:58:17.000Z',
     finishedAt: '2026-06-19T13:58:52.490Z',
     durationMs: 35490,
-    totals: { stories: 4, passed: 1, changed: 1, failed: 1, new: 1 },
+    mode: 'ci',
+    totals: {
+      stories: 4,
+      passed: 1,
+      changed: 1,
+      failed: 1,
+      new: 1,
+      deleted: deleted.length,
+    },
+    deleted,
+    environment: {
+      expected,
+      actual,
+      mismatch: !clean,
+      mismatchKeys: clean ? [] : ['browserVersion', 'platform'],
+    },
     customCoverage: {
       screens: { total: 12, covered: 9, ratio: 0.75, missing: [] },
       flows: { total: 5, covered: 3, ratio: 0.6, missing: [] },
