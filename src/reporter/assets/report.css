@@ -364,6 +364,86 @@ h2 {
   outline-offset: 2px;
 }
 
+/* Breakpoint filter — the SECOND, independent single-select filter dimension,
+   rendered below the status totals inside the summary region (only for
+   multi-breakpoint runs). A role="group" row of neutral pills; report.js ANDs it
+   with the status filter. The row sits on the page --bg with a top gap that also
+   guarantees ≥24px vertical spacing between the two pill rows (2.5.8). */
+.breakpoint-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* Neutral pills — no status hue, so the two filter rows read as siblings by
+   geometry, not color. Same pill geometry/radius as the status filter (Wave 1).
+   Default is an OUTLINE pill: transparent bg, --text-muted border (≥3:1 vs --bg
+   in both themes → 1.4.11), --text label (≥4.5:1 → 1.4.3). Hover brightens the
+   border + adds a faint neutral tint. Pressed is a FILLED pill: --text fill,
+   --bg label, bold weight — the ONLY filled + bold pill, so the pressed state is
+   never conveyed by color alone (1.4.1); the inverse fill clears 4.5:1 in both
+   themes. Focus ring is --accent 2px / offset 2px, painted on the page --bg
+   outside the pill — identical to the status filter. Target size ≥24×24 via
+   min-height/min-width (2.5.8). Stays a <button>: it filters in place. */
+.breakpoint-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0.2rem 0.6rem;
+  line-height: 1.2;
+  border: 1px solid var(--text-muted);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition-property: scale, color, background-color, border-color;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+.breakpoint-filter .breakpoint-name {
+  color: inherit;
+  font-weight: inherit;
+  text-transform: none;
+}
+
+.breakpoint-filter .breakpoint-dimensions {
+  color: var(--text-subtle);
+}
+
+.breakpoint-filter:hover:not([aria-pressed='true']) {
+  border-color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.breakpoint-filter[aria-pressed='true'] {
+  cursor: default;
+  user-select: none;
+  font-weight: 600;
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+/* The pressed pill's dimensions ride the inverse fill: --bg on --text is the
+   same ≥4.5:1 pair as the label, so they stay legible. */
+.breakpoint-filter[aria-pressed='true'] .breakpoint-dimensions {
+  color: color-mix(in srgb, var(--bg) 65%, var(--text));
+}
+
+.breakpoint-filter:active {
+  scale: 0.96;
+}
+
+.breakpoint-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -933,10 +1013,12 @@ summary.action-row:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
   summary.action-row::after,
-  .chip {
+  .chip,
+  .breakpoint-filter {
     transition: none;
   }
-  .chip:active {
+  .chip:active,
+  .breakpoint-filter:active {
     scale: none;
   }
 }

@@ -239,35 +239,54 @@
       });
     }
 
-    document
-      .querySelectorAll('.shot-interactive')
-      .forEach(function (fieldset) {
-        setupInteractiveShots(fieldset);
-      });
+    document.querySelectorAll('.shot-interactive').forEach(function (fieldset) {
+      setupInteractiveShots(fieldset);
+    });
   })();
 
-  // Status filter for the stories list. Each status total in the summary row is
-  // a native <button aria-pressed> single-select filter; clicking one toggles
-  // `hidden` on every <li.story> whose `data-status` doesn't match its
-  // `data-filter` token ("all" clears the filter). Exactly one button is pressed
-  // at all times (default: the "all/stories" button). Re-clicking the active
-  // non-"all" filter reverts to "all". Live-region updates are debounced by
-  // ~150ms; the visual hide/show is applied immediately.
+  // Two-dimension filter for the stories list: a STATUS axis (the summary
+  // totals) and an independent BREAKPOINT axis (the neutral pill row below
+  // them). Each axis is a set of native <button aria-pressed> single-select
+  // toggles keyed to a `data-filter` / `data-breakpoint-filter` TOKEN, with its
+  // own default-pressed "all" reset and its own single-pressed invariant.
+  //
+  // The two axes are ANDed: a story shows iff it has at least one action that
+  // matches BOTH the active status AND the active breakpoint. apply() is a
+  // single top-down pass — story → [data-breakpoint] container → action — that
+  // reads BOTH active tokens, so re-running it after either axis changes yields
+  // the current intersection (no stale hides carried between axes). The
+  // breakpoint pills render only for multi-breakpoint runs, so on a
+  // single-breakpoint run this collapses to the status-only behavior with the
+  // bpFilter pinned at "all".
+  //
+  // Live-region updates are debounced by ~150ms; the visual hide/show is applied
+  // immediately.
   (function () {
-    var filterButtons = Array.prototype.slice.call(
+    var statusButtons = Array.prototype.slice.call(
       document.querySelectorAll('.summary-filter'),
     );
-    if (filterButtons.length === 0) return;
+    if (statusButtons.length === 0) return;
+    var bpButtons = Array.prototype.slice.call(
+      document.querySelectorAll('.breakpoint-filter'),
+    );
     var list = document.querySelector('.stories');
     var empty = document.querySelector('.stories-empty');
     if (!list || !empty) return;
 
     var stories = Array.prototype.slice.call(list.querySelectorAll('.story'));
     var total = stories.length;
-    var allButton =
-      filterButtons.find(function (button) {
+
+    // Active token per axis; "all" means the axis imposes no constraint.
+    var statusFilter = 'all';
+    var bpFilter = 'all';
+
+    var statusAllButton =
+      statusButtons.find(function (button) {
         return button.getAttribute('data-filter') === 'all';
-      }) || filterButtons[0];
+      }) || statusButtons[0];
+    var bpAllButton = bpButtons.find(function (button) {
+      return button.getAttribute('data-breakpoint-filter') === 'all';
+    });
 
     // Cached for the zero-match disable + focus-rescue logic in apply(). The
     // scope word is now static markup ("screenshots" visible, " all screenshots"
@@ -278,10 +297,10 @@
       '[data-bulk-toggle="collapse"]',
     );
 
-    // Maintain the single-pressed invariant: exactly one filter button carries
-    // aria-pressed="true".
-    function setPressed(active) {
-      filterButtons.forEach(function (button) {
+    // Maintain a single-pressed invariant WITHIN one axis: exactly one button in
+    // `buttons` carries aria-pressed="true".
+    function setPressed(buttons, active) {
+      buttons.forEach(function (button) {
         button.setAttribute(
           'aria-pressed',
           button === active ? 'true' : 'false',
@@ -294,8 +313,8 @@
     }
 
     // True when `container` holds at least one `.action` that is not hidden.
-    // Drives whether a breakpoint group / actions list earns its place under an
-    // active filter.
+    // Drives whether a [data-breakpoint] container earns its place under the
+    // active status filter.
     function hasVisibleAction(container) {
       return Array.prototype.some.call(
         container.querySelectorAll('.action'),
@@ -305,73 +324,76 @@
       );
     }
 
-    // Apply the active filter top-down: story → breakpoint group → action. A
-    // non-"all" filter does more than hide whole stories — inside a matching
-    // story it also prunes the actions (and the now-empty breakpoint groups /
-    // actions lists) that don't match, so e.g. the "changed" view shows ONLY the
-    // changed rows of a changed story, never the pass rows that happen to share
-    // it. Expand-all then opens only those surviving rows.
-    function applyToStory(story, value) {
-      var actions = Array.prototype.slice.call(
-        story.querySelectorAll('.action'),
+    // Apply BOTH active axes to one story, top-down:
+    //   1. Each [data-breakpoint] container (a .breakpoint-group div OR the flat
+    //      <ol class="actions">) is breakpoint-eligible when bpFilter is "all"
+    //      or its data-breakpoint equals bpFilter. A non-eligible container is
+    //      hidden whole; its actions never count.
+    //   2. Inside an eligible container, each action is status-eligible when
+    //      statusFilter is "all" or its data-status equals the TOKEN ("pass"),
+    //      not the visible label. Non-matching actions are hidden.
+    //   3. A container that pruned to zero visible actions is hidden (emptiness).
+    //   4. The story shows iff at least one container survives with a visible
+    //      action — i.e. some action matched BOTH axes.
+    // Every action lives under exactly one [data-breakpoint] container, so this
+    // single walk covers the whole story with no double-counting.
+    function applyToStory(story) {
+      var containers = Array.prototype.slice.call(
+        story.querySelectorAll('[data-breakpoint]'),
       );
-      var groups = Array.prototype.slice.call(
-        story.querySelectorAll('.breakpoint-group'),
-      );
-      var lists = Array.prototype.slice.call(
-        story.querySelectorAll('ol.actions'),
-      );
 
-      // Story visibility keeps the worst-wins rollup semantics: a story shows
-      // only when its own status matches (or the filter is "all").
-      var storyMatches =
-        value === 'all' || story.getAttribute('data-status') === value;
-      if (!storyMatches) {
-        story.hidden = true;
-        // Clear inner pruning so switching back to a matching filter — or to
-        // "all" — starts from a clean slate rather than inheriting stale hides.
-        actions.forEach(show);
-        groups.forEach(show);
-        lists.forEach(show);
-        return false;
-      }
-
-      if (value === 'all') {
-        story.hidden = false;
-        actions.forEach(show);
-        groups.forEach(show);
-        lists.forEach(show);
-        return true;
-      }
-
-      // Matching story under a specific filter: compare each action's
-      // data-status against the button's data-filter TOKEN ("pass"), not its
-      // visible label ("passed"), so the "passed" filter matches the `pass`
-      // actions instead of silently emptying every story.
-      actions.forEach(function (action) {
-        action.hidden = action.getAttribute('data-status') !== value;
-      });
-      groups.forEach(function (group) {
-        group.hidden = !hasVisibleAction(group);
-      });
-      lists.forEach(function (listEl) {
-        listEl.hidden = !hasVisibleAction(listEl);
+      var storyVisible = false;
+      containers.forEach(function (container) {
+        var bpMatches =
+          bpFilter === 'all' ||
+          container.getAttribute('data-breakpoint') === bpFilter;
+        if (!bpMatches) {
+          container.hidden = true;
+          // Clear inner action hides so a later matching breakpoint starts from
+          // a clean slate rather than inheriting a stale status prune.
+          Array.prototype.forEach.call(
+            container.querySelectorAll('.action'),
+            show,
+          );
+          return;
+        }
+        Array.prototype.forEach.call(
+          container.querySelectorAll('.action'),
+          function (action) {
+            action.hidden =
+              statusFilter !== 'all' &&
+              action.getAttribute('data-status') !== statusFilter;
+          },
+        );
+        var containerVisible = hasVisibleAction(container);
+        container.hidden = !containerVisible;
+        if (containerVisible) storyVisible = true;
       });
 
-      // A worst-wins rollup guarantees at least one matching action, but guard
-      // the invariant: a story that pruned to nothing is hidden and uncounted
-      // so the "N of M" announcement stays truthful.
-      var storyVisible = actions.some(function (action) {
-        return !action.hidden;
-      });
       story.hidden = !storyVisible;
       return storyVisible;
     }
 
-    function apply(value, trigger) {
+    // The short "name width" label for a breakpoint pill's live-region echo
+    // (e.g. "mobile 375"), read from the pressed pill's visible name + width.
+    // The status pill's echo reuses the shared filterLabel helper. A missing or
+    // "all" pill contributes nothing.
+    function breakpointLabel(button) {
+      if (!button) return '';
+      if (button.getAttribute('data-breakpoint-filter') === 'all') return '';
+      var nameEl = button.querySelector('.breakpoint-name');
+      var name = nameEl ? nameEl.textContent.trim() : '';
+      var dimsEl = button.querySelector('.breakpoint-dimensions');
+      // The decorative "375×667" carries the width before the × glyph; take just
+      // the width for the short form. Absent dimensions → bare name.
+      var width = dimsEl ? dimsEl.textContent.split('×')[0].trim() : '';
+      return width ? name + ' ' + width : name;
+    }
+
+    function apply(trigger) {
       var visible = 0;
       stories.forEach(function (story) {
-        if (applyToStory(story, value)) visible += 1;
+        if (applyToStory(story)) visible += 1;
       });
       var hasNone = visible === 0;
       list.hidden = hasNone;
@@ -389,18 +411,13 @@
       ) {
         trigger.focus();
       }
-      // Disable both bulk-toggle buttons when the active filter matches zero
+      // Disable both bulk-toggle buttons when the intersection matches zero
       // stories — there is nothing to expand/collapse. Runs on EVERY apply()
-      // call (including "all"), so selecting a matching filter re-enables them.
+      // call, so a filter change that re-reveals stories re-enables them.
       if (expandButton) expandButton.disabled = hasNone;
       if (collapseButton) collapseButton.disabled = hasNone;
 
-      var message =
-        value === 'all'
-          ? 'Showing all ' + total + ' stories'
-          : 'Showing ' + visible + ' of ' + total + ' stories';
-
-      statusRegion.writeDebounced(message, 150);
+      statusRegion.writeDebounced(filterMessage(visible), 150);
 
       // Post-apply focus-loss guard: if filtering left focus on nothing, the
       // body, or inside a now-[hidden] subtree, return it to the control that
@@ -416,22 +433,76 @@
       }
     }
 
-    filterButtons.forEach(function (button) {
+    // Compose the live-region sentence for the current axis state (count =
+    // visible stories after the intersection). Four combos:
+    //   both all       → "Showing all N stories"
+    //   status only    → "Showing {statusLabel}: N stories"
+    //   breakpoint only → "Showing {breakpointLabel}: N stories"
+    //   both           → "Showing {statusLabel} at {breakpointLabel}: N stories"
+    // Singular/plural on stor(y|ies). aria-atomic replaces the whole sentence.
+    function filterMessage(visible) {
+      var noun = visible === 1 ? 'story' : 'stories';
+      var statusActive = statusFilter !== 'all';
+      var bpActive = bpFilter !== 'all';
+      if (!statusActive && !bpActive) {
+        return 'Showing all ' + total + ' ' + noun;
+      }
+      var statusLabel = filterLabel(
+        statusButtons.find(function (button) {
+          return button.getAttribute('aria-pressed') === 'true';
+        }),
+      );
+      var bpLabel = breakpointLabel(
+        bpButtons.find(function (button) {
+          return button.getAttribute('aria-pressed') === 'true';
+        }),
+      );
+      var scope;
+      if (statusActive && bpActive) {
+        scope = statusLabel + ' at ' + bpLabel;
+      } else if (statusActive) {
+        scope = statusLabel;
+      } else {
+        scope = bpLabel;
+      }
+      return 'Showing ' + scope + ': ' + visible + ' ' + noun;
+    }
+
+    statusButtons.forEach(function (button) {
       button.addEventListener('click', function () {
         var token = button.getAttribute('data-filter');
         var isActive = button.getAttribute('aria-pressed') === 'true';
-        // Re-clicking the active, non-"all" filter reverts to "all". Focus stays
-        // on the clicked button — it is in the summary row and never hidden by
-        // its own action.
+        // Re-clicking the active, non-"all" filter reverts that axis to "all".
+        // Focus stays on the clicked button — it is in the summary row and never
+        // hidden by its own action.
         if (isActive && token !== 'all') {
-          setPressed(allButton);
-          apply('all', button);
+          setPressed(statusButtons, statusAllButton);
+          statusFilter = 'all';
+          apply(button);
           return;
         }
         // Re-clicking the already-active "all" button is a no-op.
         if (isActive) return;
-        setPressed(button);
-        apply(token, button);
+        setPressed(statusButtons, button);
+        statusFilter = token;
+        apply(button);
+      });
+    });
+
+    bpButtons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var token = button.getAttribute('data-breakpoint-filter');
+        var isActive = button.getAttribute('aria-pressed') === 'true';
+        if (isActive && token !== 'all') {
+          setPressed(bpButtons, bpAllButton);
+          bpFilter = 'all';
+          apply(button);
+          return;
+        }
+        if (isActive) return;
+        setPressed(bpButtons, button);
+        bpFilter = token;
+        apply(button);
       });
     });
   })();
@@ -472,9 +543,7 @@
       if (!shouldOpen) {
         var active = document.activeElement;
         var openDetails =
-          active &&
-          active.closest &&
-          active.closest('details.shots[open]');
+          active && active.closest && active.closest('details.shots[open]');
         if (openDetails) {
           var summary = openDetails.querySelector('summary');
           if (summary) summary.focus();
@@ -506,7 +575,9 @@
       // announcement reflects the filter. Read the pressed filter button at
       // click time via the shared filterLabel helper. No pressed button falls
       // back to "all".
-      var pressed = document.querySelector('.summary-filter[aria-pressed="true"]');
+      var pressed = document.querySelector(
+        '.summary-filter[aria-pressed="true"]',
+      );
       var name = filterLabel(pressed);
       bulkRegion.write(verb + ' ' + name + ' in ' + count + ' stories');
     }

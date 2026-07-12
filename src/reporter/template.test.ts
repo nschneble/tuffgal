@@ -606,9 +606,11 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     });
     const html = renderReport(result, REPORT_DIR);
 
-    // Two breakpoint groups, one per mode, in first-seen (run-set) order.
+    // Two breakpoint groups, one per mode, in first-seen (run-set) order. Each
+    // group div now also carries an additive data-breakpoint filter hook, so
+    // count the class attribute rather than the bare closing tag.
     assert.equal(
-      countOccurrences(html, '<div class="breakpoint-group">'),
+      countOccurrences(html, '<div class="breakpoint-group" data-breakpoint='),
       2,
       'one breakpoint-group div per distinct mode',
     );
@@ -709,8 +711,10 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     const html = renderReport(result, REPORT_DIR);
 
     assert.ok(
-      html.includes('<ol class="actions" aria-label="Actions">'),
-      'single-mode story renders the flat aria-label="Actions" list',
+      html.includes(
+        '<ol class="actions" aria-label="Actions" data-breakpoint="desktop">',
+      ),
+      'single-mode story renders the flat aria-label="Actions" list (with its additive data-breakpoint hook)',
     );
     assert.ok(
       !html.includes('<div class="breakpoint-group">'),
@@ -1536,6 +1540,419 @@ describe('renderActionNotes — candidate + a11y-drift notes', () => {
     assert.ok(
       candidateIndex < a11yIndex,
       'candidate note precedes the a11y-drift note',
+    );
+  });
+});
+
+describe('renderBreakpointFilters — the breakpoint filter dimension', () => {
+  // A run spanning two distinct breakpoints across its stories: mobile 375×667
+  // and desktop 1280×800. The filter group renders once, from the distinct
+  // breakpoints in first-seen order.
+  function multiBreakpointResult() {
+    return makeRunResult({
+      totals: {
+        stories: 2,
+        passed: 1,
+        changed: 1,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
+      stories: [
+        makeStory({
+          story: 'home page renders',
+          file: 'stories/home.story.json',
+          status: 'pass',
+          actions: [
+            makeAction({
+              action: 'visit-home',
+              status: 'pass',
+              breakpoint: 'mobile',
+              breakpointWidth: 375,
+              breakpointHeight: 667,
+            }),
+            makeAction({
+              action: 'visit-home',
+              status: 'pass',
+              breakpoint: 'desktop',
+              breakpointWidth: 1280,
+              breakpointHeight: 800,
+            }),
+          ],
+        }),
+        makeStory({
+          story: 'settings drifted',
+          file: 'stories/settings.story.json',
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              breakpoint: 'desktop',
+              breakpointWidth: 1280,
+              breakpointHeight: 800,
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it('renders the role=group filter with a default-pressed "all breakpoints" reset', () => {
+    const html = renderReport(multiBreakpointResult(), REPORT_DIR);
+    assert.ok(
+      html.includes(
+        '<div class="breakpoint-filters" role="group" aria-label="Filter by breakpoint">',
+      ),
+      'breakpoint filter group is a role=group with an accessible label',
+    );
+    assert.ok(
+      html.includes(
+        '<button type="button" class="breakpoint-filter" data-breakpoint-filter="all" aria-pressed="true" aria-controls="stories-list">',
+      ),
+      'the "all breakpoints" reset is pressed by default and controls the list',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="indicator label">all breakpoints</span><span class="sr-only">, show results at every breakpoint</span>',
+      ),
+      'reset carries its visible label + sr-only action suffix',
+    );
+    // The breakpoint group lives inside the summary section, below the totals.
+    const summaryOpen = html.indexOf('<section class="summary"');
+    const groupIndex = html.indexOf('class="breakpoint-filters"');
+    const summaryClose = html.indexOf('</section>', summaryOpen);
+    assert.ok(
+      summaryOpen < groupIndex && groupIndex < summaryClose,
+      'the breakpoint filter group renders inside the summary section',
+    );
+    // It is a sibling of the totals <ul>, NOT nested inside it.
+    const ulClose = html.indexOf('</ul>', summaryOpen);
+    assert.ok(
+      ulClose < groupIndex,
+      'the breakpoint group is a sibling AFTER the totals <ul>, not nested in it',
+    );
+  });
+
+  it('renders one unpressed pill per distinct breakpoint in first-seen order, token distinct from label', () => {
+    const html = renderReport(multiBreakpointResult(), REPORT_DIR);
+    // Exactly two breakpoint pills (mobile, desktop) plus the "all" reset.
+    assert.equal(
+      countOccurrences(html, 'class="breakpoint-filter"'),
+      3,
+      'three breakpoint filter buttons: all + mobile + desktop',
+    );
+    assert.ok(
+      html.includes(
+        '<button type="button" class="breakpoint-filter" data-breakpoint-filter="mobile" aria-pressed="false" aria-controls="stories-list">',
+      ),
+      'mobile pill carries the mobile matcher token, unpressed',
+    );
+    assert.ok(
+      html.includes(
+        '<button type="button" class="breakpoint-filter" data-breakpoint-filter="desktop" aria-pressed="false" aria-controls="stories-list">',
+      ),
+      'desktop pill carries the desktop matcher token, unpressed',
+    );
+    // The visible LABEL carries the breakpoint name; the TOKEN drives matching.
+    assert.ok(
+      html.includes('<span class="breakpoint-name">mobile</span>'),
+      'mobile pill shows the human name in .breakpoint-name',
+    );
+    // First-seen order: mobile (first action) precedes desktop.
+    const mobileIndex = html.indexOf('data-breakpoint-filter="mobile"');
+    const desktopIndex = html.indexOf('data-breakpoint-filter="desktop"');
+    assert.ok(
+      mobileIndex !== -1 && desktopIndex !== -1 && mobileIndex < desktopIndex,
+      'pills render in first-seen order (mobile before desktop)',
+    );
+    // Exactly one pressed pill in the group at load (the reset).
+    const groupStart = html.indexOf('class="breakpoint-filters"');
+    const groupEnd = html.indexOf('</div>', groupStart);
+    const group = html.slice(groupStart, groupEnd);
+    assert.equal(
+      countOccurrences(group, 'aria-pressed="true"'),
+      1,
+      'exactly one breakpoint pill is pressed at load (the reset)',
+    );
+    // Never an aria-label on the pills (would drop the visible name).
+    assert.ok(
+      !/class="breakpoint-filter"[^>]*aria-label/.test(html),
+      'breakpoint pills never carry an aria-label',
+    );
+  });
+
+  it('reuses the dimensions idiom: decorative aria-hidden glyph + sr-only longhand', () => {
+    const html = renderReport(multiBreakpointResult(), REPORT_DIR);
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-dimensions" aria-hidden="true">375×667</span><span class="sr-only"> 375 by 667 pixels</span>',
+      ),
+      'mobile pill dimensions render as aria-hidden 375×667 + sr-only longhand',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-dimensions" aria-hidden="true">1280×800</span><span class="sr-only"> 1280 by 800 pixels</span>',
+      ),
+      'desktop pill dimensions render as aria-hidden 1280×800 + sr-only longhand',
+    );
+  });
+
+  it('renders NO breakpoint filter group for a single-breakpoint run (<= 1 distinct)', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            status: 'pass',
+            actions: [
+              makeAction({
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      !html.includes('class="breakpoint-filters"'),
+      'no breakpoint filter group when the run spans a single breakpoint',
+    );
+    assert.ok(
+      !html.includes('data-breakpoint-filter'),
+      'no breakpoint filter buttons render for a single-breakpoint run',
+    );
+  });
+
+  it('renders NO breakpoint filter group when there are no stories', () => {
+    const html = renderReport(makeRunResult(), REPORT_DIR);
+    assert.ok(
+      !html.includes('class="breakpoint-filters"'),
+      'no breakpoint filter group for an empty run',
+    );
+  });
+
+  it('renders the legacy pill (name + sr-only clarifier) for a blank-breakpoint bucket', () => {
+    // One story tagged desktop, one carrying no breakpoint (the defensive
+    // parse-guard bucket) → two distinct buckets → the filter renders, and the
+    // blank bucket reads as the reserved "legacy" token/label.
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 2,
+          passed: 2,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            file: 'stories/tagged.story.json',
+            status: 'pass',
+            actions: [
+              makeAction({
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+          makeStory({
+            file: 'stories/untagged.story.json',
+            status: 'pass',
+            actions: [makeAction()],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes('data-breakpoint-filter="legacy"'),
+      'the blank bucket maps to the reserved "legacy" matcher token',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-name">legacy<span class="sr-only"> (pre-breakpoint layout)</span></span>',
+      ),
+      'the legacy pill reads "legacy" with the shared pre-breakpoint clarifier',
+    );
+  });
+});
+
+describe('data-breakpoint hooks — every action under exactly one container', () => {
+  it('adds data-breakpoint to each breakpoint-group div in a multi-mode story', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            status: 'pass',
+            actions: [
+              makeAction({
+                breakpoint: 'mobile',
+                breakpointWidth: 375,
+                breakpointHeight: 667,
+              }),
+              makeAction({
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes('<div class="breakpoint-group" data-breakpoint="mobile">'),
+      'mobile group carries data-breakpoint="mobile"',
+    );
+    assert.ok(
+      html.includes('<div class="breakpoint-group" data-breakpoint="desktop">'),
+      'desktop group carries data-breakpoint="desktop"',
+    );
+  });
+
+  it('adds data-breakpoint to the flat <ol> of a single-mode story (no visible chrome)', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            status: 'pass',
+            actions: [
+              makeAction({
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        '<ol class="actions" aria-label="Actions" data-breakpoint="desktop">',
+      ),
+      'the flat single-mode list carries data-breakpoint but keeps its aria-label',
+    );
+    // No visible breakpoint chrome is added to a single-mode story.
+    assert.ok(
+      !html.includes('class="breakpoint-group"'),
+      'single-mode story still renders no breakpoint-group chrome',
+    );
+    assert.ok(
+      !html.includes('class="breakpoint-label"'),
+      'single-mode story still renders no breakpoint caption',
+    );
+  });
+
+  it('maps a blank-breakpoint flat list to data-breakpoint="legacy"', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [makeStory({ status: 'pass', actions: [makeAction()] })],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes('data-breakpoint="legacy"'),
+      'the blank-bucket flat list hooks onto the reserved legacy token',
+    );
+    assert.ok(
+      !html.includes('data-breakpoint=""'),
+      'the hook is never emitted as an empty string',
+    );
+  });
+
+  it('never leaves an action outside a [data-breakpoint] container (multi-mode)', () => {
+    // Selector invariant: the count of data-breakpoint containers equals the
+    // number of distinct modes, and each <ol class="actions"> is either the
+    // hooked flat list or nested under a hooked group div — so every action row
+    // has exactly one [data-breakpoint] ancestor-or-self.
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            status: 'pass',
+            actions: [
+              makeAction({
+                action: 'a',
+                breakpoint: 'mobile',
+                breakpointWidth: 375,
+                breakpointHeight: 667,
+              }),
+              makeAction({
+                action: 'b',
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    // Two group divs, each hooked; no flat aria-label="Actions" list in
+    // multi-mode, so the only action lists are the ones nested under a hooked
+    // group.
+    assert.equal(
+      countOccurrences(html, 'data-breakpoint="mobile"'),
+      1,
+      'exactly one mobile container',
+    );
+    assert.equal(
+      countOccurrences(html, 'data-breakpoint="desktop"'),
+      1,
+      'exactly one desktop container',
+    );
+    assert.ok(
+      !html.includes('<ol class="actions" aria-label="Actions"'),
+      'multi-mode never emits an un-hooked flat aria-label="Actions" list',
     );
   });
 });
