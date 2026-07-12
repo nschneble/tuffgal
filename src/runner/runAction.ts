@@ -469,6 +469,9 @@ async function captureAndCompare(
         baselinePath: paths.baseline,
         actualPath: paths.actual,
         failureMessage: error.message,
+        // Structured mirror of `error.message` so the reporter renders the
+        // dimensions in an accessible split idiom rather than parsing the prose.
+        sizeMismatch: { baseline: error.baseline, actual: error.actual },
         a11yBaselinePath: a11yBaselinePathForRead,
         a11yActualPath: paths.a11yActual,
       });

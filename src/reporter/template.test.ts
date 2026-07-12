@@ -471,11 +471,74 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
   });
 
-  it('shows the mismatch reason in the diff-stats slot when a changed action has no diff', () => {
+  it('renders the mismatch reason as one accessible clause from the structured pair', () => {
     // A dimension mismatch yields status:changed with a failureMessage but no
     // diffRatio/diffPath. Without a note the row reads as a "changed" with an
     // empty stats slot and no diff tab — an unexplained no-op. The recorded
-    // reason must fill the slot the "% differs" stat normally occupies.
+    // reason must fill the slot the "% differs" stat normally occupies — folded
+    // into ONE sentence, each dimension pair rendered in the split idiom (× glyph
+    // for sight, spoken "W by H pixels" for AT), read from the structured
+    // sizeMismatch pair rather than parsed from the message.
+    const result = makeRunResult({
+      totals: {
+        stories: 1,
+        passed: 0,
+        changed: 1,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              failureMessage:
+                'Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+              sizeMismatch: {
+                baseline: { width: 1280, height: 800 },
+                actual: { width: 1280, height: 2500 },
+              },
+              actualPath: '/fake/report/dir/shots/settings.actual.png',
+              baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes('diff-stats--unavailable'),
+      'the unavailable note variant renders',
+    );
+    assert.ok(
+      html.includes(
+        'No pixel diff — screenshot size changed from <span class="breakpoint-dimensions" aria-hidden="true">1280×800</span><span class="sr-only">1280 by 800 pixels</span> to <span class="breakpoint-dimensions" aria-hidden="true">1280×2500</span><span class="sr-only">1280 by 2500 pixels</span>.',
+      ),
+      'the note is one clause with both dimension pairs in the split idiom',
+    );
+    assert.ok(
+      html.includes('1280 by 800 pixels') &&
+        html.includes('1280 by 2500 pixels'),
+      'AT hears the spoken longhand for both baseline and actual, never a bare x',
+    );
+    assert.ok(
+      !html.includes('1280x800') && !html.includes('1280x2500'),
+      'no raw "x"-delimited dimensions leak into the rendered note',
+    );
+    assert.ok(
+      !html.includes('differs</span>'),
+      'no "% differs" stat renders when there is no diffRatio',
+    );
+  });
+
+  it('falls back to the escaped failureMessage when the structured pair is absent', () => {
+    // Older or malformed results may carry failureMessage without a structured
+    // sizeMismatch pair. A wrong parse is worse than the old prose, so the note
+    // degrades to the escaped message rather than guess dimensions.
     const result = makeRunResult({
       totals: {
         stories: 1,
@@ -505,17 +568,17 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 
     assert.ok(
       html.includes('diff-stats--unavailable'),
-      'the unavailable note variant renders',
+      'the unavailable note variant still renders on the fallback path',
     );
     assert.ok(
       html.includes(
         'No pixel diff. Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
       ),
-      'the recorded mismatch reason fills the diff-stats slot',
+      'the recorded prose message fills the slot when no structured pair exists',
     );
     assert.ok(
-      !html.includes('differs</span>'),
-      'no "% differs" stat renders when there is no diffRatio',
+      !html.includes('breakpoint-dimensions'),
+      'no split-idiom markup is fabricated without a structured pair',
     );
   });
 
@@ -1033,6 +1096,10 @@ describe('renderScreenshots — interactiveMode dimension-mismatch fallback', ()
               baselinePath: '/fake/report/dir/shots/settings.baseline.png',
               failureMessage:
                 'Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+              sizeMismatch: {
+                baseline: { width: 1280, height: 800 },
+                actual: { width: 1280, height: 2500 },
+              },
               ...actionOverrides,
             }),
           ],

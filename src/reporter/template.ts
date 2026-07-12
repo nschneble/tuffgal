@@ -744,13 +744,35 @@ const SHOT_ALT: Record<
  * a diff is computed, so `diffRatio` is absent and there is no diff image to
  * show — surface the recorded reason here, in the slot the "% differs" stat
  * would normally occupy, so a "changed" row never reads as an unexplained no-op.
+ *
+ * The mismatch note folds baseline and actual sizes into ONE sentence and renders
+ * each dimension pair in the file's split idiom (a `breakpoint-dimensions` span
+ * carrying the `×` glyph for sight, plus an `sr-only` "W by H pixels" longhand for
+ * AT — never a bare `x`). It reads those numbers from the structured
+ * `action.sizeMismatch` pair, NOT by parsing `failureMessage`. When that pair is
+ * absent (a malformed or older result), it falls back to escaping the recorded
+ * `failureMessage` prose rather than risk a wrong parse.
  */
 function renderDiffStats(action: ActionResult, diffStatsId: string): string {
-  return action.diffRatio !== undefined
-    ? `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`
-    : action.status === 'changed' && action.failureMessage
-      ? `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">No pixel diff. ${escapeHtml(action.failureMessage)}</span></p>`
-      : '';
+  if (action.diffRatio !== undefined) {
+    return `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`;
+  }
+  if (action.status !== 'changed' || !action.failureMessage) {
+    return '';
+  }
+  const label = action.sizeMismatch
+    ? `No pixel diff — screenshot size changed from ${dimensionPair(action.sizeMismatch.baseline)} to ${dimensionPair(action.sizeMismatch.actual)}.`
+    : `No pixel diff. ${escapeHtml(action.failureMessage)}`;
+  return `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">${label}</span></p>`;
+}
+
+/**
+ * A `width`×`height` pair in the file's split idiom: the `×` glyph is sight-only
+ * (aria-hidden), and AT hears the spoken "W by H pixels" longhand instead of an
+ * ambiguous "x". Shared with the breakpoint filters (see :219, :493).
+ */
+function dimensionPair(size: { width: number; height: number }): string {
+  return `<span class="breakpoint-dimensions" aria-hidden="true">${size.width}×${size.height}</span><span class="sr-only">${size.width} by ${size.height} pixels</span>`;
 }
 
 /**
