@@ -1475,7 +1475,7 @@ describe('renderActionNotes — candidate + a11y-drift notes', () => {
     );
     assert.ok(
       html.includes(
-        '<p class="candidate-note" role="note">This render is the proposed new baseline.</p>',
+        `<p class="candidate-note" role="note">This run's actual screenshot is the proposed new baseline.</p>`,
       ),
       'changed action carries the candidate note',
     );

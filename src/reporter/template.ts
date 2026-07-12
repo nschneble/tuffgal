@@ -569,8 +569,11 @@ ${statusBadge(action.status)}
  * BOTH with no double-announce.
  *
  *   - candidate note: on `changed`/`new` rows only — supplementary prose flagging
- *     "this render is the proposed new baseline". No aria wiring; it does not
- *     duplicate the status badge's sr-only label.
+ *     "this run's actual screenshot is the proposed new baseline". Names the
+ *     Actual variant explicitly (the note sits OUTSIDE the <details>, so "this
+ *     render" would point at whichever tab is selected — or nothing when
+ *     collapsed). No aria wiring; it does not duplicate the status badge's
+ *     sr-only label.
  *   - a11y-drift note: gated STRICTLY on `a11yChanged === true`, NEVER inferred
  *     from a missing `diffPath` (a size-mismatch `changed` row also lacks a
  *     diffPath yet deliberately omits `a11yChanged`; keying on `!diffPath` would
@@ -586,7 +589,7 @@ function renderActionNotes(action: ActionResult, reportDir: string): string {
   const notes: string[] = [];
   if (action.status === 'changed' || action.status === 'new') {
     notes.push(
-      `<p class="candidate-note" role="note">This render is the proposed new baseline.</p>`,
+      `<p class="candidate-note" role="note">This run's actual screenshot is the proposed new baseline.</p>`,
     );
   }
   if (action.a11yChanged === true) {
