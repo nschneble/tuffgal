@@ -244,20 +244,35 @@
     });
   })();
 
-  // Two-dimension filter for the stories list: a STATUS axis (the summary
-  // totals) and an independent BREAKPOINT axis (the neutral pill row below
-  // them). Each axis is a set of native <button aria-pressed> single-select
-  // toggles keyed to a `data-filter` / `data-breakpoint-filter` TOKEN, with its
-  // own default-pressed "all" reset and its own single-pressed invariant.
+  // Two-dimension filter for the stories list, with a DIFFERENT granularity per
+  // axis:
   //
-  // The two axes are ANDed: a story shows iff it has at least one action that
-  // matches BOTH the active status AND the active breakpoint. apply() is a
-  // single top-down pass — story → [data-breakpoint] container → action — that
-  // reads BOTH active tokens, so re-running it after either axis changes yields
-  // the current intersection (no stale hides carried between axes). The
-  // breakpoint pills render only for multi-breakpoint runs, so on a
-  // single-breakpoint run this collapses to the status-only behavior with the
-  // bpFilter pinned at "all".
+  //   STATUS axis (the summary totals) is STORY-LEVEL. The status pills count a
+  //   per-story ROLLUP (`totals.passed` = stories whose rollup status is `pass`),
+  //   and each pill's label says "show only passed STORIES", so the contract is
+  //   story-level: a story is status-eligible iff its own rollup `data-status`
+  //   (emitted on the .story element) matches the active status, or the status
+  //   filter is "all". Individual actions are NEVER hidden by their own status —
+  //   a `changed` story keeps its inner `pass` action visible under the
+  //   `changed` filter. This keeps the live-region visible-story count in
+  //   agreement with the pill total.
+  //
+  //   BREAKPOINT axis (the neutral pill row below the totals) is CONTAINER-level.
+  //   A story is breakpoint-eligible iff it holds a [data-breakpoint] container
+  //   matching the active breakpoint, or the bp filter is "all". Within a shown
+  //   story, the non-matching [data-breakpoint] containers are hidden.
+  //
+  // Each axis is a set of native <button aria-pressed> single-select toggles
+  // keyed to a `data-filter` / `data-breakpoint-filter` TOKEN, with its own
+  // default-pressed "all" reset and its own single-pressed invariant.
+  //
+  // The two axes are ANDed: a story shows iff it is status-eligible (story
+  // rollup) AND breakpoint-eligible (has a matching container). apply() is a
+  // single top-down pass — story → [data-breakpoint] container — that reads BOTH
+  // active tokens, so re-running it after either axis changes yields the current
+  // intersection (no stale hides carried between axes). The breakpoint pills
+  // render only for multi-breakpoint runs, so on a single-breakpoint run this
+  // collapses to the status-only behavior with the bpFilter pinned at "all".
   //
   // Live-region updates are debounced by ~150ms; the visual hide/show is applied
   // immediately.
@@ -308,36 +323,32 @@
       });
     }
 
-    function show(el) {
-      el.hidden = false;
-    }
-
-    // True when `container` holds at least one `.action` that is not hidden.
-    // Drives whether a [data-breakpoint] container earns its place under the
-    // active status filter.
-    function hasVisibleAction(container) {
-      return Array.prototype.some.call(
-        container.querySelectorAll('.action'),
-        function (action) {
-          return !action.hidden;
-        },
-      );
-    }
-
-    // Apply BOTH active axes to one story, top-down:
-    //   1. Each [data-breakpoint] container (a .breakpoint-group div OR the flat
+    // Apply BOTH active axes to one story, with the granularity each axis owns:
+    //   1. STATUS axis is story-level. The story is status-eligible when
+    //      statusFilter is "all" or the story's own rollup data-status (the
+    //      worst-across-breakpoints status emitted on the .story element) equals
+    //      the TOKEN ("pass"), not a visible label. A status-ineligible story is
+    //      hidden whole; its containers are never inspected.
+    //   2. BREAKPOINT axis is container-level. Within a status-eligible story,
+    //      each [data-breakpoint] container (a .breakpoint-group div OR the flat
     //      <ol class="actions">) is breakpoint-eligible when bpFilter is "all"
-    //      or its data-breakpoint equals bpFilter. A non-eligible container is
-    //      hidden whole; its actions never count.
-    //   2. Inside an eligible container, each action is status-eligible when
-    //      statusFilter is "all" or its data-status equals the TOKEN ("pass"),
-    //      not the visible label. Non-matching actions are hidden.
-    //   3. A container that pruned to zero visible actions is hidden (emptiness).
-    //   4. The story shows iff at least one container survives with a visible
-    //      action — i.e. some action matched BOTH axes.
-    // Every action lives under exactly one [data-breakpoint] container, so this
-    // single walk covers the whole story with no double-counting.
+    //      or its data-breakpoint equals bpFilter. A non-matching container is
+    //      hidden; its actions are left untouched (never status-pruned — the
+    //      status axis does not reach individual actions).
+    //   3. The story shows iff it is status-eligible AND at least one container
+    //      is breakpoint-eligible.
+    // No action is ever hidden by its own status: a `changed` story keeps its
+    // inner `pass` action visible under the `changed` filter, so the visible
+    // story set matches the pill's per-story rollup total.
     function applyToStory(story) {
+      var statusMatches =
+        statusFilter === 'all' ||
+        story.getAttribute('data-status') === statusFilter;
+      if (!statusMatches) {
+        story.hidden = true;
+        return false;
+      }
+
       var containers = Array.prototype.slice.call(
         story.querySelectorAll('[data-breakpoint]'),
       );
@@ -347,27 +358,8 @@
         var bpMatches =
           bpFilter === 'all' ||
           container.getAttribute('data-breakpoint') === bpFilter;
-        if (!bpMatches) {
-          container.hidden = true;
-          // Clear inner action hides so a later matching breakpoint starts from
-          // a clean slate rather than inheriting a stale status prune.
-          Array.prototype.forEach.call(
-            container.querySelectorAll('.action'),
-            show,
-          );
-          return;
-        }
-        Array.prototype.forEach.call(
-          container.querySelectorAll('.action'),
-          function (action) {
-            action.hidden =
-              statusFilter !== 'all' &&
-              action.getAttribute('data-status') !== statusFilter;
-          },
-        );
-        var containerVisible = hasVisibleAction(container);
-        container.hidden = !containerVisible;
-        if (containerVisible) storyVisible = true;
+        container.hidden = !bpMatches;
+        if (bpMatches) storyVisible = true;
       });
 
       story.hidden = !storyVisible;
@@ -553,11 +545,18 @@
         document.querySelectorAll('.story:not([hidden])'),
       );
       visibleStories.forEach(function (story) {
-        // Only the rows surviving the active filter — `.action:not([hidden])` —
-        // get toggled, so "Expand all" under e.g. the changed filter opens just
-        // the changed screenshots, not the pass rows sharing the same story.
+        // Only the rows surviving the active filter get toggled. Scope to
+        // actions inside a NON-hidden [data-breakpoint] container: the status
+        // axis is story-level (it never hides individual actions), and the
+        // breakpoint axis hides whole containers, so an action is "visible" iff
+        // its container is not hidden. Excluding hidden containers keeps a
+        // non-matching breakpoint group's panels closed — otherwise they would
+        // open here and later appear pre-expanded when the bp filter reveals
+        // them, breaking the default-closed contract.
         var panels = Array.prototype.slice.call(
-          story.querySelectorAll('.action:not([hidden]) details.shots'),
+          story.querySelectorAll(
+            '[data-breakpoint]:not([hidden]) .action:not([hidden]) details.shots',
+          ),
         );
         panels.forEach(function (panel) {
           panel.open = shouldOpen;
@@ -569,10 +568,10 @@
       // keeps the logic simple.
       var count = visibleStories.length;
       var verb = shouldOpen ? 'Expanded' : 'Collapsed';
-      // Echo the active filter scope so the announcement carries context for
-      // what was toggled (e.g. "Expanded passed in 3 stories"). The button
+      // Echo the active STATUS-filter scope so the announcement carries context
+      // for what was toggled (e.g. "Expanded passed in 3 stories"). The button
       // label itself is static ("Expand all screenshots"); only this live
-      // announcement reflects the filter. Read the pressed filter button at
+      // announcement reflects the status filter. Read the pressed status pill at
       // click time via the shared filterLabel helper. No pressed button falls
       // back to "all".
       var pressed = document.querySelector(

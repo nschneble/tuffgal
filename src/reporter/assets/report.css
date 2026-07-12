@@ -377,7 +377,7 @@ h2 {
 }
 
 /* Neutral pills — no status hue, so the two filter rows read as siblings by
-   geometry, not color. Same pill geometry/radius as the status filter (Wave 1).
+   geometry, not color. Same pill geometry/radius as the status filter.
    Default is an OUTLINE pill: transparent bg, --text-muted border (≥3:1 vs --bg
    in both themes → 1.4.11), --text label (≥4.5:1 → 1.4.3). Hover brightens the
    border + adds a faint neutral tint. Pressed is a FILLED pill: --text fill,
@@ -1014,10 +1014,12 @@ summary.action-row:focus-visible {
   .skip-link,
   summary.action-row::after,
   .chip,
+  .summary-filter,
   .breakpoint-filter {
     transition: none;
   }
   .chip:active,
+  .summary-filter:active,
   .breakpoint-filter:active {
     scale: none;
   }

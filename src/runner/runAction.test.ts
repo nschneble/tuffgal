@@ -857,6 +857,13 @@ describe('runAction — CI mode size-mismatch drift', () => {
 
     assert.equal(result.status, 'changed');
     assert.ok(result.failureMessage);
+    // The structured mirror copies the error's baseline/actual dimensions
+    // verbatim (2x2 seeded baseline vs 4x4 actual), so a transposed or dropped
+    // field here would fail loudly instead of hiding behind the prose message.
+    assert.deepEqual(result.sizeMismatch, {
+      baseline: { width: 2, height: 2 },
+      actual: { width: 4, height: 4 },
+    });
     // The seeded baseline bytes are untouched by the run.
     assert.deepEqual(
       await readFile(join(baselineDir, 'desktop.png')),

@@ -489,9 +489,7 @@ function renderBreakpointGroup(
     recorded.breakpointHeight !== undefined
       ? { width: recorded.breakpointWidth, height: recorded.breakpointHeight }
       : undefined;
-  const dimensionMarkup = dimensions
-    ? `<span class="breakpoint-dimensions" aria-hidden="true">${dimensions.width}×${dimensions.height}</span><span class="sr-only">${dimensions.width} by ${dimensions.height} pixels</span>`
-    : '';
+  const dimensionMarkup = dimensions ? dimensionPair(dimensions) : '';
   const actions = entries
     .map(({ action, id }) =>
       renderAction(action, id, reportDir, interactiveMode),
@@ -769,7 +767,12 @@ function renderDiffStats(action: ActionResult, diffStatsId: string): string {
 /**
  * A `width`×`height` pair in the file's split idiom: the `×` glyph is sight-only
  * (aria-hidden), and AT hears the spoken "W by H pixels" longhand instead of an
- * ambiguous "x". Shared with the breakpoint filters (see :219, :493).
+ * ambiguous "x". Shared by {@link renderDiffStats} (the size-mismatch note) and
+ * {@link renderBreakpointGroup} (the per-mode caption), which emit byte-identical
+ * markup. {@link breakpointFilter} renders the same idiom but keeps its own
+ * inline copy: its sr-only longhand carries a leading space (` W by H pixels`)
+ * that this helper omits, so routing it through here would change the rendered
+ * bytes.
  */
 function dimensionPair(size: { width: number; height: number }): string {
   return `<span class="breakpoint-dimensions" aria-hidden="true">${size.width}×${size.height}</span><span class="sr-only">${size.width} by ${size.height} pixels</span>`;
