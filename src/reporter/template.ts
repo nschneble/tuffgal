@@ -105,7 +105,7 @@ function renderSummary(result: RunResult): string {
 /**
  * One status total rendered as a single-select filter button. The visible count
  * sits OUTSIDE the button as a sibling span and is wired to it via
- * aria-describedby, so only the word ("passed") is the underlined link while the
+ * aria-describedby, so only the word ("passed") is the pill button while the
  * count still reads as the button's description. The accessible name is the
  * visible label plus a visually-hidden action suffix (e.g. ", show only passed
  * stories"), composed from contents so the visible text is never dropped (WCAG
