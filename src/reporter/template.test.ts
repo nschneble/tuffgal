@@ -516,7 +516,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
     assert.ok(
       html.includes(
-        'No pixel diff — screenshot size changed from <span class="breakpoint-dimensions" aria-hidden="true">1280×800</span><span class="sr-only">1280 by 800 pixels</span> to <span class="breakpoint-dimensions" aria-hidden="true">1280×2500</span><span class="sr-only">1280 by 2500 pixels</span>.',
+        'No pixel diff — screenshot resized from <span class="breakpoint-dimensions" aria-hidden="true">1280×800</span><span class="sr-only">1280 by 800 pixels</span> to <span class="breakpoint-dimensions" aria-hidden="true">1280×2500</span><span class="sr-only">1280 by 2500 pixels</span>.',
       ),
       'the note is one clause with both dimension pairs in the split idiom',
     );

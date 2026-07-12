@@ -761,7 +761,7 @@ function renderDiffStats(action: ActionResult, diffStatsId: string): string {
     return '';
   }
   const label = action.sizeMismatch
-    ? `No pixel diff — screenshot size changed from ${dimensionPair(action.sizeMismatch.baseline)} to ${dimensionPair(action.sizeMismatch.actual)}.`
+    ? `No pixel diff — screenshot resized from ${dimensionPair(action.sizeMismatch.baseline)} to ${dimensionPair(action.sizeMismatch.actual)}.`
     : `No pixel diff. ${escapeHtml(action.failureMessage)}`;
   return `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">${label}</span></p>`;
 }
