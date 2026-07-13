@@ -106,7 +106,7 @@ export default defineConfig({
   // Tuffgal reports the ratio of stories w/ matching flows
   flowInventory: 'docs/flows.md',
 
-  // render captured actions as a single image with a hover/press mouse preview
+  // render captured actions as a single image with a press-and-hold compare
   // layered over a Baseline/Actual/Diff radio group, instead of radio tabs
   interactiveMode: false,
 });
@@ -245,13 +245,15 @@ How each captured action's screenshots are presented in the report. Default:
 
 - `false` — the report renders the radio-tab viewer: Baseline, Actual, and Diff
   each sit in their own panel and you switch between them with the tabs.
-- `true` — the report renders a single screenshot per action with a mouse
-  preview layered over it. By default it shows the `actual` capture; hovering
-  the image previews the `baseline` and pressing (mouse down) previews the
-  `diff`, so you can scrub between the three without leaving the image. The
-  visual preview sits on top of an accessible Baseline/Actual/Diff radio group,
-  so keyboard and touch users switch variants through the radios rather than the
-  mouse gesture. The image is scaled to fit the viewport height.
+- `true` — the report renders a single screenshot per action with a
+  press-and-hold compare layered over it. At rest it shows the selected variant
+  (`actual` by default); pressing and holding the image flips to its
+  counterpart — the `baseline` normally, or the `actual` when the baseline is
+  selected — and releasing flips back, so you can blink between the two and
+  spot what changed. The gesture sits on top of a visible Baseline/Actual/Diff
+  chip group that commits the selection for mouse, touch, and keyboard alike;
+  the `diff` overlay lives on its chip rather than the gesture. The image is
+  scaled to fit the viewport height.
 
 ```ts
 interactiveMode: false,

@@ -646,15 +646,16 @@ function renderScreenshots(
   if (!action.actualPath && !action.baselinePath) {
     return '';
   }
-  // interactiveMode swaps the radio-tab output for the single-image hover/press
-  // viewer. When it is false the function falls through to the radio-tab output
-  // below, byte-identical with the pre-interactiveMode render.
+  // interactiveMode swaps the radio-tab output for the single-image
+  // press-and-hold viewer. When it is false the function falls through to the
+  // radio-tab output below, byte-identical with the pre-interactiveMode render.
   //
   // When the baseline and actual differ in dimensions the diff is uncomputable
   // (renderDiffStats' unavailable branch — both paths present, `changed` status,
-  // a recorded failureMessage, no diffRatio). The hover/press gesture has no diff
-  // image to reveal, so fall back to the radio-tab render: visible chips,
-  // baseline + actual, and the disabled diff option carrying the mismatch reason.
+  // a recorded failureMessage, no diffRatio). Press-flipping between two
+  // differently-sized captures misaligns everything and reads as "everything
+  // changed", so fall back to the radio-tab render: visible panels, baseline +
+  // actual, and the disabled diff option carrying the mismatch reason.
   const diffUncomputable =
     action.baselinePath !== undefined &&
     action.actualPath !== undefined &&
@@ -784,9 +785,12 @@ function dimensionPair(size: { width: number; height: number }): string {
 /**
  * Interactive screenshot viewer (interactiveMode). One native radio group per
  * action is the committed-state source of truth — keyboard, touch, and AT all
- * operate the radios (reusing `name="${actionId}-shot"`). report.js layers a
- * VISUAL-ONLY mouse preview (hover→baseline, press→diff, release→committed) on
- * a SINGLE shared `<img>`; that gesture rewrites only the img src and the
+ * operate the radios (reusing `name="${actionId}-shot"`), and the chips render
+ * permanently visible (the mouse/touch path to every variant, including Diff).
+ * report.js layers a VISUAL-ONLY press-and-hold blink-compare on a SINGLE
+ * shared `<img>`: press shows the committed variant's counterpart (baseline
+ * normally, actual when baseline is committed); release/leave/dragstart
+ * reverts. No hover behavior. The gesture rewrites only the img src and the
  * aria-hidden "Showing:" caption (which names the DISPLAYED variant, preview
  * included) — never radio state, the img alt, or any ARIA. The controls +
  * caption live OUTSIDE the clipped `.shot-stage` so
@@ -827,7 +831,7 @@ function renderInteractiveScreenshots(
   const committedSrc = (committed === 'actual' ? actual : baseline) ?? '';
 
   // When only one variant is real (the common case for a `new` baseline, whose
-  // baseline is suppressed and has no diff), the hover/press switcher has nothing
+  // baseline is suppressed and has no diff), the press-and-hold flip has nothing
   // to toggle to — a lone radio in a group is noise to AT. Render the image alone;
   // the row's status badge already announces "new baseline". Zero variants — a
   // `new` row whose actual capture is missing — collapses to nothing.

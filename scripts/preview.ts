@@ -10,8 +10,8 @@
  *
  * `npm run preview`                  — everything, including banner + deleted
  * `npm run preview -- --clean`       — happy path: no mismatch, nothing orphaned
- * `npm run preview -- --interactive` — hover/press screenshot viewer instead of
- *                                      the radio-tab panels
+ * `npm run preview -- --interactive` — press-and-hold screenshot viewer instead
+ *                                      of the radio-tab panels
  *
  * Outputs to a (throwaway) temp directory.
  */

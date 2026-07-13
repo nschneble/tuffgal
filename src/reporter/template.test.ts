@@ -1072,9 +1072,10 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
 
 describe('renderScreenshots — interactiveMode dimension-mismatch fallback', () => {
   // A baseline/actual dimension mismatch yields status:changed + failureMessage
-  // but no diffRatio/diffPath: the diff is uncomputable, so the hover/press
-  // viewer has no diff to reveal. interactiveMode must fall back to the radio-tab
-  // render (visible chips, baseline + actual, disabled diff carrying the reason).
+  // but no diffRatio/diffPath: the diff is uncomputable, and press-flipping two
+  // differently-sized captures would misalign everything. interactiveMode must
+  // fall back to the radio-tab render (baseline + actual panels, disabled diff
+  // carrying the reason).
   function mismatchResult(actionOverrides: Partial<ActionResult> = {}) {
     return makeRunResult({
       totals: {
@@ -1116,7 +1117,7 @@ describe('renderScreenshots — interactiveMode dimension-mismatch fallback', ()
     );
     assert.ok(
       !html.includes('class="shot-interactive"'),
-      'the interactive hover/press viewer does not render for a dimension mismatch',
+      'the interactive press-and-hold viewer does not render for a dimension mismatch',
     );
     // Both real variants render as radios → the full fieldset, not the collapsed
     // lone-image path (soleVariant.length === 2).

@@ -930,7 +930,12 @@ summary.action-row:focus-visible {
    sit in this fieldset, which lives OUTSIDE the clipped `.shot-stage`, so the
    chip focus ring is never clipped by the stage overflow nor painted over
    screenshot pixels. The chips reuse `.chip--toggle` (border `--border-bright`,
-   `--accent` focus ring), so no new focus tokens are introduced here. */
+   `--accent` focus ring) and the same `.shot-radio-label` base styles as the
+   radio-tab viewer — permanently visible, no interactiveMode-specific chip
+   styling. Visible chips are the mouse/touch path to every variant (including
+   Diff, which the press gesture does not cover) and double as the viewer's
+   only visible affordance; the press-and-hold blink-compare in report.js is
+   enhancement on top. */
 .shot-interactive {
   display: flex;
   flex-wrap: wrap;
@@ -941,38 +946,10 @@ summary.action-row:focus-visible {
   border: 0;
 }
 
-/* interactiveMode: chip buttons collapsed by default — sighted mouse users
-   drive the viewer with the hover/press gesture on the stage. Clip (never
-   display/visibility/inert) so the nested radio stays focusable and keeps
-   its accessible name. Mirrors .sr-only. */
-.shot-interactive .shot-radio-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-/* Reveal the whole chip group when a keyboard user focuses any radio.
-   :focus-within needs no :has() fallback and never fires for mouse/touch
-   (label clipped, input pointer-events:none → radios are keyboard-only
-   reachable). Specificity (0,3,0) beats the collapse rule (0,2,0). */
-.shot-interactive:focus-within .shot-radio-label {
-  position: static;
-  width: auto;
-  height: auto;
-  margin: 0;
-  overflow: visible;
-  clip: auto;
-  white-space: normal;
-}
-
 /* Persistent caption naming the DISPLAYED variant — the committed one, or the
-   hover/press preview while that gesture is active (report.js keeps it in sync).
-   Text on `--text` (≥4.5:1), so the active variant is never conveyed by color
-   alone — it pairs the checked chip's accent border with this readable label.
+   press-and-hold preview while it is held (report.js keeps it in sync). Text on
+   `--text` (≥4.5:1), so the active variant is never conveyed by color alone —
+   it pairs the checked chip's accent border with this readable label.
    aria-hidden keeps it visual only: the checked radio is the single accessible
    source of committed state. */
 .shot-caption {

@@ -138,22 +138,28 @@
 
   // Interactive screenshot viewer (rendered when the report is built with
   // interactiveMode). Each action shows ONE shared <img>. A native radio group
-  // is the committed-state source of truth — keyboard, touch, and AT operate it
-  // exactly like the radio-tab viewer. On top of that, the mouse gesture is a
-  // STATELESS visual preview layered on the same <img>:
-  //   hover  (mouseenter/mousemove) → baseline src
-  //   press  (mousedown)            → diff src (no-op when there is no diff)
-  //   release/leave (mouseup/mouseleave) → revert to the checked radio's variant
+  // (always-visible chips) is the committed-state source of truth — keyboard,
+  // touch, and AT operate it exactly like the radio-tab viewer, and the chips
+  // are the only path to Diff. On top of that, the mouse gesture is a STATELESS
+  // blink-compare layered on the same <img>:
+  //   press-and-hold (mousedown) → the committed variant's COUNTERPART:
+  //     baseline normally; actual when baseline is the committed variant
+  //     ("show me the other one"; committed diff flips to baseline). A missing
+  //     counterpart is a truthful no-op.
+  //   release/leave/dragstart → revert to the checked radio's variant
+  // There is deliberately NO hover behavior: hover swapped the image the moment
+  // the pointer wandered in, so the resting state under the cursor was the OLD
+  // screenshot. Rest = committed; press = intentional compare. Diff is off the
+  // gesture too (secondary forensic view — its chip covers it).
   // The preview rewrites img.src plus the sight-only (aria-hidden) caption, so
   // the "Showing: {variant}" line always names the DISPLAYED image. It never
   // changes the checked radio, the img alt, any ARIA attribute, or any live
-  // region — so hovering announces nothing by construction. The caption and the
+  // region — so pressing announces nothing by construction. The caption and the
   // checked radio are two different truths on purpose: the caption tracks what
   // is displayed (preview included), the checked radio tracks the committed
-  // state AT operates on. In the rare hybrid case (keyboard focus reveals the
-  // chips, then the mouse hovers the stage) they diverge briefly — both remain
+  // state AT operates on; during a press they diverge briefly — both remain
   // accurate. Do NOT "fix" that by moving radio.checked during preview: checked
-  // is the single accessible source of committed state, and hover-flapping it
+  // is the single accessible source of committed state, and press-flapping it
   // would announce to AT and leave revert() nothing stable to revert to.
   //
   // The mouse listeners live on the .shot-stage wrapper rather than the
@@ -188,13 +194,13 @@
       });
 
       // `committed` mirrors the checked radio — the ONLY state the keyboard /
-      // touch / AT path mutates. Mouse preview reverts here on release/leave.
+      // touch / AT path mutates. Mouse preview reverts here on release, leave,
+      // and dragstart.
       var committed = null;
-      var pressed = false;
 
       // Caption always names the DISPLAYED variant — committed or previewed.
-      // The equality check makes the continuous mousemove-driven rewrite a
-      // no-op after the first hover frame.
+      // The equality check is a cheap idempotence guard: writes are skipped
+      // when the label is already showing (e.g. revert after a no-op press).
       function setCaption(variant) {
         if (!captionVariant) return;
         var label = VARIANT_LABELS[variant] || variant;
@@ -211,8 +217,8 @@
       }
 
       // Show a variant WITHOUT committing (mouse preview). No-op when the variant
-      // has no src, so press-with-no-diff leaves the displayed image AND the
-      // caption untouched (baseline stays showing — the caption stays truthful).
+      // has no src, so a press whose counterpart is absent leaves the displayed
+      // image AND the caption untouched (the caption stays truthful).
       function preview(variant) {
         if (!(variant in sources)) return;
         image.src = sources[variant];
@@ -238,27 +244,16 @@
         });
       });
 
-      function hoverPreview() {
-        // While not pressed, hovering previews the baseline for an in-place
-        // compare. The pressed guard keeps a held mousedown pinned to diff even
-        // as the pointer moves across the image.
-        if (!pressed) preview('baseline');
-      }
-
-      stage.addEventListener('mouseenter', hoverPreview);
-      stage.addEventListener('mousemove', hoverPreview);
       stage.addEventListener('mousedown', function () {
-        pressed = true;
-        preview('diff');
+        preview(committed === 'baseline' ? 'actual' : 'baseline');
       });
-      stage.addEventListener('mouseup', function () {
-        pressed = false;
-        revert();
-      });
-      stage.addEventListener('mouseleave', function () {
-        pressed = false;
-        revert();
-      });
+      stage.addEventListener('mouseup', revert);
+      stage.addEventListener('mouseleave', revert);
+      // A press that turns into a native image drag can swallow the mouseup
+      // (the pointer never "leaves" the stage), which would leave the preview
+      // stuck. Native drag itself stays enabled — save-image is a platform
+      // feature, not ours to suppress.
+      stage.addEventListener('dragstart', revert);
     }
 
     document.querySelectorAll('.shot-interactive').forEach(function (fieldset) {
