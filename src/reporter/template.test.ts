@@ -471,11 +471,74 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
   });
 
-  it('shows the mismatch reason in the diff-stats slot when a changed action has no diff', () => {
+  it('renders the mismatch reason as one accessible clause from the structured pair', () => {
     // A dimension mismatch yields status:changed with a failureMessage but no
     // diffRatio/diffPath. Without a note the row reads as a "changed" with an
     // empty stats slot and no diff tab — an unexplained no-op. The recorded
-    // reason must fill the slot the "% differs" stat normally occupies.
+    // reason must fill the slot the "% differs" stat normally occupies — folded
+    // into ONE sentence, each dimension pair rendered in the split idiom (× glyph
+    // for sight, spoken "W by H pixels" for AT), read from the structured
+    // sizeMismatch pair rather than parsed from the message.
+    const result = makeRunResult({
+      totals: {
+        stories: 1,
+        passed: 0,
+        changed: 1,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
+      stories: [
+        makeStory({
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              failureMessage:
+                'Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+              sizeMismatch: {
+                baseline: { width: 1280, height: 800 },
+                actual: { width: 1280, height: 2500 },
+              },
+              actualPath: '/fake/report/dir/shots/settings.actual.png',
+              baselinePath: '/fake/report/dir/shots/settings.baseline.png',
+            }),
+          ],
+        }),
+      ],
+    });
+    const html = renderReport(result, REPORT_DIR);
+
+    assert.ok(
+      html.includes('diff-stats--unavailable'),
+      'the unavailable note variant renders',
+    );
+    assert.ok(
+      html.includes(
+        'No pixel diff — screenshot resized from <span class="breakpoint-dimensions" aria-hidden="true">1280×800</span><span class="sr-only">1280 by 800 pixels</span> to <span class="breakpoint-dimensions" aria-hidden="true">1280×2500</span><span class="sr-only">1280 by 2500 pixels</span>.',
+      ),
+      'the note is one clause with both dimension pairs in the split idiom',
+    );
+    assert.ok(
+      html.includes('1280 by 800 pixels') &&
+        html.includes('1280 by 2500 pixels'),
+      'AT hears the spoken longhand for both baseline and actual, never a bare x',
+    );
+    assert.ok(
+      !html.includes('1280x800') && !html.includes('1280x2500'),
+      'no raw "x"-delimited dimensions leak into the rendered note',
+    );
+    assert.ok(
+      !html.includes('differs</span>'),
+      'no "% differs" stat renders when there is no diffRatio',
+    );
+  });
+
+  it('falls back to the escaped failureMessage when the structured pair is absent', () => {
+    // Older or malformed results may carry failureMessage without a structured
+    // sizeMismatch pair. A wrong parse is worse than the old prose, so the note
+    // degrades to the escaped message rather than guess dimensions.
     const result = makeRunResult({
       totals: {
         stories: 1,
@@ -505,17 +568,17 @@ describe('renderAction — whole row as screenshot disclosure', () => {
 
     assert.ok(
       html.includes('diff-stats--unavailable'),
-      'the unavailable note variant renders',
+      'the unavailable note variant still renders on the fallback path',
     );
     assert.ok(
       html.includes(
         'No pixel diff. Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
       ),
-      'the recorded mismatch reason fills the diff-stats slot',
+      'the recorded prose message fills the slot when no structured pair exists',
     );
     assert.ok(
-      !html.includes('differs</span>'),
-      'no "% differs" stat renders when there is no diffRatio',
+      !html.includes('breakpoint-dimensions'),
+      'no split-idiom markup is fabricated without a structured pair',
     );
   });
 
@@ -606,9 +669,11 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     });
     const html = renderReport(result, REPORT_DIR);
 
-    // Two breakpoint groups, one per mode, in first-seen (run-set) order.
+    // Two breakpoint groups, one per mode, in first-seen (run-set) order. Each
+    // group div now also carries an additive data-breakpoint filter hook, so
+    // count the class attribute rather than the bare closing tag.
     assert.equal(
-      countOccurrences(html, '<div class="breakpoint-group">'),
+      countOccurrences(html, '<div class="breakpoint-group" data-breakpoint='),
       2,
       'one breakpoint-group div per distinct mode',
     );
@@ -709,8 +774,10 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
     const html = renderReport(result, REPORT_DIR);
 
     assert.ok(
-      html.includes('<ol class="actions" aria-label="Actions">'),
-      'single-mode story renders the flat aria-label="Actions" list',
+      html.includes(
+        '<ol class="actions" aria-label="Actions" data-breakpoint="desktop">',
+      ),
+      'single-mode story renders the flat aria-label="Actions" list (with its additive data-breakpoint hook)',
     );
     assert.ok(
       !html.includes('<div class="breakpoint-group">'),
@@ -1005,9 +1072,10 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
 
 describe('renderScreenshots — interactiveMode dimension-mismatch fallback', () => {
   // A baseline/actual dimension mismatch yields status:changed + failureMessage
-  // but no diffRatio/diffPath: the diff is uncomputable, so the hover/press
-  // viewer has no diff to reveal. interactiveMode must fall back to the radio-tab
-  // render (visible chips, baseline + actual, disabled diff carrying the reason).
+  // but no diffRatio/diffPath: the diff is uncomputable, and press-flipping two
+  // differently-sized captures would misalign everything. interactiveMode must
+  // fall back to the radio-tab render (baseline + actual panels, disabled diff
+  // carrying the reason).
   function mismatchResult(actionOverrides: Partial<ActionResult> = {}) {
     return makeRunResult({
       totals: {
@@ -1029,6 +1097,10 @@ describe('renderScreenshots — interactiveMode dimension-mismatch fallback', ()
               baselinePath: '/fake/report/dir/shots/settings.baseline.png',
               failureMessage:
                 'Screenshot dimensions changed: baseline 1280x800, actual 1280x2500',
+              sizeMismatch: {
+                baseline: { width: 1280, height: 800 },
+                actual: { width: 1280, height: 2500 },
+              },
               ...actionOverrides,
             }),
           ],
@@ -1045,7 +1117,7 @@ describe('renderScreenshots — interactiveMode dimension-mismatch fallback', ()
     );
     assert.ok(
       !html.includes('class="shot-interactive"'),
-      'the interactive hover/press viewer does not render for a dimension mismatch',
+      'the interactive press-and-hold viewer does not render for a dimension mismatch',
     );
     // Both real variants render as radios → the full fieldset, not the collapsed
     // lone-image path (soleVariant.length === 2).
@@ -1404,7 +1476,7 @@ describe('renderActionNotes — candidate + a11y-drift notes', () => {
     );
     assert.ok(
       html.includes(
-        '<p class="candidate-note" role="note">This render is the proposed new baseline.</p>',
+        `<p class="candidate-note" role="note">This run's actual screenshot is the proposed new baseline.</p>`,
       ),
       'changed action carries the candidate note',
     );
@@ -1536,6 +1608,419 @@ describe('renderActionNotes — candidate + a11y-drift notes', () => {
     assert.ok(
       candidateIndex < a11yIndex,
       'candidate note precedes the a11y-drift note',
+    );
+  });
+});
+
+describe('renderBreakpointFilters — the breakpoint filter dimension', () => {
+  // A run spanning two distinct breakpoints across its stories: mobile 375×667
+  // and desktop 1280×800. The filter group renders once, from the distinct
+  // breakpoints in first-seen order.
+  function multiBreakpointResult() {
+    return makeRunResult({
+      totals: {
+        stories: 2,
+        passed: 1,
+        changed: 1,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
+      stories: [
+        makeStory({
+          story: 'home page renders',
+          file: 'stories/home.story.json',
+          status: 'pass',
+          actions: [
+            makeAction({
+              action: 'visit-home',
+              status: 'pass',
+              breakpoint: 'mobile',
+              breakpointWidth: 375,
+              breakpointHeight: 667,
+            }),
+            makeAction({
+              action: 'visit-home',
+              status: 'pass',
+              breakpoint: 'desktop',
+              breakpointWidth: 1280,
+              breakpointHeight: 800,
+            }),
+          ],
+        }),
+        makeStory({
+          story: 'settings drifted',
+          file: 'stories/settings.story.json',
+          status: 'changed',
+          actions: [
+            makeAction({
+              action: 'visit-settings',
+              status: 'changed',
+              breakpoint: 'desktop',
+              breakpointWidth: 1280,
+              breakpointHeight: 800,
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it('renders the role=group filter with a default-pressed "all breakpoints" reset', () => {
+    const html = renderReport(multiBreakpointResult(), REPORT_DIR);
+    assert.ok(
+      html.includes(
+        '<div class="breakpoint-filters" role="group" aria-label="Filter by breakpoint">',
+      ),
+      'breakpoint filter group is a role=group with an accessible label',
+    );
+    assert.ok(
+      html.includes(
+        '<button type="button" class="breakpoint-filter" data-breakpoint-filter="all" aria-pressed="true" aria-controls="stories-list">',
+      ),
+      'the "all breakpoints" reset is pressed by default and controls the list',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="indicator label">all breakpoints</span><span class="sr-only">, show results at every breakpoint</span>',
+      ),
+      'reset carries its visible label + sr-only action suffix',
+    );
+    // The breakpoint group lives inside the summary section, below the totals.
+    const summaryOpen = html.indexOf('<section class="summary"');
+    const groupIndex = html.indexOf('class="breakpoint-filters"');
+    const summaryClose = html.indexOf('</section>', summaryOpen);
+    assert.ok(
+      summaryOpen < groupIndex && groupIndex < summaryClose,
+      'the breakpoint filter group renders inside the summary section',
+    );
+    // It is a sibling of the totals <ul>, NOT nested inside it.
+    const ulClose = html.indexOf('</ul>', summaryOpen);
+    assert.ok(
+      ulClose < groupIndex,
+      'the breakpoint group is a sibling AFTER the totals <ul>, not nested in it',
+    );
+  });
+
+  it('renders one unpressed pill per distinct breakpoint in first-seen order, token distinct from label', () => {
+    const html = renderReport(multiBreakpointResult(), REPORT_DIR);
+    // Exactly two breakpoint pills (mobile, desktop) plus the "all" reset.
+    assert.equal(
+      countOccurrences(html, 'class="breakpoint-filter"'),
+      3,
+      'three breakpoint filter buttons: all + mobile + desktop',
+    );
+    assert.ok(
+      html.includes(
+        '<button type="button" class="breakpoint-filter" data-breakpoint-filter="mobile" aria-pressed="false" aria-controls="stories-list">',
+      ),
+      'mobile pill carries the mobile matcher token, unpressed',
+    );
+    assert.ok(
+      html.includes(
+        '<button type="button" class="breakpoint-filter" data-breakpoint-filter="desktop" aria-pressed="false" aria-controls="stories-list">',
+      ),
+      'desktop pill carries the desktop matcher token, unpressed',
+    );
+    // The visible LABEL carries the breakpoint name; the TOKEN drives matching.
+    assert.ok(
+      html.includes('<span class="breakpoint-name">mobile</span>'),
+      'mobile pill shows the human name in .breakpoint-name',
+    );
+    // First-seen order: mobile (first action) precedes desktop.
+    const mobileIndex = html.indexOf('data-breakpoint-filter="mobile"');
+    const desktopIndex = html.indexOf('data-breakpoint-filter="desktop"');
+    assert.ok(
+      mobileIndex !== -1 && desktopIndex !== -1 && mobileIndex < desktopIndex,
+      'pills render in first-seen order (mobile before desktop)',
+    );
+    // Exactly one pressed pill in the group at load (the reset).
+    const groupStart = html.indexOf('class="breakpoint-filters"');
+    const groupEnd = html.indexOf('</div>', groupStart);
+    const group = html.slice(groupStart, groupEnd);
+    assert.equal(
+      countOccurrences(group, 'aria-pressed="true"'),
+      1,
+      'exactly one breakpoint pill is pressed at load (the reset)',
+    );
+    // Never an aria-label on the pills (would drop the visible name).
+    assert.ok(
+      !/class="breakpoint-filter"[^>]*aria-label/.test(html),
+      'breakpoint pills never carry an aria-label',
+    );
+  });
+
+  it('reuses the dimensions idiom: decorative aria-hidden glyph + sr-only longhand', () => {
+    const html = renderReport(multiBreakpointResult(), REPORT_DIR);
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-dimensions" aria-hidden="true">375×667</span><span class="sr-only"> 375 by 667 pixels</span>',
+      ),
+      'mobile pill dimensions render as aria-hidden 375×667 + sr-only longhand',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-dimensions" aria-hidden="true">1280×800</span><span class="sr-only"> 1280 by 800 pixels</span>',
+      ),
+      'desktop pill dimensions render as aria-hidden 1280×800 + sr-only longhand',
+    );
+  });
+
+  it('renders NO breakpoint filter group for a single-breakpoint run (<= 1 distinct)', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            status: 'pass',
+            actions: [
+              makeAction({
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      !html.includes('class="breakpoint-filters"'),
+      'no breakpoint filter group when the run spans a single breakpoint',
+    );
+    assert.ok(
+      !html.includes('data-breakpoint-filter'),
+      'no breakpoint filter buttons render for a single-breakpoint run',
+    );
+  });
+
+  it('renders NO breakpoint filter group when there are no stories', () => {
+    const html = renderReport(makeRunResult(), REPORT_DIR);
+    assert.ok(
+      !html.includes('class="breakpoint-filters"'),
+      'no breakpoint filter group for an empty run',
+    );
+  });
+
+  it('renders the legacy pill (name + sr-only clarifier) for a blank-breakpoint bucket', () => {
+    // One story tagged desktop, one carrying no breakpoint (the defensive
+    // parse-guard bucket) → two distinct buckets → the filter renders, and the
+    // blank bucket reads as the reserved "legacy" token/label.
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 2,
+          passed: 2,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            file: 'stories/tagged.story.json',
+            status: 'pass',
+            actions: [
+              makeAction({
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+          makeStory({
+            file: 'stories/untagged.story.json',
+            status: 'pass',
+            actions: [makeAction()],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes('data-breakpoint-filter="legacy"'),
+      'the blank bucket maps to the reserved "legacy" matcher token',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="breakpoint-name">legacy<span class="sr-only"> (pre-breakpoint layout)</span></span>',
+      ),
+      'the legacy pill reads "legacy" with the shared pre-breakpoint clarifier',
+    );
+  });
+});
+
+describe('data-breakpoint hooks — every action under exactly one container', () => {
+  it('adds data-breakpoint to each breakpoint-group div in a multi-mode story', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            status: 'pass',
+            actions: [
+              makeAction({
+                breakpoint: 'mobile',
+                breakpointWidth: 375,
+                breakpointHeight: 667,
+              }),
+              makeAction({
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes('<div class="breakpoint-group" data-breakpoint="mobile">'),
+      'mobile group carries data-breakpoint="mobile"',
+    );
+    assert.ok(
+      html.includes('<div class="breakpoint-group" data-breakpoint="desktop">'),
+      'desktop group carries data-breakpoint="desktop"',
+    );
+  });
+
+  it('adds data-breakpoint to the flat <ol> of a single-mode story (no visible chrome)', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            status: 'pass',
+            actions: [
+              makeAction({
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        '<ol class="actions" aria-label="Actions" data-breakpoint="desktop">',
+      ),
+      'the flat single-mode list carries data-breakpoint but keeps its aria-label',
+    );
+    // No visible breakpoint chrome is added to a single-mode story.
+    assert.ok(
+      !html.includes('class="breakpoint-group"'),
+      'single-mode story still renders no breakpoint-group chrome',
+    );
+    assert.ok(
+      !html.includes('class="breakpoint-label"'),
+      'single-mode story still renders no breakpoint caption',
+    );
+  });
+
+  it('maps a blank-breakpoint flat list to data-breakpoint="legacy"', () => {
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [makeStory({ status: 'pass', actions: [makeAction()] })],
+      }),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes('data-breakpoint="legacy"'),
+      'the blank-bucket flat list hooks onto the reserved legacy token',
+    );
+    assert.ok(
+      !html.includes('data-breakpoint=""'),
+      'the hook is never emitted as an empty string',
+    );
+  });
+
+  it('never leaves an action outside a [data-breakpoint] container (multi-mode)', () => {
+    // Selector invariant: the count of data-breakpoint containers equals the
+    // number of distinct modes, and each <ol class="actions"> is either the
+    // hooked flat list or nested under a hooked group div — so every action row
+    // has exactly one [data-breakpoint] ancestor-or-self.
+    const html = renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 1,
+          changed: 0,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            status: 'pass',
+            actions: [
+              makeAction({
+                action: 'a',
+                breakpoint: 'mobile',
+                breakpointWidth: 375,
+                breakpointHeight: 667,
+              }),
+              makeAction({
+                action: 'b',
+                breakpoint: 'desktop',
+                breakpointWidth: 1280,
+                breakpointHeight: 800,
+              }),
+            ],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+    // Two group divs, each hooked; no flat aria-label="Actions" list in
+    // multi-mode, so the only action lists are the ones nested under a hooked
+    // group.
+    assert.equal(
+      countOccurrences(html, 'data-breakpoint="mobile"'),
+      1,
+      'exactly one mobile container',
+    );
+    assert.equal(
+      countOccurrences(html, 'data-breakpoint="desktop"'),
+      1,
+      'exactly one desktop container',
+    );
+    assert.ok(
+      !html.includes('<ol class="actions" aria-label="Actions"'),
+      'multi-mode never emits an un-hooked flat aria-label="Actions" list',
     );
   });
 });

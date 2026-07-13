@@ -15,6 +15,18 @@ const STATUS_LABELS: Record<ActionStatus, string> = {
   new: 'new baseline',
 };
 
+/**
+ * The matcher token for a breakpoint bucket key, shared by the filter pills and
+ * the `[data-breakpoint]` hooks so a token always matches its container. The
+ * empty-string key (the defensive parse-guard bucket where a result carried no
+ * breakpoint) maps to the reserved `legacy` token — the same string
+ * {@link renderDeletedEntry} uses for the pre-breakpoint layout. Every other key
+ * is the real breakpoint name, passed through verbatim.
+ */
+function breakpointToken(key: string): string {
+  return key === '' ? 'legacy' : key;
+}
+
 const STATUS_MARKERS: Record<ActionStatus, string> = {
   pass: '✓',
   changed: '~',
@@ -80,6 +92,11 @@ export function renderReport(
  * coverage stats used to occupy. The `<ul>` stays a plain list (no composite
  * role): a non-filter total and the bulk-toggle group share it, so a
  * radiogroup/fieldset could not cleanly scope just the filters.
+ *
+ * A second, independent filter dimension — the breakpoint filter — renders
+ * BELOW the totals row inside this same summary region (see
+ * {@link renderBreakpointFilters}), but only when the run spans two or more
+ * distinct breakpoints. The two dimensions are ANDed by report.js.
  */
 function renderSummary(result: RunResult): string {
   return `
@@ -98,14 +115,118 @@ function renderSummary(result: RunResult): string {
       <span class="bulk-scope" aria-hidden="true">screenshots</span>
     </li>
   </ul>
+  ${renderBreakpointFilters(result)}
 </section>
 `;
 }
 
 /**
+ * The distinct breakpoints a run spanned, in first-seen order across every
+ * story's flat action array — the SAME order {@link renderStoryActions} buckets
+ * a single story's groups in, extended across stories. Each distinct breakpoint
+ * carries the capture dimensions of the FIRST action seen at it (the same source
+ * {@link renderBreakpointGroup} labels a group with), so the filter pill can
+ * echo the size.
+ *
+ * The bucket KEY is `action.breakpoint ?? ''` — identical to
+ * {@link renderStoryActions}, so a filter token always matches a rendered
+ * `[data-breakpoint]` container. The empty-string key is a defensive parse-guard
+ * only (the runner always tags a real breakpoint name); it maps to the reserved
+ * `legacy` token/label. A live `ActionResult` never carries the literal
+ * `'legacy'` breakpoint — that synthetic name is confined to orphaned-baseline
+ * (`deleted`) entries — so the empty-string bucket and a real `legacy` bucket
+ * cannot collide within one run's stories.
+ */
+function distinctBreakpoints(
+  result: RunResult,
+): Array<{ key: string; width?: number; height?: number }> {
+  const seen = new Set<string>();
+  const distinct: Array<{ key: string; width?: number; height?: number }> = [];
+  for (const story of result.stories) {
+    for (const action of story.actions) {
+      const key = action.breakpoint ?? '';
+      if (seen.has(key)) continue;
+      seen.add(key);
+      distinct.push({
+        key,
+        width: action.breakpointWidth,
+        height: action.breakpointHeight,
+      });
+    }
+  }
+  return distinct;
+}
+
+/**
+ * The breakpoint filter group: a second single-select filter dimension, sibling
+ * to the status totals inside the summary region. Rendered ONLY when the run
+ * spans two or more distinct breakpoints — a single-breakpoint run makes the
+ * filter a no-op, so the whole group is omitted.
+ *
+ * Each pill is a native `<button aria-pressed>` toggle (like the status filter),
+ * grouped in a `role="group"` with an accessible label so assistive tech reads
+ * the two rows as distinct filter axes. A leading "all breakpoints" reset is
+ * pressed by default and clears the dimension. The neutral palette (outline
+ * default, filled + bold when pressed) carries no status hue, so the two rows
+ * read as siblings without implying a status.
+ *
+ * The visible `.indicator` carries the human LABEL (breakpoint name + decorative
+ * dimensions), while `data-breakpoint-filter` carries the MATCHER TOKEN (the
+ * exact bucket key). report.js echoes the label, matches on the token against a
+ * container's `data-breakpoint`. The blank-bucket token/label is `legacy` (with
+ * the shared "(pre-breakpoint layout)" sr-only clarifier); every other token is
+ * the real breakpoint name. Dimensions reuse the exact idiom of
+ * {@link renderBreakpointGroup}: a decorative aria-hidden `375×667` plus an
+ * sr-only `375 by 667 pixels` longhand so the `×` glyph is never read as "x".
+ */
+function renderBreakpointFilters(result: RunResult): string {
+  const distinct = distinctBreakpoints(result);
+  if (distinct.length < 2) {
+    return '';
+  }
+  const pills = distinct.map((bp) => breakpointFilter(bp)).join('\n  ');
+  return `
+<div class="breakpoint-filters" role="group" aria-label="Filter by breakpoint">
+  <button type="button" class="breakpoint-filter" data-breakpoint-filter="all" aria-pressed="true" aria-controls="stories-list">
+    <span class="indicator label">all breakpoints</span><span class="sr-only">, show results at every breakpoint</span>
+  </button>
+  ${pills}
+</div>
+`;
+}
+
+/**
+ * One breakpoint rendered as an unpressed single-select filter pill. The blank
+ * bucket (`key === ''`) reads visibly as "legacy" with an sr-only
+ * "(pre-breakpoint layout)" clarifier, mirroring {@link renderDeletedEntry};
+ * both the visible name and the `data-breakpoint-filter` token become the
+ * reserved `legacy` string so the token still matches the flat list's
+ * `data-breakpoint="legacy"` hook. Dimensions render only when the recorded
+ * result carried them.
+ */
+function breakpointFilter(bp: {
+  key: string;
+  width?: number;
+  height?: number;
+}): string {
+  const isLegacy = bp.key === '';
+  const token = breakpointToken(bp.key);
+  const name = isLegacy
+    ? 'legacy<span class="sr-only"> (pre-breakpoint layout)</span>'
+    : `${escapeHtml(bp.key)}`;
+  const dimensions =
+    bp.width !== undefined && bp.height !== undefined
+      ? ` <span class="breakpoint-dimensions" aria-hidden="true">${bp.width}×${bp.height}</span><span class="sr-only"> ${bp.width} by ${bp.height} pixels</span>`
+      : '';
+  return `<button type="button" class="breakpoint-filter" data-breakpoint-filter="${escapeHtml(token)}" aria-pressed="false" aria-controls="stories-list">
+    <span class="indicator label"><span class="breakpoint-name">${name}</span>${dimensions}</span><span class="sr-only">, show only results at this breakpoint</span>
+  </button>`;
+}
+
+/**
  * One status total rendered as a single-select filter button. The visible count
  * sits OUTSIDE the button as a sibling span and is wired to it via
- * aria-describedby, so only the word ("passed") is the underlined link while the
+ * aria-describedby, so only the word ("passed") is the pill button while the
  * count still reads as the button's description. The accessible name is the
  * visible label plus a visually-hidden action suffix (e.g. ", show only passed
  * stories"), composed from contents so the visible text is never dropped (WCAG
@@ -295,7 +416,10 @@ function renderStoryActions(
   });
 
   // One mode (or untagged) → flat list, no caption. Captions only earn their
-  // chrome when there is more than one mode to tell apart.
+  // chrome when there is more than one mode to tell apart. The flat list still
+  // carries the `data-breakpoint` hook (keyed off the sole bucket) so the
+  // breakpoint filter can hide the whole single-mode story when it does not
+  // match — no visible chrome is added, only the filter hook.
   if (order.length <= 1) {
     const actions = story.actions
       .map((action, actionIndex) =>
@@ -307,7 +431,7 @@ function renderStoryActions(
         ),
       )
       .join('\n');
-    return `<ol class="actions" aria-label="Actions">
+    return `<ol class="actions" aria-label="Actions" data-breakpoint="${escapeHtml(breakpointToken(order[0] ?? ''))}">
     ${actions}
   </ol>`;
   }
@@ -342,6 +466,10 @@ function renderStoryActions(
  * Dimensions render in their own `aria-hidden` span (decorative "375×667")
  * with an sr-only longhand ("375 by 667 pixels") so screen readers don't read
  * the `×` glyph as "x" mid-stream.
+ *
+ * The group `<div>` additionally carries a `data-breakpoint` hook (the bucket
+ * key's matcher token) so the breakpoint filter can hide a whole group whose
+ * mode is not selected. Purely additive — the caption/label idiom is untouched.
  */
 function renderBreakpointGroup(
   key: string,
@@ -361,16 +489,14 @@ function renderBreakpointGroup(
     recorded.breakpointHeight !== undefined
       ? { width: recorded.breakpointWidth, height: recorded.breakpointHeight }
       : undefined;
-  const dimensionMarkup = dimensions
-    ? `<span class="breakpoint-dimensions" aria-hidden="true">${dimensions.width}×${dimensions.height}</span><span class="sr-only">${dimensions.width} by ${dimensions.height} pixels</span>`
-    : '';
+  const dimensionMarkup = dimensions ? dimensionPair(dimensions) : '';
   const actions = entries
     .map(({ action, id }) =>
       renderAction(action, id, reportDir, interactiveMode),
     )
     .join('\n');
   return `
-<div class="breakpoint-group">
+<div class="breakpoint-group" data-breakpoint="${escapeHtml(breakpointToken(key))}">
   <p class="breakpoint-label" id="${labelId}">
     <span class="breakpoint-name">${escapeHtml(name)}</span>
     ${dimensionMarkup}
@@ -443,8 +569,11 @@ ${statusBadge(action.status)}
  * BOTH with no double-announce.
  *
  *   - candidate note: on `changed`/`new` rows only — supplementary prose flagging
- *     "this render is the proposed new baseline". No aria wiring; it does not
- *     duplicate the status badge's sr-only label.
+ *     "this run's actual screenshot is the proposed new baseline". Names the
+ *     Actual variant explicitly (the note sits OUTSIDE the <details>, so "this
+ *     render" would point at whichever tab is selected — or nothing when
+ *     collapsed). No aria wiring; it does not duplicate the status badge's
+ *     sr-only label.
  *   - a11y-drift note: gated STRICTLY on `a11yChanged === true`, NEVER inferred
  *     from a missing `diffPath` (a size-mismatch `changed` row also lacks a
  *     diffPath yet deliberately omits `a11yChanged`; keying on `!diffPath` would
@@ -460,7 +589,7 @@ function renderActionNotes(action: ActionResult, reportDir: string): string {
   const notes: string[] = [];
   if (action.status === 'changed' || action.status === 'new') {
     notes.push(
-      `<p class="candidate-note" role="note">This render is the proposed new baseline.</p>`,
+      `<p class="candidate-note" role="note">This run's actual screenshot is the proposed new baseline.</p>`,
     );
   }
   if (action.a11yChanged === true) {
@@ -517,15 +646,16 @@ function renderScreenshots(
   if (!action.actualPath && !action.baselinePath) {
     return '';
   }
-  // interactiveMode swaps the radio-tab output for the single-image hover/press
-  // viewer. When it is false the function falls through to the radio-tab output
-  // below, byte-identical with the pre-interactiveMode render.
+  // interactiveMode swaps the radio-tab output for the single-image
+  // press-and-hold viewer. When it is false the function falls through to the
+  // radio-tab output below, byte-identical with the pre-interactiveMode render.
   //
   // When the baseline and actual differ in dimensions the diff is uncomputable
   // (renderDiffStats' unavailable branch — both paths present, `changed` status,
-  // a recorded failureMessage, no diffRatio). The hover/press gesture has no diff
-  // image to reveal, so fall back to the radio-tab render: visible chips,
-  // baseline + actual, and the disabled diff option carrying the mismatch reason.
+  // a recorded failureMessage, no diffRatio). Press-flipping between two
+  // differently-sized captures misaligns everything and reads as "everything
+  // changed", so fall back to the radio-tab render: visible panels, baseline +
+  // actual, and the disabled diff option carrying the mismatch reason.
   const diffUncomputable =
     action.baselinePath !== undefined &&
     action.actualPath !== undefined &&
@@ -616,22 +746,54 @@ const SHOT_ALT: Record<
  * a diff is computed, so `diffRatio` is absent and there is no diff image to
  * show — surface the recorded reason here, in the slot the "% differs" stat
  * would normally occupy, so a "changed" row never reads as an unexplained no-op.
+ *
+ * The mismatch note folds baseline and actual sizes into ONE sentence and renders
+ * each dimension pair in the file's split idiom (a `breakpoint-dimensions` span
+ * carrying the `×` glyph for sight, plus an `sr-only` "W by H pixels" longhand for
+ * AT — never a bare `x`). It reads those numbers from the structured
+ * `action.sizeMismatch` pair, NOT by parsing `failureMessage`. When that pair is
+ * absent (a malformed or older result), it falls back to escaping the recorded
+ * `failureMessage` prose rather than risk a wrong parse.
  */
 function renderDiffStats(action: ActionResult, diffStatsId: string): string {
-  return action.diffRatio !== undefined
-    ? `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`
-    : action.status === 'changed' && action.failureMessage
-      ? `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">No pixel diff. ${escapeHtml(action.failureMessage)}</span></p>`
-      : '';
+  if (action.diffRatio !== undefined) {
+    return `<p class="diff-stats" id="${diffStatsId}"><span class="count">${parseFloat((action.diffRatio * 100).toFixed(2))}%</span> <span class="label">differs</span> <span class="coverage-detail">· ${(action.diffPixels ?? 0).toLocaleString('en-US')} pixels</span></p>`;
+  }
+  if (action.status !== 'changed' || !action.failureMessage) {
+    return '';
+  }
+  const label = action.sizeMismatch
+    ? `No pixel diff — screenshot resized from ${dimensionPair(action.sizeMismatch.baseline)} to ${dimensionPair(action.sizeMismatch.actual)}.`
+    : `No pixel diff. ${escapeHtml(action.failureMessage)}`;
+  return `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">${label}</span></p>`;
+}
+
+/**
+ * A `width`×`height` pair in the file's split idiom: the `×` glyph is sight-only
+ * (aria-hidden), and AT hears the spoken "W by H pixels" longhand instead of an
+ * ambiguous "x". Shared by {@link renderDiffStats} (the size-mismatch note) and
+ * {@link renderBreakpointGroup} (the per-mode caption), which emit byte-identical
+ * markup. {@link breakpointFilter} renders the same idiom but keeps its own
+ * inline copy: its sr-only longhand carries a leading space (` W by H pixels`)
+ * that this helper omits, so routing it through here would change the rendered
+ * bytes.
+ */
+function dimensionPair(size: { width: number; height: number }): string {
+  return `<span class="breakpoint-dimensions" aria-hidden="true">${size.width}×${size.height}</span><span class="sr-only">${size.width} by ${size.height} pixels</span>`;
 }
 
 /**
  * Interactive screenshot viewer (interactiveMode). One native radio group per
  * action is the committed-state source of truth — keyboard, touch, and AT all
- * operate the radios (reusing `name="${actionId}-shot"`). report.js layers a
- * VISUAL-ONLY mouse preview (hover→baseline, press→diff, release→committed) on
- * a SINGLE shared `<img>`; that gesture never mutates radio state, the img alt,
- * or any ARIA. The controls + caption live OUTSIDE the clipped `.shot-stage` so
+ * operate the radios (reusing `name="${actionId}-shot"`), and the chips render
+ * permanently visible (the mouse/touch path to every variant, including Diff).
+ * report.js layers a VISUAL-ONLY press-and-hold blink-compare on a SINGLE
+ * shared `<img>`: press shows the committed variant's counterpart (baseline
+ * normally, actual when baseline is committed); release/leave/dragstart
+ * reverts. No hover behavior. The gesture rewrites only the img src and the
+ * aria-hidden "Showing:" caption (which names the DISPLAYED variant, preview
+ * included) — never radio state, the img alt, or any ARIA. The controls +
+ * caption live OUTSIDE the clipped `.shot-stage` so
  * the focus ring is never clipped or painted over screenshot pixels. The diff
  * variant — and its radio — is omitted entirely (not disabled) when this action
  * produced no diff image; the existing diff-stats association then rides on the
@@ -669,7 +831,7 @@ function renderInteractiveScreenshots(
   const committedSrc = (committed === 'actual' ? actual : baseline) ?? '';
 
   // When only one variant is real (the common case for a `new` baseline, whose
-  // baseline is suppressed and has no diff), the hover/press switcher has nothing
+  // baseline is suppressed and has no diff), the press-and-hold flip has nothing
   // to toggle to — a lone radio in a group is noise to AT. Render the image alone;
   // the row's status badge already announces "new baseline". Zero variants — a
   // `new` row whose actual capture is missing — collapses to nothing.

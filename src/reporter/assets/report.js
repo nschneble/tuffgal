@@ -138,16 +138,32 @@
 
   // Interactive screenshot viewer (rendered when the report is built with
   // interactiveMode). Each action shows ONE shared <img>. A native radio group
-  // is the committed-state source of truth — keyboard, touch, and AT operate it
-  // exactly like the radio-tab viewer. On top of that, the mouse gesture is a
-  // STATELESS visual preview layered on the same <img>:
-  //   hover  (mouseenter/mousemove) → baseline src
-  //   press  (mousedown)            → diff src (no-op when there is no diff)
-  //   release/leave (mouseup/mouseleave) → revert to the checked radio's variant
-  // The preview ONLY rewrites img.src. It never changes the checked radio, the
-  // img alt, any ARIA attribute, or any live region — so hovering announces
-  // nothing by construction. The mouse listeners live on the .shot-stage wrapper
-  // rather than the <img>, keeping the image itself handler-free and
+  // (always-visible chips) is the committed-state source of truth — keyboard,
+  // touch, and AT operate it exactly like the radio-tab viewer, and the chips
+  // are the only path to Diff. On top of that, the mouse gesture is a STATELESS
+  // blink-compare layered on the same <img>:
+  //   press-and-hold (mousedown) → the committed variant's COUNTERPART:
+  //     baseline normally; actual when baseline is the committed variant
+  //     ("show me the other one"; committed diff flips to baseline). A missing
+  //     counterpart is a truthful no-op.
+  //   release/leave/dragstart → revert to the checked radio's variant
+  // There is deliberately NO hover behavior: hover swapped the image the moment
+  // the pointer wandered in, so the resting state under the cursor was the OLD
+  // screenshot. Rest = committed; press = intentional compare. Diff is off the
+  // gesture too (secondary forensic view — its chip covers it).
+  // The preview rewrites img.src plus the sight-only (aria-hidden) caption, so
+  // the "Showing: {variant}" line always names the DISPLAYED image. It never
+  // changes the checked radio, the img alt, any ARIA attribute, or any live
+  // region — so pressing announces nothing by construction. The caption and the
+  // checked radio are two different truths on purpose: the caption tracks what
+  // is displayed (preview included), the checked radio tracks the committed
+  // state AT operates on; during a press they diverge briefly — both remain
+  // accurate. Do NOT "fix" that by moving radio.checked during preview: checked
+  // is the single accessible source of committed state, and press-flapping it
+  // would announce to AT and leave revert() nothing stable to revert to.
+  //
+  // The mouse listeners live on the .shot-stage wrapper rather than the
+  // <img>, keeping the image itself handler-free and
   // non-focusable. Non-interactive reports have no .shot-interactive nodes, so
   // this block is a no-op there (and setupShots is a no-op on interactive ones).
   (function () {
@@ -178,29 +194,41 @@
       });
 
       // `committed` mirrors the checked radio — the ONLY state the keyboard /
-      // touch / AT path mutates. Mouse preview reverts here on release/leave.
+      // touch / AT path mutates. Mouse preview reverts here on release, leave,
+      // and dragstart.
       var committed = null;
-      var pressed = false;
+
+      // Caption always names the DISPLAYED variant — committed or previewed.
+      // The equality check is a cheap idempotence guard: writes are skipped
+      // when the label is already showing (e.g. revert after a no-op press).
+      function setCaption(variant) {
+        if (!captionVariant) return;
+        var label = VARIANT_LABELS[variant] || variant;
+        if (captionVariant.textContent !== label) {
+          captionVariant.textContent = label;
+        }
+      }
 
       function commit(variant) {
         if (!(variant in sources)) return;
         committed = variant;
         image.src = sources[variant];
-        if (captionVariant) {
-          captionVariant.textContent = VARIANT_LABELS[variant] || variant;
-        }
+        setCaption(variant);
       }
 
       // Show a variant WITHOUT committing (mouse preview). No-op when the variant
-      // has no src, so press-with-no-diff leaves the displayed image untouched.
+      // has no src, so a press whose counterpart is absent leaves the displayed
+      // image AND the caption untouched (the caption stays truthful).
       function preview(variant) {
         if (!(variant in sources)) return;
         image.src = sources[variant];
+        setCaption(variant);
       }
 
       function revert() {
         if (committed && committed in sources) {
           image.src = sources[committed];
+          setCaption(committed);
         }
       }
 
@@ -216,58 +244,85 @@
         });
       });
 
-      function hoverPreview() {
-        // While not pressed, hovering previews the baseline for an in-place
-        // compare. The pressed guard keeps a held mousedown pinned to diff even
-        // as the pointer moves across the image.
-        if (!pressed) preview('baseline');
-      }
-
-      stage.addEventListener('mouseenter', hoverPreview);
-      stage.addEventListener('mousemove', hoverPreview);
       stage.addEventListener('mousedown', function () {
-        pressed = true;
-        preview('diff');
+        preview(committed === 'baseline' ? 'actual' : 'baseline');
       });
-      stage.addEventListener('mouseup', function () {
-        pressed = false;
-        revert();
-      });
-      stage.addEventListener('mouseleave', function () {
-        pressed = false;
-        revert();
-      });
+      stage.addEventListener('mouseup', revert);
+      stage.addEventListener('mouseleave', revert);
+      // A press that turns into a native image drag can swallow the mouseup
+      // (the pointer never "leaves" the stage), which would leave the preview
+      // stuck. Native drag itself stays enabled — save-image is a platform
+      // feature, not ours to suppress.
+      stage.addEventListener('dragstart', revert);
     }
 
-    document
-      .querySelectorAll('.shot-interactive')
-      .forEach(function (fieldset) {
-        setupInteractiveShots(fieldset);
-      });
+    document.querySelectorAll('.shot-interactive').forEach(function (fieldset) {
+      setupInteractiveShots(fieldset);
+    });
   })();
 
-  // Status filter for the stories list. Each status total in the summary row is
-  // a native <button aria-pressed> single-select filter; clicking one toggles
-  // `hidden` on every <li.story> whose `data-status` doesn't match its
-  // `data-filter` token ("all" clears the filter). Exactly one button is pressed
-  // at all times (default: the "all/stories" button). Re-clicking the active
-  // non-"all" filter reverts to "all". Live-region updates are debounced by
-  // ~150ms; the visual hide/show is applied immediately.
+  // Two-dimension filter for the stories list, with a DIFFERENT granularity per
+  // axis:
+  //
+  //   STATUS axis (the summary totals) works at TWO levels. Story ELIGIBILITY
+  //   is the per-story ROLLUP (`totals.passed` = stories whose rollup status is
+  //   `pass`): a story is status-eligible iff its own rollup `data-status`
+  //   (emitted on the .story element) matches the active status, or the status
+  //   filter is "all". Within an eligible story, non-matching actions are then
+  //   PRUNED (hidden) so e.g. the `changed` view shows only the changed rows —
+  //   and expand-all opens only those rows' screenshots. `skipped` actions are
+  //   exempt from pruning: `skipped` exists on actions but not in the story
+  //   rollup vocabulary, so pruning it could empty a story the pill counts (a
+  //   dependency-blocked story is rollup `failed` with only `skipped` actions),
+  //   and skipped rows are context for the failure, not mismatches. The
+  //   exemption keeps the live-region visible-story count in agreement with the
+  //   pill total on a status-only filter.
+  //
+  //   BREAKPOINT axis (the neutral pill row below the totals) is CONTAINER-level.
+  //   A story is breakpoint-eligible iff it holds a [data-breakpoint] container
+  //   matching the active breakpoint, or the bp filter is "all". Within a shown
+  //   story, the non-matching [data-breakpoint] containers are hidden.
+  //
+  // Each axis is a set of native <button aria-pressed> single-select toggles
+  // keyed to a `data-filter` / `data-breakpoint-filter` TOKEN, with its own
+  // default-pressed "all" reset and its own single-pressed invariant.
+  //
+  // The two axes are ANDed: a story shows iff it is status-eligible (story
+  // rollup) AND breakpoint-eligible (has a matching container). apply() is a
+  // single top-down pass — story → [data-breakpoint] container — that reads BOTH
+  // active tokens, so re-running it after either axis changes yields the current
+  // intersection (no stale hides carried between axes). The breakpoint pills
+  // render only for multi-breakpoint runs, so on a single-breakpoint run this
+  // collapses to the status-only behavior with the bpFilter pinned at "all".
+  //
+  // Live-region updates are debounced by ~150ms; the visual hide/show is applied
+  // immediately.
   (function () {
-    var filterButtons = Array.prototype.slice.call(
+    var statusButtons = Array.prototype.slice.call(
       document.querySelectorAll('.summary-filter'),
     );
-    if (filterButtons.length === 0) return;
+    if (statusButtons.length === 0) return;
+    var bpButtons = Array.prototype.slice.call(
+      document.querySelectorAll('.breakpoint-filter'),
+    );
     var list = document.querySelector('.stories');
     var empty = document.querySelector('.stories-empty');
     if (!list || !empty) return;
 
     var stories = Array.prototype.slice.call(list.querySelectorAll('.story'));
     var total = stories.length;
-    var allButton =
-      filterButtons.find(function (button) {
+
+    // Active token per axis; "all" means the axis imposes no constraint.
+    var statusFilter = 'all';
+    var bpFilter = 'all';
+
+    var statusAllButton =
+      statusButtons.find(function (button) {
         return button.getAttribute('data-filter') === 'all';
-      }) || filterButtons[0];
+      }) || statusButtons[0];
+    var bpAllButton = bpButtons.find(function (button) {
+      return button.getAttribute('data-breakpoint-filter') === 'all';
+    });
 
     // Cached for the zero-match disable + focus-rescue logic in apply(). The
     // scope word is now static markup ("screenshots" visible, " all screenshots"
@@ -278,10 +333,10 @@
       '[data-bulk-toggle="collapse"]',
     );
 
-    // Maintain the single-pressed invariant: exactly one filter button carries
-    // aria-pressed="true".
-    function setPressed(active) {
-      filterButtons.forEach(function (button) {
+    // Maintain a single-pressed invariant WITHIN one axis: exactly one button in
+    // `buttons` carries aria-pressed="true".
+    function setPressed(buttons, active) {
+      buttons.forEach(function (button) {
         button.setAttribute(
           'aria-pressed',
           button === active ? 'true' : 'false',
@@ -289,89 +344,106 @@
       });
     }
 
-    function show(el) {
-      el.hidden = false;
-    }
-
-    // True when `container` holds at least one `.action` that is not hidden.
-    // Drives whether a breakpoint group / actions list earns its place under an
-    // active filter.
-    function hasVisibleAction(container) {
-      return Array.prototype.some.call(
-        container.querySelectorAll('.action'),
-        function (action) {
-          return !action.hidden;
-        },
-      );
-    }
-
-    // Apply the active filter top-down: story → breakpoint group → action. A
-    // non-"all" filter does more than hide whole stories — inside a matching
-    // story it also prunes the actions (and the now-empty breakpoint groups /
-    // actions lists) that don't match, so e.g. the "changed" view shows ONLY the
-    // changed rows of a changed story, never the pass rows that happen to share
-    // it. Expand-all then opens only those surviving rows.
-    function applyToStory(story, value) {
-      var actions = Array.prototype.slice.call(
-        story.querySelectorAll('.action'),
-      );
-      var groups = Array.prototype.slice.call(
-        story.querySelectorAll('.breakpoint-group'),
-      );
-      var lists = Array.prototype.slice.call(
-        story.querySelectorAll('ol.actions'),
-      );
-
-      // Story visibility keeps the worst-wins rollup semantics: a story shows
-      // only when its own status matches (or the filter is "all").
-      var storyMatches =
-        value === 'all' || story.getAttribute('data-status') === value;
-      if (!storyMatches) {
+    // Apply BOTH active axes to one story:
+    //   1. STATUS eligibility is story-level. The story is status-eligible when
+    //      statusFilter is "all" or the story's own rollup data-status (the
+    //      worst-across-breakpoints status emitted on the .story element) equals
+    //      the TOKEN ("pass"), not a visible label. A status-ineligible story is
+    //      hidden whole; its containers are never inspected, so they may carry
+    //      stale hidden state (see the recompute invariant below).
+    //   2. BREAKPOINT axis is container-level. Within a status-eligible story,
+    //      each [data-breakpoint] container (a .breakpoint-group div OR the flat
+    //      <ol class="actions">) is breakpoint-eligible when bpFilter is "all"
+    //      or its data-breakpoint equals bpFilter. A non-matching container is
+    //      hidden whole and its inner action prunes are CLEARED so a later
+    //      reveal starts from a clean slate.
+    //   3. STATUS pruning is action-level. Inside each breakpoint-eligible
+    //      container, an action is hidden when statusFilter is active and the
+    //      action's own data-status differs — EXCEPT `skipped` actions, which
+    //      are never pruned. `skipped` is not a story-rollup status, so pruning
+    //      it could empty a story the pill counts (a dependency-blocked story
+    //      is rollup `failed` with only `skipped` actions); skipped rows are
+    //      context for the failure, not mismatches.
+    //   4. A container pruned to zero visible actions is hidden — a captioned
+    //      empty list is a dead end. The story shows iff at least one container
+    //      survives with a visible action.
+    // Deliberate gate asymmetry under combined filters: the ROLLUP gates the
+    // story, the exact match prunes actions. Under "changed at mobile", a story
+    // whose rollup is `failed` stays hidden even if its mobile container holds
+    // a `changed` action — that matches the pill's per-story rollup semantics.
+    //
+    // Recompute invariant: apply() re-runs this for EVERY story on every filter
+    // change, unconditionally recomputing action.hidden in every breakpoint-
+    // eligible container. Hidden stories and containers may carry stale inner
+    // state by design; keep this pass memoization-free, or step 2's
+    // clear-on-hide and the stale state inside status-hidden stories become
+    // bugs.
+    function applyToStory(story) {
+      var statusMatches =
+        statusFilter === 'all' ||
+        story.getAttribute('data-status') === statusFilter;
+      if (!statusMatches) {
         story.hidden = true;
-        // Clear inner pruning so switching back to a matching filter — or to
-        // "all" — starts from a clean slate rather than inheriting stale hides.
-        actions.forEach(show);
-        groups.forEach(show);
-        lists.forEach(show);
         return false;
       }
 
-      if (value === 'all') {
-        story.hidden = false;
-        actions.forEach(show);
-        groups.forEach(show);
-        lists.forEach(show);
-        return true;
-      }
+      var containers = Array.prototype.slice.call(
+        story.querySelectorAll('[data-breakpoint]'),
+      );
 
-      // Matching story under a specific filter: compare each action's
-      // data-status against the button's data-filter TOKEN ("pass"), not its
-      // visible label ("passed"), so the "passed" filter matches the `pass`
-      // actions instead of silently emptying every story.
-      actions.forEach(function (action) {
-        action.hidden = action.getAttribute('data-status') !== value;
-      });
-      groups.forEach(function (group) {
-        group.hidden = !hasVisibleAction(group);
-      });
-      lists.forEach(function (listEl) {
-        listEl.hidden = !hasVisibleAction(listEl);
+      var storyVisible = false;
+      containers.forEach(function (container) {
+        var actions = Array.prototype.slice.call(
+          container.querySelectorAll('.action'),
+        );
+        var bpMatches =
+          bpFilter === 'all' ||
+          container.getAttribute('data-breakpoint') === bpFilter;
+        if (!bpMatches) {
+          container.hidden = true;
+          actions.forEach(function (action) {
+            action.hidden = false;
+          });
+          return;
+        }
+        var containerVisible = false;
+        actions.forEach(function (action) {
+          var status = action.getAttribute('data-status');
+          var pruned =
+            statusFilter !== 'all' &&
+            status !== statusFilter &&
+            status !== 'skipped';
+          action.hidden = pruned;
+          if (!pruned) containerVisible = true;
+        });
+        container.hidden = !containerVisible;
+        if (containerVisible) storyVisible = true;
       });
 
-      // A worst-wins rollup guarantees at least one matching action, but guard
-      // the invariant: a story that pruned to nothing is hidden and uncounted
-      // so the "N of M" announcement stays truthful.
-      var storyVisible = actions.some(function (action) {
-        return !action.hidden;
-      });
       story.hidden = !storyVisible;
       return storyVisible;
     }
 
-    function apply(value, trigger) {
+    // The short "name width" label for a breakpoint pill's live-region echo
+    // (e.g. "mobile 375"), read from the pressed pill's visible name + width.
+    // The status pill's echo reuses the shared filterLabel helper. A missing or
+    // "all" pill contributes nothing.
+    function breakpointLabel(button) {
+      if (!button) return '';
+      if (button.getAttribute('data-breakpoint-filter') === 'all') return '';
+      var nameEl = button.querySelector('.breakpoint-name');
+      var name = nameEl ? nameEl.textContent.trim() : '';
+      var dimsEl = button.querySelector('.breakpoint-dimensions');
+      // The decorative "375×667" carries the width before the × glyph; take just
+      // the width for the short form. Absent dimensions → bare name.
+      var width = dimsEl ? dimsEl.textContent.split('×')[0].trim() : '';
+      return width ? name + ' ' + width : name;
+    }
+
+    function apply(trigger) {
       var visible = 0;
       stories.forEach(function (story) {
-        if (applyToStory(story, value)) visible += 1;
+        if (applyToStory(story)) visible += 1;
       });
       var hasNone = visible === 0;
       list.hidden = hasNone;
@@ -389,18 +461,13 @@
       ) {
         trigger.focus();
       }
-      // Disable both bulk-toggle buttons when the active filter matches zero
+      // Disable both bulk-toggle buttons when the intersection matches zero
       // stories — there is nothing to expand/collapse. Runs on EVERY apply()
-      // call (including "all"), so selecting a matching filter re-enables them.
+      // call, so a filter change that re-reveals stories re-enables them.
       if (expandButton) expandButton.disabled = hasNone;
       if (collapseButton) collapseButton.disabled = hasNone;
 
-      var message =
-        value === 'all'
-          ? 'Showing all ' + total + ' stories'
-          : 'Showing ' + visible + ' of ' + total + ' stories';
-
-      statusRegion.writeDebounced(message, 150);
+      statusRegion.writeDebounced(filterMessage(visible), 150);
 
       // Post-apply focus-loss guard: if filtering left focus on nothing, the
       // body, or inside a now-[hidden] subtree, return it to the control that
@@ -410,28 +477,83 @@
         trigger &&
         (!active ||
           active === document.body ||
+          active === document.documentElement ||
           (active.closest && active.closest('[hidden]')))
       ) {
         trigger.focus();
       }
     }
 
-    filterButtons.forEach(function (button) {
+    // Compose the live-region sentence for the current axis state (count =
+    // visible stories after the intersection). Four combos:
+    //   both all       → "Showing all N stories"
+    //   status only    → "Showing {statusLabel}: N stories"
+    //   breakpoint only → "Showing {breakpointLabel}: N stories"
+    //   both           → "Showing {statusLabel} at {breakpointLabel}: N stories"
+    // Singular/plural on stor(y|ies). aria-atomic replaces the whole sentence.
+    function filterMessage(visible) {
+      var noun = visible === 1 ? 'story' : 'stories';
+      var statusActive = statusFilter !== 'all';
+      var bpActive = bpFilter !== 'all';
+      if (!statusActive && !bpActive) {
+        return 'Showing all ' + total + ' ' + noun;
+      }
+      var statusLabel = filterLabel(
+        statusButtons.find(function (button) {
+          return button.getAttribute('aria-pressed') === 'true';
+        }),
+      );
+      var bpLabel = breakpointLabel(
+        bpButtons.find(function (button) {
+          return button.getAttribute('aria-pressed') === 'true';
+        }),
+      );
+      var scope;
+      if (statusActive && bpActive) {
+        scope = statusLabel + ' at ' + bpLabel;
+      } else if (statusActive) {
+        scope = statusLabel;
+      } else {
+        scope = bpLabel;
+      }
+      return 'Showing ' + scope + ': ' + visible + ' ' + noun;
+    }
+
+    statusButtons.forEach(function (button) {
       button.addEventListener('click', function () {
         var token = button.getAttribute('data-filter');
         var isActive = button.getAttribute('aria-pressed') === 'true';
-        // Re-clicking the active, non-"all" filter reverts to "all". Focus stays
-        // on the clicked button — it is in the summary row and never hidden by
-        // its own action.
+        // Re-clicking the active, non-"all" filter reverts that axis to "all".
+        // Focus stays on the clicked button — it is in the summary row and never
+        // hidden by its own action.
         if (isActive && token !== 'all') {
-          setPressed(allButton);
-          apply('all', button);
+          setPressed(statusButtons, statusAllButton);
+          statusFilter = 'all';
+          apply(button);
           return;
         }
         // Re-clicking the already-active "all" button is a no-op.
         if (isActive) return;
-        setPressed(button);
-        apply(token, button);
+        setPressed(statusButtons, button);
+        statusFilter = token;
+        apply(button);
+      });
+    });
+
+    bpButtons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var token = button.getAttribute('data-breakpoint-filter');
+        var isActive = button.getAttribute('aria-pressed') === 'true';
+        if (isActive && token !== 'all') {
+          setPressed(bpButtons, bpAllButton);
+          bpFilter = 'all';
+          apply(button);
+          return;
+        }
+        if (isActive) return;
+        setPressed(bpButtons, button);
+        bpFilter = token;
+        apply(button);
       });
     });
   })();
@@ -447,10 +569,9 @@
   // We use `details.open = true/false` rather than `details.click()` so the
   // browser does not dispatch a `toggle` event cascade for every panel.
   //
-  // No debounce: bulk-toggle fires once per click (not on every arrow keypress
-  // like the filter does), so the live region is not at risk of being flooded.
-  // The filter's 150ms debounce exists because radios announce on every arrow
-  // move; here a single click → single message is fine.
+  // No debounce: bulk-toggle fires once per click, so the live region is not
+  // at risk of being flooded. The filter's 150ms debounce exists to coalesce a
+  // rapid run of pill clicks; here a single click → single message is fine.
   //
   // Toggle announcements go to their own `.bulk-toggle-status` region via
   // `bulkRegion.write(msg)`, NOT the filter's `.story-filter-status`. Toggling
@@ -472,9 +593,7 @@
       if (!shouldOpen) {
         var active = document.activeElement;
         var openDetails =
-          active &&
-          active.closest &&
-          active.closest('details.shots[open]');
+          active && active.closest && active.closest('details.shots[open]');
         if (openDetails) {
           var summary = openDetails.querySelector('summary');
           if (summary) summary.focus();
@@ -484,11 +603,17 @@
         document.querySelectorAll('.story:not([hidden])'),
       );
       visibleStories.forEach(function (story) {
-        // Only the rows surviving the active filter — `.action:not([hidden])` —
-        // get toggled, so "Expand all" under e.g. the changed filter opens just
-        // the changed screenshots, not the pass rows sharing the same story.
+        // Only the rows surviving the active filter get toggled. The status
+        // axis prunes non-matching actions ([hidden] on the .action) and the
+        // breakpoint axis hides whole containers, so an action is "visible"
+        // iff neither it nor its container is hidden. Excluding both keeps a
+        // pruned row's panels closed — otherwise they would open here and
+        // later appear pre-expanded when a filter change reveals them,
+        // breaking the default-closed contract.
         var panels = Array.prototype.slice.call(
-          story.querySelectorAll('.action:not([hidden]) details.shots'),
+          story.querySelectorAll(
+            '[data-breakpoint]:not([hidden]) .action:not([hidden]) details.shots',
+          ),
         );
         panels.forEach(function (panel) {
           panel.open = shouldOpen;
@@ -499,16 +624,19 @@
       // announcement reads the same to a screen reader either way, and this
       // keeps the logic simple.
       var count = visibleStories.length;
+      var noun = count === 1 ? 'story' : 'stories';
       var verb = shouldOpen ? 'Expanded' : 'Collapsed';
-      // Echo the active filter scope so the announcement carries context for
-      // what was toggled (e.g. "Expanded passed in 3 stories"). The button
+      // Echo the active STATUS-filter scope so the announcement carries context
+      // for what was toggled (e.g. "Expanded passed in 3 stories"). The button
       // label itself is static ("Expand all screenshots"); only this live
-      // announcement reflects the filter. Read the pressed filter button at
+      // announcement reflects the status filter. Read the pressed status pill at
       // click time via the shared filterLabel helper. No pressed button falls
       // back to "all".
-      var pressed = document.querySelector('.summary-filter[aria-pressed="true"]');
+      var pressed = document.querySelector(
+        '.summary-filter[aria-pressed="true"]',
+      );
       var name = filterLabel(pressed);
-      bulkRegion.write(verb + ' ' + name + ' in ' + count + ' stories');
+      bulkRegion.write(verb + ' ' + name + ' in ' + count + ' ' + noun);
     }
 
     buttons.forEach(function (button) {

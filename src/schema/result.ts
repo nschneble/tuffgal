@@ -48,6 +48,19 @@ export interface ActionResult {
    */
   failedStepIndex?: number;
   failureMessage?: string;
+  /**
+   * Structured baseline/actual dimensions for the size-mismatch `changed` branch
+   * (a screenshot whose baseline and actual differ in size, so no pixel diff can
+   * be computed). Carried alongside `failureMessage` — which holds the same fact
+   * as prose — so the reporter can render the dimensions in an accessible split
+   * idiom (a spoken "W by H pixels" longhand) instead of string-parsing the
+   * message. Set ONLY by the size-mismatch branch of `runAction`; absent on every
+   * other result, in which case the reporter falls back to `failureMessage`.
+   */
+  sizeMismatch?: {
+    baseline: { width: number; height: number };
+    actual: { width: number; height: number };
+  };
   baselinePath?: string;
   actualPath?: string;
   diffPath?: string;

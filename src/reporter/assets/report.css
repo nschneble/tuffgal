@@ -245,72 +245,201 @@ h2 {
   color: var(--text-subtle);
 }
 
-/* Each status total is a single-select filter styled as a plain text link. The
-   word ("passed") is the only underlined link; its sibling count precedes it
-   outside the button. Resting is plain --text (1.4.3 text contrast, not the
-   1.4.11 non-text floor — no border to measure); hover and pressed tint the word
-   AND its underline the status color (text-decoration inherits currentColor, so
-   they carry a same-ratio underline). The visible count + word always show, and
-   the pressed state is never color-alone (1.4.1) — bold weight + a double
-   underline carry it independently. Target size ≥24×24 via min-height/min-width
-   (2.5.8). Stays a <button>: it filters in place, never navigates. */
+/* Each status total is a single-select filter styled as a colorful, button-like
+   pill keyed to its status accent (aligned to the .chip idiom). Its sibling count
+   precedes it outside the button. Default (aria-pressed=false) is an OUTLINE pill:
+   transparent background, status-colored label + 1px status-colored border. Hover
+   adds a faint status tint; pressed becomes a FILLED pill (status background,
+   paired --*-fg label) with bold weight. The 1px solid status border on every
+   state guarantees a perceivable non-text edge (1.4.11); label/fg pairings clear
+   4.5:1 on --bg-elevated in both themes (1.4.3). Pressed is never color-alone
+   (1.4.1): it is the only filled + bold pill, readable without hue. Target size
+   ≥24×24 via min-height/min-width (2.5.8). Stays a <button>: it filters in place,
+   never navigates. */
 .summary-filter {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   min-height: 24px;
   min-width: 24px;
-  padding: 0 0.15rem;
+  padding: 0.2rem 0.6rem;
   line-height: 1.2;
-  background: none;
-  border: 0;
+  border: 1px solid var(--border-bright);
+  border-radius: 999px;
+  background: transparent;
   color: var(--text);
   font: inherit;
   cursor: pointer;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 4.5px;
+  transition-property: scale, color, background-color, border-color;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
 }
 
 .summary-filter[aria-pressed='true'] {
   cursor: default;
   user-select: none;
+  font-weight: 600;
 }
 
-/* Hover + pressed tint the word its status color. The "all" total stays --text
-   on both: --accent equals --new, so tinting "all" blue would falsely imply the
-   "new" filter. Status colors clear 4.5:1 on --bg-elevated in both themes. */
-.summary-item[data-status='pass'] .summary-filter:hover,
-.summary-item[data-status='pass'] .summary-filter[aria-pressed='true'] {
+.summary-filter:active {
+  scale: 0.96;
+}
+
+/* Status pills: OUTLINE by default (status label + status border, transparent
+   bg), faint status tint on hover, FILLED on pressed (status bg + paired --*-fg
+   label). The "all" total stays NEUTRAL on every state: --accent equals --new, so
+   tinting "all" blue would falsely imply the "new" filter. Status label + border
+   clear their contrast floors on --bg-elevated in both themes; each status token
+   paired with its --*-fg fill clears 4.5:1. */
+.summary-item[data-status='pass'] .summary-filter {
   color: var(--pass);
+  border-color: var(--pass);
 }
 
-.summary-item[data-status='changed'] .summary-filter:hover,
-.summary-item[data-status='changed'] .summary-filter[aria-pressed='true'] {
+.summary-item[data-status='pass'] .summary-filter:hover {
+  background: color-mix(in srgb, var(--pass) 15%, transparent);
+}
+
+.summary-item[data-status='pass'] .summary-filter[aria-pressed='true'] {
+  background: var(--pass);
+  color: var(--pass-fg);
+}
+
+.summary-item[data-status='changed'] .summary-filter {
   color: var(--changed);
+  border-color: var(--changed);
 }
 
-.summary-item[data-status='failed'] .summary-filter:hover,
-.summary-item[data-status='failed'] .summary-filter[aria-pressed='true'] {
+.summary-item[data-status='changed'] .summary-filter:hover {
+  background: color-mix(in srgb, var(--changed) 15%, transparent);
+}
+
+.summary-item[data-status='changed'] .summary-filter[aria-pressed='true'] {
+  background: var(--changed);
+  color: var(--changed-fg);
+}
+
+.summary-item[data-status='failed'] .summary-filter {
   color: var(--failed);
+  border-color: var(--failed);
 }
 
-.summary-item[data-status='new'] .summary-filter:hover,
-.summary-item[data-status='new'] .summary-filter[aria-pressed='true'] {
+.summary-item[data-status='failed'] .summary-filter:hover {
+  background: color-mix(in srgb, var(--failed) 15%, transparent);
+}
+
+.summary-item[data-status='failed'] .summary-filter[aria-pressed='true'] {
+  background: var(--failed);
+  color: var(--failed-fg);
+}
+
+.summary-item[data-status='new'] .summary-filter {
   color: var(--new);
+  border-color: var(--new);
 }
 
-.summary-item[data-status='all'] .summary-filter:hover,
+.summary-item[data-status='new'] .summary-filter:hover {
+  background: color-mix(in srgb, var(--new) 15%, transparent);
+}
+
+.summary-item[data-status='new'] .summary-filter[aria-pressed='true'] {
+  background: var(--new);
+  color: var(--new-fg);
+}
+
+/* "all" stays NEUTRAL — never a status color, never blue. Pressed is a filled
+   neutral pill (it is pressed-by-default at load, so this is the resting view). */
+.summary-item[data-status='all'] .summary-filter {
+  color: var(--text);
+  border-color: var(--border-bright);
+}
+
 .summary-item[data-status='all'] .summary-filter[aria-pressed='true'] {
+  background: var(--bg);
   color: var(--text);
 }
 
-.summary-filter:hover,
-.summary-filter[aria-pressed='true'] {
-  text-decoration-style: double;
+.summary-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.summary-filter:focus-visible {
+/* Breakpoint filter — the SECOND, independent single-select filter dimension,
+   rendered below the status totals inside the summary region (only for
+   multi-breakpoint runs). A role="group" row of neutral pills; report.js ANDs it
+   with the status filter. The row sits on the page --bg with a top gap that also
+   guarantees ≥24px vertical spacing between the two pill rows (2.5.8). */
+.breakpoint-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* Neutral pills — no status hue, so the two filter rows read as siblings by
+   geometry, not color. Same pill geometry/radius as the status filter.
+   Default is an OUTLINE pill: transparent bg, --text-muted border (≥3:1 vs --bg
+   in both themes → 1.4.11), --text label (≥4.5:1 → 1.4.3). Hover brightens the
+   border + adds a faint neutral tint. Pressed is a FILLED pill: --text fill,
+   --bg label, bold weight — the ONLY filled + bold pill, so the pressed state is
+   never conveyed by color alone (1.4.1); the inverse fill clears 4.5:1 in both
+   themes. Focus ring is --accent 2px / offset 2px, painted on the page --bg
+   outside the pill — identical to the status filter. Target size ≥24×24 via
+   min-height/min-width (2.5.8). Stays a <button>: it filters in place. */
+.breakpoint-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0.2rem 0.6rem;
+  line-height: 1.2;
+  border: 1px solid var(--text-muted);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition-property: scale, color, background-color, border-color;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+.breakpoint-filter .breakpoint-name {
+  color: inherit;
+  font-weight: inherit;
+  text-transform: none;
+}
+
+.breakpoint-filter .breakpoint-dimensions {
+  color: var(--text-subtle);
+}
+
+.breakpoint-filter:hover:not([aria-pressed='true']) {
+  border-color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.breakpoint-filter[aria-pressed='true'] {
+  cursor: default;
+  user-select: none;
+  font-weight: 600;
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+/* The pressed pill's dimensions ride the inverse fill: --bg on --text is the
+   same ≥4.5:1 pair as the label, so they stay legible. */
+.breakpoint-filter[aria-pressed='true'] .breakpoint-dimensions {
+  color: color-mix(in srgb, var(--bg) 65%, var(--text));
+}
+
+.breakpoint-filter:active {
+  scale: 0.96;
+}
+
+.breakpoint-filter:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -801,7 +930,12 @@ summary.action-row:focus-visible {
    sit in this fieldset, which lives OUTSIDE the clipped `.shot-stage`, so the
    chip focus ring is never clipped by the stage overflow nor painted over
    screenshot pixels. The chips reuse `.chip--toggle` (border `--border-bright`,
-   `--accent` focus ring), so no new focus tokens are introduced here. */
+   `--accent` focus ring) and the same `.shot-radio-label` base styles as the
+   radio-tab viewer — permanently visible, no interactiveMode-specific chip
+   styling. Visible chips are the mouse/touch path to every variant (including
+   Diff, which the press gesture does not cover) and double as the viewer's
+   only visible affordance; the press-and-hold blink-compare in report.js is
+   enhancement on top. */
 .shot-interactive {
   display: flex;
   flex-wrap: wrap;
@@ -812,38 +946,12 @@ summary.action-row:focus-visible {
   border: 0;
 }
 
-/* interactiveMode: chip buttons collapsed by default — sighted mouse users
-   drive the viewer with the hover/press gesture on the stage. Clip (never
-   display/visibility/inert) so the nested radio stays focusable and keeps
-   its accessible name. Mirrors .sr-only. */
-.shot-interactive .shot-radio-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-/* Reveal the whole chip group when a keyboard user focuses any radio.
-   :focus-within needs no :has() fallback and never fires for mouse/touch
-   (label clipped, input pointer-events:none → radios are keyboard-only
-   reachable). Specificity (0,3,0) beats the collapse rule (0,2,0). */
-.shot-interactive:focus-within .shot-radio-label {
-  position: static;
-  width: auto;
-  height: auto;
-  margin: 0;
-  overflow: visible;
-  clip: auto;
-  white-space: normal;
-}
-
-/* Persistent caption naming the committed variant. Text on `--text` (≥4.5:1),
-   so the active variant is never conveyed by color alone — it pairs the checked
-   chip's accent border with this readable label. aria-hidden keeps it visual
-   only: the checked radio is the single accessible source of committed state. */
+/* Persistent caption naming the DISPLAYED variant — the committed one, or the
+   press-and-hold preview while it is held (report.js keeps it in sync). Text on
+   `--text` (≥4.5:1), so the active variant is never conveyed by color alone —
+   it pairs the checked chip's accent border with this readable label.
+   aria-hidden keeps it visual only: the checked radio is the single accessible
+   source of committed state. */
 .shot-caption {
   margin: 0 0 0 0.25rem;
   color: var(--text);
@@ -884,10 +992,14 @@ summary.action-row:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .skip-link,
   summary.action-row::after,
-  .chip {
+  .chip,
+  .summary-filter,
+  .breakpoint-filter {
     transition: none;
   }
-  .chip:active {
+  .chip:active,
+  .summary-filter:active,
+  .breakpoint-filter:active {
     scale: none;
   }
 }

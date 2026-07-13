@@ -8,6 +8,36 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.2.0-alpha.2] — 2026-07-12
+
+Report improvements. The HTML report picks up a breakpoint filter, sharper
+status filtering, and an interactive viewer redesigned around
+blink-comparing what changed.
+
+### Added
+
+- Breakpoint filter pills in the report summary
+- `npm run preview -- --interactive` renders sample report in interactive mode
+- `sizeMismatch` on `results.json` action results
+
+### Changed
+
+- A status-filtered story now shows only its matching actions
+- Candidate note names its referent
+- Redesigned interactive mode so resting state is the selected variant
+  - Press and hold the screenshot to flip to its baseline counterpart
+  - The Baseline/Actual/Diff chips are always visible
+  - The Showing caption tracks whatever is displayed
+- Resized-screenshot note folded into one accessible sentence
+- Summary status filters restyled as colorful pills
+
+### Fixed
+
+- A press-to-native-image-drag no longer leaves the preview stuck
+- Bulk expand/collapse no longer pre-expands hidden screenshot panels
+- "Expanded changed in 1 stories" pluralization in bulk-toggle announcement
+- `npm run preview` silently never rendered interactive mode
+
 ## [0.2.0-alpha.1] — 2026-07-10
 
 CI-owned baselines. CI is now the sole writer of committed baselines. Local
@@ -249,7 +279,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.1...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.2...HEAD
+[0.2.0-alpha.2]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.2
 [0.2.0-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.1
 [0.1.0-alpha.14]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.14
 [0.1.0-alpha.13]: https://github.com/nschneble/tuffgal/releases/tag/v0.1.0-alpha.13
