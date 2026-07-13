@@ -8,8 +8,10 @@
  * every conditional report section — the environment-mismatch banner and the
  * deleted (orphaned-baseline) list — so a preview shows the whole surface.
  *
- * `npm run preview`             — everything, including banner + deleted
- * `npm run preview -- --clean`  — happy path: no mismatch, nothing orphaned
+ * `npm run preview`                  — everything, including banner + deleted
+ * `npm run preview -- --clean`       — happy path: no mismatch, nothing orphaned
+ * `npm run preview -- --interactive` — hover/press screenshot viewer instead of
+ *                                      the radio-tab panels
  *
  * Outputs to a (throwaway) temp directory.
  */
@@ -134,6 +136,7 @@ function manifest(
 
 async function main(): Promise<void> {
   const clean = process.argv.includes('--clean');
+  const interactive = process.argv.includes('--interactive');
   const dir = mkdtempSync(join(tmpdir(), 'tuffgal-preview-'));
   const writeShot = (name: string, png: Buffer): string => {
     const path = join(dir, `${name}.png`);
@@ -398,7 +401,7 @@ async function main(): Promise<void> {
     ],
   };
 
-  const htmlPath = await writeReport(dir, result);
+  const htmlPath = await writeReport(dir, result, interactive);
   console.log(`Sample report written to ${htmlPath}`);
   openInBrowser(htmlPath);
 }

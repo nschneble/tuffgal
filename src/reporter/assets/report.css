@@ -969,10 +969,12 @@ summary.action-row:focus-visible {
   white-space: normal;
 }
 
-/* Persistent caption naming the committed variant. Text on `--text` (≥4.5:1),
-   so the active variant is never conveyed by color alone — it pairs the checked
-   chip's accent border with this readable label. aria-hidden keeps it visual
-   only: the checked radio is the single accessible source of committed state. */
+/* Persistent caption naming the DISPLAYED variant — the committed one, or the
+   hover/press preview while that gesture is active (report.js keeps it in sync).
+   Text on `--text` (≥4.5:1), so the active variant is never conveyed by color
+   alone — it pairs the checked chip's accent border with this readable label.
+   aria-hidden keeps it visual only: the checked radio is the single accessible
+   source of committed state. */
 .shot-caption {
   margin: 0 0 0 0.25rem;
   color: var(--text);

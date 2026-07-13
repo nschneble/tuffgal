@@ -144,10 +144,20 @@
   //   hover  (mouseenter/mousemove) → baseline src
   //   press  (mousedown)            → diff src (no-op when there is no diff)
   //   release/leave (mouseup/mouseleave) → revert to the checked radio's variant
-  // The preview ONLY rewrites img.src. It never changes the checked radio, the
-  // img alt, any ARIA attribute, or any live region — so hovering announces
-  // nothing by construction. The mouse listeners live on the .shot-stage wrapper
-  // rather than the <img>, keeping the image itself handler-free and
+  // The preview rewrites img.src plus the sight-only (aria-hidden) caption, so
+  // the "Showing: {variant}" line always names the DISPLAYED image. It never
+  // changes the checked radio, the img alt, any ARIA attribute, or any live
+  // region — so hovering announces nothing by construction. The caption and the
+  // checked radio are two different truths on purpose: the caption tracks what
+  // is displayed (preview included), the checked radio tracks the committed
+  // state AT operates on. In the rare hybrid case (keyboard focus reveals the
+  // chips, then the mouse hovers the stage) they diverge briefly — both remain
+  // accurate. Do NOT "fix" that by moving radio.checked during preview: checked
+  // is the single accessible source of committed state, and hover-flapping it
+  // would announce to AT and leave revert() nothing stable to revert to.
+  //
+  // The mouse listeners live on the .shot-stage wrapper rather than the
+  // <img>, keeping the image itself handler-free and
   // non-focusable. Non-interactive reports have no .shot-interactive nodes, so
   // this block is a no-op there (and setupShots is a no-op on interactive ones).
   (function () {
@@ -182,25 +192,37 @@
       var committed = null;
       var pressed = false;
 
+      // Caption always names the DISPLAYED variant — committed or previewed.
+      // The equality check makes the continuous mousemove-driven rewrite a
+      // no-op after the first hover frame.
+      function setCaption(variant) {
+        if (!captionVariant) return;
+        var label = VARIANT_LABELS[variant] || variant;
+        if (captionVariant.textContent !== label) {
+          captionVariant.textContent = label;
+        }
+      }
+
       function commit(variant) {
         if (!(variant in sources)) return;
         committed = variant;
         image.src = sources[variant];
-        if (captionVariant) {
-          captionVariant.textContent = VARIANT_LABELS[variant] || variant;
-        }
+        setCaption(variant);
       }
 
       // Show a variant WITHOUT committing (mouse preview). No-op when the variant
-      // has no src, so press-with-no-diff leaves the displayed image untouched.
+      // has no src, so press-with-no-diff leaves the displayed image AND the
+      // caption untouched (baseline stays showing — the caption stays truthful).
       function preview(variant) {
         if (!(variant in sources)) return;
         image.src = sources[variant];
+        setCaption(variant);
       }
 
       function revert() {
         if (committed && committed in sources) {
           image.src = sources[committed];
+          setCaption(committed);
         }
       }
 

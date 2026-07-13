@@ -786,8 +786,10 @@ function dimensionPair(size: { width: number; height: number }): string {
  * action is the committed-state source of truth — keyboard, touch, and AT all
  * operate the radios (reusing `name="${actionId}-shot"`). report.js layers a
  * VISUAL-ONLY mouse preview (hover→baseline, press→diff, release→committed) on
- * a SINGLE shared `<img>`; that gesture never mutates radio state, the img alt,
- * or any ARIA. The controls + caption live OUTSIDE the clipped `.shot-stage` so
+ * a SINGLE shared `<img>`; that gesture rewrites only the img src and the
+ * aria-hidden "Showing:" caption (which names the DISPLAYED variant, preview
+ * included) — never radio state, the img alt, or any ARIA. The controls +
+ * caption live OUTSIDE the clipped `.shot-stage` so
  * the focus ring is never clipped or painted over screenshot pixels. The diff
  * variant — and its radio — is omitted entirely (not disabled) when this action
  * produced no diff image; the existing diff-stats association then rides on the
