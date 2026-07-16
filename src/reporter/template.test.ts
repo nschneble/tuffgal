@@ -254,17 +254,28 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
       'three story list items',
     );
     assert.ok(
-      html.includes('<li class="story" data-status="pass">'),
+      html.includes('<li class="story" data-status="pass"'),
       'pass story has data-status="pass"',
     );
     assert.ok(
-      html.includes('<li class="story" data-status="changed">'),
+      html.includes('<li class="story" data-status="changed"'),
       'changed story has data-status="changed"',
     );
     assert.ok(
-      html.includes('<li class="story" data-status="failed">'),
+      html.includes('<li class="story" data-status="failed"'),
       'failed story has data-status="failed"',
     );
+  });
+
+  it('gives each story a deep-link anchor keyed to its results.stories index, plus a script focus target', () => {
+    // The CI comment builds `#story-<i>` links off the same results.json story
+    // ordinal, so each story <li> must carry `id="story-<index>"` in order.
+    for (let index = 0; index < 3; index += 1) {
+      assert.ok(
+        html.includes(`id="story-${index}" tabindex="-1"`),
+        `story ${index} has id="story-${index}" and a -1 focus target`,
+      );
+    }
   });
 
   it('renders the summary section with per-tier totals matching the fixture', () => {
@@ -466,7 +477,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
       'the new filter button carries its visible "new" label',
     );
     assert.ok(
-      html.includes('<li class="story" data-status="new">'),
+      html.includes('<li class="story" data-status="new"'),
       'the new story carries data-status="new" so the filter matches it',
     );
   });

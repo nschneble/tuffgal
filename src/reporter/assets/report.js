@@ -679,4 +679,64 @@
       });
     });
   })();
+
+  // Deep-link support for the CI comment. A URL like `…/index.html#story-3`
+  // (built by tuffgal-action from the same `results.json` story ordinal that
+  // template.ts renders as `id="story-<index>"`) lands the reader ON that story
+  // with its screenshots already expanded — no scrolling or clicking through a
+  // 34-row report to find the one that changed.
+  //
+  // On a matching hash we:
+  //   1. Expand every VISIBLE screenshot disclosure in that story, reusing the
+  //      bulk-toggle's own visibility predicate so a filtered-out row is not
+  //      force-opened (default-closed contract). Setting `details.open` directly
+  //      — not `.click()` — mirrors the bulk-toggle and avoids a toggle cascade.
+  //   2. Move focus to the story `<li>` (tabindex="-1") so assistive tech
+  //      announces the story prose rather than dropping the reader mid-list.
+  //      `preventScroll` keeps focus from yanking the viewport before our own
+  //      smooth scroll runs.
+  //   3. Smooth-scroll the story to the top (respecting reduced-motion), so the
+  //      expanded screenshots sit in view.
+  //
+  // Runs on initial load AND on `hashchange`, so following a second deep-link
+  // within an already-open report re-targets without a reload.
+  (function () {
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    function openStory(story) {
+      // Same predicate the bulk-toggle uses: only rows surviving the active
+      // filter (neither the action nor its breakpoint container hidden) get
+      // opened, so a deep-link never resurrects a pruned row pre-expanded.
+      var panels = Array.prototype.slice.call(
+        story.querySelectorAll(
+          '[data-breakpoint]:not([hidden]) .action:not([hidden]) details.shots',
+        ),
+      );
+      panels.forEach(function (panel) {
+        panel.open = true;
+      });
+      if (typeof story.focus === 'function') {
+        story.focus({ preventScroll: true });
+      }
+      requestAnimationFrame(function () {
+        story.scrollIntoView({
+          behavior: reduce.matches ? 'instant' : 'smooth',
+          block: 'start',
+          inline: 'nearest',
+        });
+      });
+    }
+
+    function applyHash() {
+      var hash = window.location.hash;
+      // Only act on our own `#story-<n>` fragments; leave every other in-page
+      // anchor (headings, skip link) to native browser behavior.
+      if (!/^#story-\d+$/.test(hash)) return;
+      var story = document.getElementById(hash.slice(1));
+      if (story && story.classList.contains('story')) openStory(story);
+    }
+
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+  })();
 })();
