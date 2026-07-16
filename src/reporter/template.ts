@@ -354,6 +354,15 @@ function renderStories(
 `;
 }
 
+/**
+ * `id="story-<storyIndex>"` is the deep-link target: report.js reads
+ * `location.hash`, scrolls the matching story into view, and expands its
+ * screenshots. The index is the story's position in `result.stories` (the same
+ * ordinal that keys action ids as `s<storyIndex>-a…`), so the CI comment — which
+ * walks the SAME `results.json` stories array — can build `#story-<i>` links
+ * without re-deriving a slug. `tabindex="-1"` makes the `<li>` a script focus
+ * target so a deep-link lands the reader on the story prose, not mid-list.
+ */
 function renderStory(
   story: StoryResult,
   storyIndex: number,
@@ -361,7 +370,7 @@ function renderStory(
   interactiveMode: boolean,
 ): string {
   return `
-<li class="story" data-status="${story.status}">
+<li class="story" data-status="${story.status}" id="story-${storyIndex}" tabindex="-1">
   <div class="story-row">
     <span class="story-marker" aria-hidden="true">${STATUS_MARKERS[story.status]}</span>
     <span class="sr-only">${STATUS_LABELS[story.status]}</span>

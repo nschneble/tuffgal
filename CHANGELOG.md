@@ -6,7 +6,11 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Added
+
+- Report stories carry a stable `id="story-<index>"` deep-link anchor
+  - A `…/index.html#story-<n>` URL scrolls that story into view and expands its screenshots on load (and on `hashchange`), moving focus to the story for assistive tech
+  - The index is the story's position in `results.json`, so the CI comment can build deep-links without re-deriving a slug
 
 ## [0.2.0-alpha.2] — 2026-07-12
 
