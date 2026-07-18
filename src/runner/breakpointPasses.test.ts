@@ -143,7 +143,7 @@ describe('adaptNeedsForPass', () => {
   });
 
   it('drops a scheduler need whose producer is absent but RETAINS it for auth', () => {
-    // Only the consumer participates — its producer renders at another
+    // Only the consumer participates; its producer renders at another
     // breakpoint and persisted auth state in that pass. Keeping the scheduler
     // need would deadlock the drain, so `needs` is stripped; but `authNeeds`
     // must retain the label so `resolveStorageStateForNeeds` still loads the

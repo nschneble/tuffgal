@@ -44,7 +44,7 @@ const passRunner: StoryRunner = (item) => Promise.resolve(passResult(item));
 
 const noop = (): void => {};
 
-describe('buildSchedule — validation', () => {
+describe('buildSchedule: validation', () => {
   it('throws when two stories produce the same label', () => {
     const stories = [
       makeStoryFile('a.json', { produces: ['shared'] }),
@@ -85,7 +85,7 @@ describe('buildSchedule — validation', () => {
   });
 });
 
-describe('drainSchedule — execution', () => {
+describe('drainSchedule: execution', () => {
   it('resolves immediately for an empty schedule', async () => {
     const results = await drainSchedule([], 2, passRunner, noop, noop);
     assert.deepEqual(results, []);

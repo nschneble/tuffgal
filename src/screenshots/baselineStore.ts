@@ -20,7 +20,7 @@ export interface BaselinePaths {
    * Pre-breakpoint baseline location (`<action>/0.png`). Populated so a caller
    * that finds no breakpoint-keyed baseline can fall back to a project's
    * legacy committed baseline instead of declaring every action `new`. Read
-   * fallback only — the runner reads `baseline` first, then `legacyBaseline`;
+   * fallback only. The runner reads `baseline` first, then `legacyBaseline`;
    * promotion always writes the breakpoint-keyed `baseline`, never this. See
    * the read-order note below.
    */
@@ -31,7 +31,7 @@ export interface BaselinePaths {
    * Proposed-new-baseline PNG for CI mode, under
    * `<report>/candidates/<action>/<breakpoint>.png`. Mirrors the `baseline`
    * layout exactly (action dir + breakpoint filename) so approving a candidate
-   * set is a plain tree copy into `paths.baselines`. Always report-rooted —
+   * set is a plain tree copy into `paths.baselines`. Always report-rooted,
    * never affected by the comparison root, which only moves the baseline side.
    */
   candidate: string;
@@ -44,7 +44,7 @@ export interface StoreOptions {
   /**
    * Root the baseline-side paths (`baseline`, `a11yBaseline`, and the two
    * `legacy*` fallbacks) resolve under. Defaults to `baselinesDir`, so an
-   * omitted root reproduces the committed-baselines layout byte-for-byte — the
+   * omitted root reproduces the committed-baselines layout byte-for-byte, the
    * zero-behaviour-change default. Local mode passes the per-machine cache dir
    * here to self-diff against it instead. Report-side artifacts (actual, diff,
    * candidate, a11yActual, a11yCandidate) ignore this and stay report-rooted.
@@ -101,7 +101,7 @@ export const ACTION_NAME_PATTERN = /^[a-z0-9-]+$/;
 export const BREAKPOINT_SEGMENT_PATTERN = /^[a-z0-9_-]+$/;
 
 /**
- * Computes deterministic paths for the baseline (the comparison target —
+ * Computes deterministic paths for the baseline (the comparison target:
  * committed baselines by default, or the local cache when `comparisonRoot` is
  * supplied), actual (regenerated each run), diff (regenerated when a baseline
  * existed and the diff was non-zero), and candidate (proposed-new-baseline for
@@ -168,15 +168,15 @@ export function pathsFor(options: StoreOptions): BaselinePaths {
 
 /**
  * Per-path serialization for baseline creation. A baseline is keyed on action
- * name *and* breakpoint (see `pathsFor` — the breakpoint is part of the
+ * name *and* breakpoint (see `pathsFor`, the breakpoint is part of the
  * filename), so when the same action+breakpoint runs in two stories
  * concurrently (`workers > 1`, fresh run), both would otherwise read "no
- * baseline" and race to write the same `<breakpoint>.png` — a torn or
+ * baseline" and race to write the same `<breakpoint>.png`, a torn or
  * last-writer-wins file. Callers wrap their read-then-maybe-write critical
  * section in this lock so exactly one writer per baseline path runs at a time;
  * later callers see the baseline the first writer produced. The map is keyed by
- * path, so distinct actions — and now distinct breakpoints of the same action,
- * whose baseline paths differ — never block each other; entries are bounded by
+ * path, so distinct actions (and now distinct breakpoints of the same action,
+ * whose baseline paths differ) never block each other; entries are bounded by
  * action count times breakpoint count.
  */
 const baselineLocks = new Map<string, Promise<void>>();
@@ -246,8 +246,8 @@ export async function writeText(path: string, content: string): Promise<void> {
  * {@link writeDurablePng} routes through it, so baseline, candidate, cache, and
  * promoted-baseline writes inherit it without per-callsite wiring. Transient
  * report artifacts (`actual`, `diff`) deliberately skip it via
- * {@link writeTransientPng} — the max-effort encode is wasted on a file that is
- * overwritten or deleted next run. Deterministic — pngjs's encoder is a pure
+ * {@link writeTransientPng}. The max-effort encode is wasted on a file that is
+ * overwritten or deleted next run. Deterministic: pngjs's encoder is a pure
  * function of the pixel data and the fixed options above.
  *
  * Deliberately NOT palette-quantised and never lossy: colour type and bit depth
@@ -258,17 +258,17 @@ export function recompressPng(png: Buffer): Buffer {
   try {
     recompressed = PNG.sync.write(PNG.sync.read(png));
   } catch {
-    // Not a decodable PNG, or an encoder edge case — write what we were given
+    // Not a decodable PNG, or an encoder edge case. Write what we were given
     // rather than risk emitting a corrupt or truncated file.
     return png;
   }
-  // A recompress that grows the file is a loss, not a win — keep the smaller.
+  // A recompress that grows the file is a loss, not a win. Keep the smaller.
   return recompressed.length < png.length ? recompressed : png;
 }
 
 /**
  * Shared write core: ensure the parent directory exists, then write the bytes
- * verbatim. The durable/transient split lives one level up — this only handles
+ * verbatim. The durable/transient split lives one level up. This only handles
  * the mkdir + write both share.
  */
 async function writePngBytes(path: string, bytes: Buffer): Promise<void> {
@@ -277,14 +277,14 @@ async function writePngBytes(path: string, bytes: Buffer): Promise<void> {
 }
 
 /**
- * Writes a DURABLE PNG — a baseline, a candidate, or a promoted baseline — that
+ * Writes a DURABLE PNG (a baseline, a candidate, or a promoted baseline) that
  * outlives the run and is re-read on every later comparison. These earn the
  * max-effort lossless recompress (see {@link recompressPng}): the level-9
  * deflate + adaptive per-scanline filtering is paid once at write, and every
  * subsequent read of the smaller file benefits.
  *
  * Transient report artifacts (the run's `actual`, the `diff` overlay) are
- * overwritten or deleted next run and must NOT pay this cost — they route
+ * overwritten or deleted next run and must NOT pay this cost. They route
  * through {@link writeTransientPng}, which skips recompress entirely.
  */
 export async function writeDurablePng(
@@ -295,7 +295,7 @@ export async function writeDurablePng(
 }
 
 /**
- * Writes a TRANSIENT PNG — the run's `actual` capture or the `diff` overlay —
+ * Writes a TRANSIENT PNG (the run's `actual` capture or the `diff` overlay)
  * verbatim, with NO recompress pass. These artifacts live only for the current
  * report: an `actual` is overwritten on the next run and a `diff` is deleted the
  * moment a comparison passes, so shrinking them with the expensive level-9
@@ -329,7 +329,7 @@ export async function deleteIfExists(path: string): Promise<void> {
  * `recompressPng`, so the bytes on disk are the recompressed ones. Copying them
  * forward keeps the destination losslessly recompressed for free. The only
  * non-test caller is `approve` refreshing the per-machine cache; `approve --from`
- * does NOT use this — it reads each source once during validation and writes the
+ * does NOT use this. It reads each source once during validation and writes the
  * retained buffer through {@link writeDurablePng}.
  */
 export async function copyRecompressedPng(

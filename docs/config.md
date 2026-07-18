@@ -147,7 +147,7 @@ file's location.
 `localCache` is the per-machine baseline set for **local (advisory) mode**: a
 local run compares against it, not against committed `baselines`, and seeds a
 missing entry on first sight. It is per-developer state, so it must never be
-committed — `tuffgal init` writes a `.gitignore` under `tuffgal/` that ignores
+committed. `tuffgal init` writes a `.gitignore` under `tuffgal/` that ignores
 both `.auth/` and `.cache/`. See [CLI reference](cli.md#run) for how the mode
 resolves and [reporting.md](reporting.md#exit-code) for the advisory exit-code
 posture.
@@ -182,7 +182,7 @@ are common candidates.
 The viewport modes your project runs, drawn from the built-in registry. Each
 selected mode renders in its own browser context, in the order you list
 (duplicate names dropped, first wins), and produces its own baseline, diff,
-and a11y snapshot — so a single story can be regression-tested at several
+and a11y snapshot, so a single story can be regression-tested at several
 widths at once.
 
 | Name      | Dimensions | Tailwind anchor  |
@@ -221,12 +221,12 @@ field, which **replaces** this set for that story. See
 
 How much of the page each screenshot captures. Default: `viewport`.
 
-- `viewport` — crops to the breakpoint's `width x height` box, so a snapshot
+- `viewport`: crops to the breakpoint's `width x height` box, so a snapshot
   shows exactly what a user sees above the fold (e.g. `1280x800` for
   `desktop`). A long page is _not_ stretched to its full scroll height. The
   shot is taken wherever the flow left the page scrolled, so a story that
   scrolls to a below-the-fold section captures that section, not the top.
-- `fullPage` — composites the entire scrollable document, however tall (a long
+- `fullPage`: composites the entire scrollable document, however tall (a long
   settings page might render at `1280x2500`). Catches below-the-fold
   regressions at the cost of viewport fidelity.
 
@@ -241,7 +241,7 @@ changes the image dimensions, so existing baselines stop matching and report
 ### `maxFullPagePixels?: number`
 
 Safety cap on a `fullPage` capture's total area, in pixels (`width × height`).
-Defaults to `30_000_000` (e.g. `1280 × ~23_400`) — well above realistic long
+Defaults to `30_000_000` (e.g. `1280 × ~23_400`), well above realistic long
 pages, but below runaway heights.
 
 A `fullPage` shot composites the whole scrollable document, so an
@@ -251,7 +251,7 @@ layout area exceeds this cap, the run fails with a clear error naming the
 story/action instead of risking an out-of-memory crash. Raise the cap for a
 legitimately tall page, or switch that story to `captureMode: 'viewport'`.
 
-Only `fullPage` captures are bounded — `viewport` shots are already capped by
+Only `fullPage` captures are bounded. `viewport` shots are already capped by
 the breakpoint dimensions, so this field has no effect under the default
 `captureMode`.
 
@@ -264,13 +264,13 @@ maxFullPagePixels: 30_000_000,
 How each captured action's screenshots are presented in the report. Default:
 `false`.
 
-- `false` — the report renders the radio-tab viewer: Baseline, Actual, and Diff
+- `false`: the report renders the radio-tab viewer: Baseline, Actual, and Diff
   each sit in their own panel and you switch between them with the tabs.
-- `true` — the report renders a single screenshot per action with a
+- `true`: the report renders a single screenshot per action with a
   press-and-hold compare layered over it. At rest it shows the selected variant
   (`actual` by default); pressing and holding the image flips to its
-  counterpart — the `baseline` normally, or the `actual` when the baseline is
-  selected — and releasing flips back, so you can blink between the two and
+  counterpart (the `baseline` normally, or the `actual` when the baseline is
+  selected) and releasing flips back, so you can blink between the two and
   spot what changed. The gesture sits on top of a visible Baseline/Actual/Diff
   chip group that commits the selection for mouse, touch, and keyboard alike;
   the `diff` overlay lives on its chip rather than the gesture. The image is
@@ -347,7 +347,7 @@ Before a `--manage-servers` run starts, each health-check URL is probed with an
 HTTP `GET`: any non-5xx response (2xx/3xx/4xx) marks it ready, so a 404 does not
 block but a still-compiling server that 5xxs keeps the poll going. This proves
 the server is actually serving routes, not merely that it has bound its socket.
-Use an `http` URL — a self-signed HTTPS certificate is rejected by the probe.
+Use an `http` URL. A self-signed HTTPS certificate is rejected by the probe.
 (The separate `tuffgal supervise` liveness poll, once servers are past boot,
 uses a cheaper TCP check; see [supervisor.md](supervisor.md).)
 

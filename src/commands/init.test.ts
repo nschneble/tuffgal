@@ -21,7 +21,7 @@ async function gitignore(): Promise<string> {
   return readFile(join(cwd, 'tuffgal', '.gitignore'), 'utf8');
 }
 
-describe('init — .gitignore scaffold', () => {
+describe('init: .gitignore scaffold', () => {
   it('ignores the local cache dir alongside .auth/ and report/', async () => {
     await init({ cwd });
     const contents = await gitignore();
@@ -60,7 +60,7 @@ describe('init — .gitignore scaffold', () => {
     // OFF gets `resolveConfig`'s default, and THAT is what must fall inside the
     // ignored `tuffgal/.cache/`. Load a config that mirrors the scaffold's
     // `paths` block but omits `localCache`, so the resolved value is the true
-    // default — then assert it sits under the `tuffgal/` dir the scaffolded
+    // default; then assert it sits under the `tuffgal/` dir the scaffolded
     // `.gitignore` (with its `.cache/` line) actually covers. If the default
     // ever drifts back to `<configDir>/.cache`, this fails.
     //

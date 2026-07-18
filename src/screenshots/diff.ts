@@ -41,19 +41,19 @@ export interface ScoredDiff {
 /**
  * Diffing is split into two phases so the common case stays cheap:
  *
- *   1. {@link scoreDiff} — the gate. Computes SSIM (the pass/changed
+ *   1. {@link scoreDiff}: the gate. Computes SSIM (the pass/changed
  *      decision) plus the pixel metrics reported on every outcome
  *      (`diffPixels`, `diffRatio`). It runs pixelmatch in count-only mode
  *      (no output buffer) and never encodes a diff image. It also returns the
  *      {@link DecodedPair} it read, so the changed branch can render its
  *      overlay without a second decode.
- *   2. {@link renderDiffOverlay} — the visualisation. Takes that same decoded
+ *   2. {@link renderDiffOverlay}: the visualisation. Takes that same decoded
  *      pair, runs pixelmatch with an output buffer, and deflate-encodes the
  *      red-highlight overlay PNG for the human-facing report.
  *
  * The overlay is only kept when a comparison FAILS; a passing comparison
  * deletes it. Because passing is the common case in a healthy suite,
- * encoding the overlay on every comparison was pure waste — so the caller
+ * encoding the overlay on every comparison was pure waste, so the caller
  * runs {@link scoreDiff} unconditionally and reaches for
  * {@link renderDiffOverlay} only on the changed branch, where the image is
  * actually written. The decode is shared across both, so the changed branch
@@ -68,7 +68,7 @@ export function scoreDiff(
   const decoded = decodePair(baseline, actual);
   const { baselinePng, actualPng } = decoded;
   // Count-only: passing `undefined` as the output buffer makes pixelmatch
-  // tally differing pixels without allocating or filling an overlay — the
+  // tally differing pixels without allocating or filling an overlay. The
   // metric feeds `diffPixels`/`diffRatio` reporting, not a written image.
   const diffPixels = pixelmatch(
     baselinePng.data,
@@ -113,8 +113,8 @@ export function scoreDiff(
 
 /**
  * Renders the red-highlight overlay PNG for the report from the already-decoded
- * pair {@link scoreDiff} produced. This is the expensive half — pixelmatch
- * fills an output buffer and `PNG.sync.write` deflate-encodes it — so it runs
+ * pair {@link scoreDiff} produced. This is the expensive half (pixelmatch
+ * fills an output buffer and `PNG.sync.write` deflate-encodes it) so it runs
  * only on the changed/failed branch where the diff image is actually written to
  * disk.
  *
@@ -148,7 +148,7 @@ export function renderDiffOverlay(
 /**
  * Decodes both PNG buffers and enforces the invariants the diff phases
  * share: dimensions must match and the pixel data must be tightly-packed
- * RGBA. Dimension mismatch is a regression on its own — fail loudly. Runs
+ * RGBA. Dimension mismatch is a regression on its own. Fail loudly. Runs
  * once per comparison inside {@link scoreDiff}; {@link renderDiffOverlay}
  * reuses the result instead of decoding again.
  */

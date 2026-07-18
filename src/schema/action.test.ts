@@ -32,7 +32,7 @@ function parseAction(
   });
 }
 
-describe('navigate path guard — rejects origin-escaping forms', () => {
+describe('navigate path guard: rejects origin-escaping forms', () => {
   // Each of these resolves off-origin against a baseUrl (browsers normalise the
   // backslash variants to `//host`), so the schema must reject them before the
   // runner ever calls `page.goto`.
@@ -53,10 +53,10 @@ describe('navigate path guard — rejects origin-escaping forms', () => {
   }
 });
 
-describe('navigate path guard — rejects control chars the URL parser strips', () => {
+describe('navigate path guard: rejects control chars the URL parser strips', () => {
   // The WHATWG URL parser removes ASCII tab (U+0009), newline (U+000A), and
-  // carriage return (U+000D) BEFORE resolving a URL, so each of these — a
-  // control char right after the leading slash — resolves to a protocol-relative
+  // carriage return (U+000D) BEFORE resolving a URL, so each of these; a
+  // control char right after the leading slash; resolves to a protocol-relative
   // `//evil.com` despite passing the two-char slash-rooted regex. The schema
   // must reject them at parse time. (`\t`, `\n`, `\r` here are the escape
   // sequences, so the source itself carries no raw control bytes.)
@@ -79,7 +79,7 @@ describe('navigate path guard — rejects control chars the URL parser strips', 
   }
 });
 
-describe('wait.ms bound — 0 to 5000 inclusive', () => {
+describe('wait.ms bound: 0 to 5000 inclusive', () => {
   const cases: Array<[string, number, boolean]> = [
     ['accepts the lower bound 0', 0, true],
     ['accepts the upper bound 5000', 5000, true],
@@ -99,7 +99,7 @@ describe('wait.ms bound — 0 to 5000 inclusive', () => {
   });
 });
 
-describe('intercept.respond.status bound — 100 to 599 inclusive', () => {
+describe('intercept.respond.status bound: 100 to 599 inclusive', () => {
   function parseStatus(status: number): boolean {
     return stepSchema.safeParse({
       kind: 'intercept',
@@ -120,7 +120,7 @@ describe('intercept.respond.status bound — 100 to 599 inclusive', () => {
   }
 });
 
-describe('action name — lowercase-kebab regex', () => {
+describe('action name: lowercase-kebab regex', () => {
   const cases: Array<[string, string, boolean]> = [
     ['accepts a kebab name', 'visit-home', true],
     ['accepts digits', 'step-2', true],
@@ -135,7 +135,7 @@ describe('action name — lowercase-kebab regex', () => {
   }
 });
 
-describe('retry.attempts bound — 1 to 5 inclusive', () => {
+describe('retry.attempts bound: 1 to 5 inclusive', () => {
   const cases: Array<[string, number, boolean]> = [
     ['accepts the lower bound 1', 1, true],
     ['accepts the upper bound 5', 5, true],
@@ -149,7 +149,7 @@ describe('retry.attempts bound — 1 to 5 inclusive', () => {
   }
 });
 
-describe('diff thresholds — pixelThreshold / ssimThreshold in 0 to 1', () => {
+describe('diff thresholds: pixelThreshold / ssimThreshold in 0 to 1', () => {
   for (const key of ['pixelThreshold', 'ssimThreshold'] as const) {
     const cases: Array<[string, number, boolean]> = [
       ['accepts 0', 0, true],
@@ -165,12 +165,12 @@ describe('diff thresholds — pixelThreshold / ssimThreshold in 0 to 1', () => {
   }
 });
 
-describe('hint role — enum membership', () => {
+describe('hint role: enum membership', () => {
   it('accepts a member of the role enum', () => {
     assert.equal(hintSchema.safeParse({ role: 'button' }).success, true);
   });
   it('rejects a role outside the enum', () => {
-    // `nav` is not a member — the enum spells it `navigation`.
+    // `nav` is not a member; the enum spells it `navigation`.
     assert.equal(hintSchema.safeParse({ role: 'nav' }).success, false);
   });
   it('rejects an empty text hint (min 1)', () => {
@@ -178,7 +178,7 @@ describe('hint role — enum membership', () => {
   });
 });
 
-describe('navigate path guard — accepts single-slash-rooted paths', () => {
+describe('navigate path guard: accepts single-slash-rooted paths', () => {
   const accepted: Array<[string, string]> = [
     ['bare root', '/'],
     ['simple path', '/path'],
@@ -193,7 +193,7 @@ describe('navigate path guard — accepts single-slash-rooted paths', () => {
   }
 });
 
-describe('navigate waitUntil — enum opt-in unchanged by the default flip', () => {
+describe('navigate waitUntil: enum opt-in unchanged by the default flip', () => {
   it('still accepts an explicit networkidle opt-in', () => {
     const result = stepSchema.safeParse({
       kind: 'navigate',
@@ -208,7 +208,7 @@ describe('navigate waitUntil — enum opt-in unchanged by the default flip', () 
   });
 });
 
-describe('scroll amount — schema default is load-bearing', () => {
+describe('scroll amount: schema default is load-bearing', () => {
   // Wave 12 moved the 600px default from the handler into the schema and retyped
   // `runScroll`'s param to a required `number`, so this `.default(600)` is the
   // only thing standing between an omitted `amount` and a `page.mouse.wheel(0,

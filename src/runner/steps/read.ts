@@ -5,7 +5,7 @@ import { LocatorNotFoundError, resolveLocator } from '../resolveLocator.ts';
 /**
  * Synchronous existence check. Resolves the hint to a Playwright locator
  * and asserts that at least one matching element is currently attached.
- * Does not poll — the element must already be on screen by the time the
+ * Does not poll. The element must already be on screen by the time the
  * step runs. Use after a click or input that synchronously updates the
  * DOM, when you want a checkpoint that fails fast on a broken hint.
  */

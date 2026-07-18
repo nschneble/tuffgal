@@ -48,7 +48,7 @@ export type Hint = z.infer<typeof hintSchema>;
  * True when `path` contains an ASCII control character (C0 range U+0000–U+001F
  * or DEL U+007F). The WHATWG URL parser strips tab (U+0009), newline (U+000A),
  * and carriage return (U+000D) from a URL BEFORE resolving it, so any of those
- * placed after the leading slash — e.g. `/<TAB>//host` — would slip past the
+ * placed after the leading slash (e.g. `/<TAB>//host`) would slip past the
  * two-char slash-rooted regex and still resolve to a protocol-relative `//host`.
  * Rejecting the whole control range (not just the stripped trio) is the
  * conservative guard: no legitimate root-relative path carries a raw control
@@ -73,8 +73,8 @@ export const stepSchema = z.discriminatedUnion('kind', [
      * rejected so a story can never drive the browser off the target origin.
      * Control characters are rejected too, because the WHATWG URL parser strips
      * ASCII tab (U+0009), newline (U+000A), and carriage return (U+000D) BEFORE
-     * it resolves the path: a tab (or newline/CR) after the leading slash — e.g.
-     * `/<TAB>//host` — would otherwise slip past the two-char slash-rooted check
+     * it resolves the path: a tab (or newline/CR) after the leading slash (e.g.
+     * `/<TAB>//host`) would otherwise slip past the two-char slash-rooted check
      * and resolve to a protocol-relative `//host`. The runner re-asserts the
      * resolved origin as defense in depth.
      */
@@ -114,8 +114,8 @@ export const stepSchema = z.discriminatedUnion('kind', [
     kind: z.literal('scroll'),
     direction: z.enum(['up', 'down']),
     /**
-     * Wheel distance in pixels. Defaults to 600 — roughly a viewport's worth
-     * of scroll — so a story can request "scroll down" without picking a number.
+     * Wheel distance in pixels. Defaults to 600 (roughly a viewport's worth
+     * of scroll) so a story can request "scroll down" without picking a number.
      * The default is applied here (declaratively, like the other step defaults)
      * so the handler receives a concrete value.
      */
@@ -136,7 +136,7 @@ export const stepSchema = z.discriminatedUnion('kind', [
   }),
   /**
    * Instant assertion that a hint resolves to an attached element. Unlike
-   * `waitFor`, does not poll — the element must already be present when
+   * `waitFor`, does not poll. The element must already be present when
    * the step runs. Use as a mid-flow checkpoint after a click/input that
    * synchronously updates the DOM.
    */
@@ -199,7 +199,7 @@ export const actionSchema = z.object({
   /**
    * Bounded retry budget for individual steps. Wraps each step's dispatch so a
    * transient fault does not fail the action immediately: a LocatorNotFoundError
-   * (target not yet hydrated) or any bounded Playwright TimeoutError — a
+   * (target not yet hydrated) or any bounded Playwright TimeoutError: a
    * navigation that missed its ready signal, or a step-level click/input/waitFor
    * whose own timeout elapsed. Steps that succeed on the first try cost no retry.
    */
@@ -214,7 +214,7 @@ export const actionSchema = z.object({
       /**
        * Pixelmatch per-pixel similarity. Tighter values flag more pixels
        * as changed; loosens anti-aliasing tolerance as it grows. Only
-       * controls how the diff PNG is computed — it does not gate the
+       * controls how the diff PNG is computed. It does not gate the
        * action's pass/changed status.
        */
       pixelThreshold: z.number().min(0).max(1).default(0.1),

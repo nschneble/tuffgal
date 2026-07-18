@@ -120,7 +120,7 @@ describe('summarise', () => {
     assert.equal(totals.stories, 4);
   });
 
-  it('seeds deleted at 0 — orphans are a run-level count, not a story outcome', () => {
+  it('seeds deleted at 0: orphans are a run-level count, not a story outcome', () => {
     assert.equal(
       summarise([story('pass', [action('desktop', 'pass')])]).deleted,
       0,
@@ -137,8 +137,8 @@ describe('copyResultsIntoCandidates', () => {
       'utf8',
     );
 
-    // candidates/ does not exist yet — an all-pass run writes no candidate
-    // renders — so the copy must create it rather than fail.
+    // candidates/ does not exist yet; an all-pass run writes no candidate
+    // renders; so the copy must create it rather than fail.
     assert.equal(await pathExists(join(reportDir, 'candidates')), false);
     await copyResultsIntoCandidates(reportDir);
 
@@ -284,7 +284,7 @@ describe('coverageComparisonRoot', () => {
   });
 });
 
-describe('resolveEnvironmentReport — browser probe gating', () => {
+describe('resolveEnvironmentReport: browser probe gating', () => {
   it('does NOT launch the browser probe in local mode', async () => {
     let probed = 0;
     const probe = async (): Promise<CapturedBrowser> => {
@@ -320,7 +320,7 @@ describe('resolveEnvironmentReport — browser probe gating', () => {
 });
 
 /**
- * A 2x2 solid-colour PNG — `runAction` diffs real PNG bytes via pngjs, so the
+ * A 2x2 solid-colour PNG; `runAction` diffs real PNG bytes via pngjs, so the
  * fake page's screenshot must be a genuine image, not a stub buffer.
  */
 function solidPng(r: number, g: number, b: number): Buffer {
@@ -353,7 +353,7 @@ function fakePage(screenshot: Buffer): Page {
   } as unknown as Page;
 }
 
-/** A `BrowserContext` over a single fake page — the per-story isolation unit. */
+/** A `BrowserContext` over a single fake page; the per-story isolation unit. */
 function fakeContext(page: Page): BrowserContext {
   return {
     setDefaultTimeout(): void {},
@@ -371,7 +371,7 @@ function fakeContext(page: Page): BrowserContext {
   } as unknown as BrowserContext;
 }
 
-describe('runAll — shared browser lifecycle', () => {
+describe('runAll: shared browser lifecycle', () => {
   it('launches ONE browser, reuses it across stories, and closes it once', async () => {
     const root = await mkdtemp(join(tmpdir(), 'tuffgal-runall-'));
     const actionsDir = join(root, 'actions');
@@ -382,7 +382,7 @@ describe('runAll — shared browser lifecycle', () => {
       join(actionsDir, 'open.json'),
       JSON.stringify({ action: 'open', steps: [{ kind: 'wait', ms: 0 }] }),
     );
-    // Two independent stories (no needs/produces) so both are ready at once —
+    // Two independent stories (no needs/produces) so both are ready at once ;
     // the shared browser must serve both without a second launch.
     await writeFile(
       join(storiesDir, 'home.json'),
@@ -444,14 +444,14 @@ describe('runAll — shared browser lifecycle', () => {
       launchBrowser,
     );
 
-    // ONE launch for the whole run — not one per (story × breakpoint) pass.
+    // ONE launch for the whole run; not one per (story × breakpoint) pass.
     assert.equal(launches, 1, 'browser must launch exactly once');
     // The single browser was reused: one context per story (2 stories ×
     // 1 breakpoint), each a DISTINCT context so per-story isolation survives a
     // shared browser.
     assert.equal(contextsCreated, 2, 'one fresh context per story');
     assert.equal(distinctContexts.size, 2, 'contexts must not be shared');
-    // Closed exactly once, on the normal finally path — no leak, no double-close.
+    // Closed exactly once, on the normal finally path; no leak, no double-close.
     assert.equal(closes, 1, 'browser closed once on completion');
     assert.equal(result.totals.stories, 2);
     // The finally removes both SIGINT/SIGTERM listeners it installed: net zero
@@ -535,7 +535,7 @@ describe('createSignalTeardownHandler', () => {
       exitCodes.push(code),
     );
 
-    // Drive the handler directly — no real signal raised in the test runner.
+    // Drive the handler directly; no real signal raised in the test runner.
     handler();
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -562,7 +562,7 @@ describe('createSignalTeardownHandler', () => {
     handler();
     await new Promise((resolve) => setImmediate(resolve));
 
-    // Two signals, one close — the shared latch swallows the redundant teardown.
+    // Two signals, one close; the shared latch swallows the redundant teardown.
     assert.equal(closes, 1);
     assert.deepEqual(exitCodes, [1, 1]);
   });

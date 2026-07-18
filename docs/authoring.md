@@ -102,8 +102,8 @@ each supplying its own map.
 Alongside the story-supplied parameters, Tuffgal injects one built-in
 placeholder, `${breakpoint}`, holding the name of the mode the action is
 currently rendering at (`mobile` / `tablet` / `laptop` / `desktop`, or a
-custom mode name). It is available everywhere author parameters interpolate —
-hint `text`/`selector`, `input`/`type` `value`s, and `mask` selectors — and,
+custom mode name). It is available everywhere author parameters interpolate
+(hint `text`/`selector`, `input`/`type` `value`s, and `mask` selectors) and,
 unlike declared parameters, you do **not** list it in the action's
 `parameters` array.
 
@@ -120,8 +120,8 @@ instead of every pass fighting over one email:
 }
 ```
 
-A story parameter literally named `breakpoint` overrides the injected value —
-your explicit map always wins.
+A story parameter literally named `breakpoint` overrides the injected value.
+Your explicit map always wins.
 
 ## Hint resolution
 
@@ -403,8 +403,8 @@ schedule rendered at that single breakpoint. Desktop runs start to finish, the
 database resets, then mobile runs start to finish. The report merges each
 story's passes back into one row grouped by mode.
 
-This is what keeps breakpoints isolated. A destructive story — change password,
-empty read history, delete account — mutates the seeded database during the
+This is what keeps breakpoints isolated. A destructive story (change password,
+empty read history, delete account) mutates the seeded database during the
 mobile pass, but the desktop pass starts from a fresh reset and never sees it.
 You do **not** need a fixture to undo a destructive action between breakpoints;
 the per-pass reset handles it.

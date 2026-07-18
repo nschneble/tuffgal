@@ -18,13 +18,13 @@ function parseStory(
   });
 }
 
-describe('storySchema — breakpoints.min(1)', () => {
+describe('storySchema: breakpoints.min(1)', () => {
   it('accepts a single-entry breakpoints list', () => {
     assert.equal(parseStory({ breakpoints: ['mobile'] }).success, true);
   });
 
   it('rejects an empty breakpoints list (present-but-empty is a mistake)', () => {
-    // The field is optional — omit it to inherit the project default. But an
+    // The field is optional; omit it to inherit the project default. But an
     // explicit `[]` would run the story at zero breakpoints, so it is rejected
     // rather than silently rendering nothing.
     assert.equal(parseStory({ breakpoints: [] }).success, false);
@@ -35,7 +35,7 @@ describe('storySchema — breakpoints.min(1)', () => {
   });
 });
 
-describe('storySchema — required non-empty fields', () => {
+describe('storySchema: required non-empty fields', () => {
   it('rejects an empty story title', () => {
     assert.equal(parseStory({ story: '' }).success, false);
   });

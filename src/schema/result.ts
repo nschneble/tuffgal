@@ -6,14 +6,14 @@ import type { EnvironmentManifest } from '../runner/manifest.ts';
  * consumes it to render the HTML report. Status values map onto the three
  * outcomes the framework distinguishes:
  *
- * - `pass`  — action succeeded and screenshot matched baseline (or no baseline).
- * - `changed` — action succeeded but the baseline drifted: the screenshot moved
+ * - `pass`: action succeeded and screenshot matched baseline (or no baseline).
+ * - `changed`: action succeeded but the baseline drifted: the screenshot moved
  *   past the threshold, or (CI mode) pixels matched while the accessibility-tree
  *   snapshot drifted. The story does not fail. The user reviews and either
  *   approves the new baseline or files a bug.
- * - `new` — no baseline existed; one was written this run. Informational, not a
- *   regression — there is nothing to compare against yet.
- * - `failed` — a step threw. The story fails fast and skips any later actions.
+ * - `new`: no baseline existed; one was written this run. Informational, not a
+ *   regression. There is nothing to compare against yet.
+ * - `failed`: a step threw. The story fails fast and skips any later actions.
  */
 export type ActionStatus = 'pass' | 'changed' | 'failed' | 'skipped' | 'new';
 
@@ -31,8 +31,8 @@ export interface ActionResult {
   breakpoint?: string;
   /**
    * Viewport dimensions this result was actually captured at. Carried alongside
-   * `breakpoint` so the reporter labels each group with the real size —
-   * including per-config and per-story overrides — rather than a registry
+   * `breakpoint` so the reporter labels each group with the real size
+   * (including per-config and per-story overrides) rather than a registry
    * lookup that would show stale dimensions for an overridden mode. Optional in
    * the type only as a defensive parse guard; the runner always records them.
    */
@@ -51,8 +51,8 @@ export interface ActionResult {
   /**
    * Structured baseline/actual dimensions for the size-mismatch `changed` branch
    * (a screenshot whose baseline and actual differ in size, so no pixel diff can
-   * be computed). Carried alongside `failureMessage` — which holds the same fact
-   * as prose — so the reporter can render the dimensions in an accessible split
+   * be computed). Carried alongside `failureMessage` (which holds the same fact
+   * as prose) so the reporter can render the dimensions in an accessible split
    * idiom (a spoken "W by H pixels" longhand) instead of string-parsing the
    * message. Set ONLY by the size-mismatch branch of `runAction`; absent on every
    * other result, in which case the reporter falls back to `failureMessage`.
@@ -66,7 +66,7 @@ export interface ActionResult {
   diffPath?: string;
   diffPixels?: number;
   diffRatio?: number;
-  /** Mean SSIM score of baseline vs actual — see screenshots/diff.ts. */
+  /** Mean SSIM score of baseline vs actual. See screenshots/diff.ts. */
   ssimScore?: number;
   /**
    * `true` when the captured page accessibility tree differs from the
@@ -79,7 +79,7 @@ export interface ActionResult {
    * `a11yChanged === true`, never by the absence of `diffPath` alone. Both
    * pixel-drift branches (SSIM-fail and size-mismatch) carry a `diffPath` /
    * `failureMessage` and deliberately leave `a11yChanged` unset, so the two
-   * classes never collide — but the size-mismatch branch's omission of
+   * classes never collide; but the size-mismatch branch's omission of
    * `a11yChanged` is the load-bearing half of that guarantee and is locked by
    * runAction's `never carries a11yChanged` test. Consumers MUST branch on
    * `a11yChanged === true`; a `!diffPath` heuristic would misread a future
@@ -100,7 +100,7 @@ export interface ActionResult {
 /**
  * Story-wide rollup of its action results. Precedence (worst wins):
  * `failed` > `changed` > `new` > `pass`. A story is `new` only when it wrote at
- * least one fresh baseline and had no `changed`/`failed` action — so a run of
+ * least one fresh baseline and had no `changed`/`failed` action, so a run of
  * first-time stories no longer masquerades as `changed`.
  */
 export type StoryStatus = 'pass' | 'changed' | 'failed' | 'new';
@@ -128,7 +128,7 @@ export interface CoverageMetric {
  * One orphaned committed baseline: an entry under `paths.baselines` whose action
  * ran no story this run, so nothing compared against it. Recorded (CI mode,
  * unfiltered runs only) so the report can surface it and a later `approve
- * --prune` can delete it — this wave detects, it never removes.
+ * --prune` can delete it. This wave detects, it never removes.
  *
  * Keyed per breakpoint rather than per action so a partially-orphaned action
  * (some breakpoints retired, others still live) could in principle be expressed;
@@ -136,7 +136,7 @@ export interface CoverageMetric {
  * it left behind. `breakpoint` is the mode name (`mobile`/`desktop`/…) for the
  * breakpoint-keyed `<action>/<breakpoint>.png` layout, or `'legacy'` for the
  * pre-breakpoint `<action>/0.png` layout. `baselinePaths` are the absolute paths
- * the prune step deletes — the PNG plus its a11y companion when one exists — so
+ * the prune step deletes (the PNG plus its a11y companion when one exists), so
  * wave 7 prunes a flat path list without re-deriving layout.
  */
 export interface DeletedBaseline {
@@ -150,7 +150,7 @@ export interface DeletedBaseline {
  * own output, the one JSON re-entry point that skips the zod validation every
  * input file gets. A truncated or stale-schema artifact would otherwise throw
  * an opaque TypeError deep in the approval loop; this fails loudly with the
- * file path instead. Validation is intentionally shallow — enough to trust the
+ * file path instead. Validation is intentionally shallow, enough to trust the
  * `stories[].actions[]` walk, not a full structural mirror.
  */
 export function parseRunResult(raw: string, sourcePath: string): RunResult {
@@ -179,15 +179,15 @@ export function parseRunResult(raw: string, sourcePath: string): RunResult {
  * Action, and a human diagnose an environment drift between the committed
  * baselines and the run that compared against them.
  *
- * - `expected` — the committed `<baselines>/manifest.json` when one exists and
+ * - `expected`: the committed `<baselines>/manifest.json` when one exists and
  *   parses, else `null`. `null` covers both the bootstrap case (no manifest
- *   written yet — the first `approve --from` creates it) and local mode, which
+ *   written yet, the first `approve --from` creates it) and local mode, which
  *   never reads `paths.baselines` at all.
- * - `actual` — the environment this run actually captured under.
- * - `mismatch` — `true` when a pixel-affecting key diverged (CI mode with a
+ * - `actual`: the environment this run actually captured under.
+ * - `mismatch`: `true` when a pixel-affecting key diverged (CI mode with a
  *   present manifest), or when the committed manifest was unreadable. Always
  *   `false` in local mode and on the bootstrap (missing-manifest) case.
- * - `mismatchKeys` — the specific diverging keys (see `PIXEL_AFFECTING_KEYS`),
+ * - `mismatchKeys`: the specific diverging keys (see `PIXEL_AFFECTING_KEYS`),
  *   or `['manifest']` when the committed manifest could not be parsed. Empty
  *   when `mismatch` is `false`.
  */
@@ -218,7 +218,7 @@ export interface RunResult {
     /** Stories whose rollup status is `new` (wrote a fresh baseline, no drift). */
     new: number;
     /**
-     * Orphaned committed baselines detected this run — the length of `deleted`.
+     * Orphaned committed baselines detected this run (the length of `deleted`).
      * CI mode + unfiltered runs only; `0` in local mode and on any filtered run
      * (where unselected stories' baselines are not orphans, merely unvisited).
      */
@@ -229,7 +229,7 @@ export interface RunResult {
    * ran no story this run. Populated only for an unfiltered CI run (see
    * {@link DeletedBaseline}); empty in local mode and on filtered runs, where a
    * baseline going unvisited says nothing about whether its story still exists.
-   * Detection only — pruning is a later wave.
+   * Detection only. Pruning is a later wave.
    */
   deleted: DeletedBaseline[];
   /**

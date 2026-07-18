@@ -18,7 +18,7 @@ import {
 } from './runStory.ts';
 
 /**
- * Minimal ResolvedConfig carrying only the field `resolveRunSet` reads — the
+ * Minimal ResolvedConfig carrying only the field `resolveRunSet` reads; the
  * resolved breakpoint list. Cast through `unknown` so the test does not have to
  * spell out the dozen unrelated resolved fields just to exercise breakpoint
  * selection.
@@ -106,7 +106,7 @@ describe('resolveRunSet', () => {
   });
 
   it('inherits the REGISTRY dimension for an axis the story override omits', () => {
-    // The story list never references the project's per-mode overrides — an
+    // The story list never references the project's per-mode overrides; an
     // omitted axis falls back to the registry default, not the config size.
     const config = configWithBreakpoints([
       { name: 'desktop', width: 1440, height: 900 },
@@ -151,7 +151,7 @@ describe('mergeStoryStatus', () => {
 /**
  * A 2x2 solid-colour PNG. `runAction` diffs real PNG bytes (via pngjs), so the
  * fake page's screenshot and any seeded baseline must be genuine images of
- * matching dimensions — a `Buffer.from('png')` stub would throw inside pngjs.
+ * matching dimensions; a `Buffer.from('png')` stub would throw inside pngjs.
  */
 function solidPng(r: number, g: number, b: number): Buffer {
   const png = new PNG({ width: 2, height: 2 });
@@ -180,7 +180,7 @@ interface FakePageOptions {
  * Stand-in for the slice of `Page` the per-breakpoint loop + a single-`wait`
  * action touch: a clock install, a deterministic screenshot, an aria snapshot,
  * and the no-op timer/evaluate the screenshot path calls. The two throw knobs
- * model the two distinct failure shapes the loop must handle differently — a
+ * model the two distinct failure shapes the loop must handle differently; a
  * returned `failed` result vs. a thrown infra fault.
  */
 function fakePage(options: FakePageOptions): Page {
@@ -214,9 +214,9 @@ function fakePage(options: FakePageOptions): Page {
 interface ContextRecord {
   /** How many times `close()` was called on this context (leak guard). */
   closeCount: number;
-  /** Paths passed to `storageState({ path })` — i.e. `produces` persistence. */
+  /** Paths passed to `storageState({ path })`; i.e. `produces` persistence. */
   storageStatePaths: string[];
-  /** Paths passed to `tracing.stop({ path })` — i.e. failing-breakpoint zips. */
+  /** Paths passed to `tracing.stop({ path })`; i.e. failing-breakpoint zips. */
   tracePaths: string[];
 }
 
@@ -258,7 +258,7 @@ function fakeContext(page: Page): {
 
 /**
  * Fake `Browser` that hands out a pre-built context per `newContext` call, in
- * order — one per breakpoint. Lets each test wire a distinct page/outcome to
+ * order; one per breakpoint. Lets each test wire a distinct page/outcome to
  * each breakpoint without launching Chromium.
  */
 function fakeBrowser(contexts: BrowserContext[]): Browser {
@@ -279,7 +279,7 @@ function fakeBrowser(contexts: BrowserContext[]): Browser {
  * Fake `Browser` that hands out a single pre-built context and CAPTURES the
  * `storageState` argument every `newContext` call receives. That captured value
  * is what proves which on-disk auth file `runStoryWithBrowser` resolved and
- * loaded — the whole point of the authNeeds-vs-needs wiring test.
+ * loaded; the whole point of the authNeeds-vs-needs wiring test.
  */
 function capturingBrowser(context: BrowserContext): {
   browser: Browser;
@@ -339,7 +339,7 @@ function makeOptions(
   };
 }
 
-describe('runStoryWithBrowser — per-breakpoint loop', () => {
+describe('runStoryWithBrowser: per-breakpoint loop', () => {
   it('re-applies the story fixtures before every breakpoint so each mode starts from a fresh seed', async () => {
     const config = await makeConfig();
     let seedCount = 0;
@@ -367,7 +367,7 @@ describe('runStoryWithBrowser — per-breakpoint loop', () => {
     );
 
     // makeConfig runs two breakpoints (mobile, desktop). The fixture must be
-    // applied once per breakpoint — not once for the whole story — so a
+    // applied once per breakpoint; not once for the whole story; so a
     // mutating story re-enters each mode from the same baseline rows.
     assert.equal(seedCount, 2);
   });
@@ -388,16 +388,16 @@ describe('runStoryWithBrowser — per-breakpoint loop', () => {
       new Date(),
     );
 
-    // Both breakpoints produced results — the failure did not abort the loop.
+    // Both breakpoints produced results; the failure did not abort the loop.
     const breakpoints = result.actions.map((a) => a.breakpoint);
     assert.deepEqual(breakpoints, ['mobile', 'desktop']);
     assert.equal(result.status, 'failed');
     // Auth state came from the SECOND (clean) breakpoint's context, never the
-    // first (failed) one — `produces` persists once, from the first clean run.
+    // first (failed) one; `produces` persists once, from the first clean run.
     assert.equal(first.record.storageStatePaths.length, 0);
     assert.equal(second.record.storageStatePaths.length, 1);
     assert.ok(second.record.storageStatePaths[0]?.endsWith('logged-in.json'));
-    // Both contexts closed — no leak on either path.
+    // Both contexts closed; no leak on either path.
     assert.equal(first.record.closeCount, 1);
     assert.equal(second.record.closeCount, 1);
   });
@@ -420,7 +420,7 @@ describe('runStoryWithBrowser — per-breakpoint loop', () => {
     );
 
     // Each failing breakpoint wrote its own uniquely-named zip
-    // (`<slug>.<breakpoint>.zip`) — neither overwrote the other.
+    // (`<slug>.<breakpoint>.zip`); neither overwrote the other.
     assert.ok(first.record.tracePaths[0]?.endsWith(join('home.mobile.zip')));
     assert.ok(second.record.tracePaths[0]?.endsWith(join('home.desktop.zip')));
     assert.notEqual(first.record.tracePaths[0], second.record.tracePaths[0]);
@@ -451,7 +451,7 @@ describe('runStoryWithBrowser — per-breakpoint loop', () => {
 
   it('closes the context (no leak) when a breakpoint run throws an infra fault, then propagates', async () => {
     const config = await makeConfig();
-    // `clock.install` throws — an exception that escapes the action runner
+    // `clock.install` throws; an exception that escapes the action runner
     // entirely. Per the Fix 1 throw policy it aborts the story, but must close
     // the in-flight context first.
     const first = fakeContext(
@@ -465,14 +465,14 @@ describe('runStoryWithBrowser — per-breakpoint loop', () => {
       /clock install blew up/,
     );
 
-    // The throwing breakpoint's context was still closed — no leak.
+    // The throwing breakpoint's context was still closed; no leak.
     assert.equal(first.record.closeCount, 1);
     // The story aborted: the second breakpoint never opened a context.
     assert.equal(second.record.closeCount, 0);
   });
 });
 
-describe('runStoryWithBrowser — auth state resolves from authNeeds, not needs', () => {
+describe('runStoryWithBrowser: auth state resolves from authNeeds, not needs', () => {
   it('loads the auth file resolved from authNeeds even when the scheduler-facing needs is stripped empty', async () => {
     const config = await makeConfig();
     // Persist an auth payload for the `auth` label on disk.
@@ -489,7 +489,7 @@ describe('runStoryWithBrowser — auth state resolves from authNeeds, not needs'
       browser,
       makeOptions(config, {
         // A breakpoint pass strips the scheduler-facing needs to its in-pass
-        // subset — here, empty…
+        // subset; here, empty…
         needs: [],
         // …but the story's ORIGINAL needs still name `auth`. The wiring must
         // resolve storage state from authNeeds; regress it to `needs` and the
@@ -533,7 +533,7 @@ describe('runStoryWithBrowser — auth state resolves from authNeeds, not needs'
   });
 });
 
-describe('runStoryWithBrowser — mode threads into the candidate/cache decision', () => {
+describe('runStoryWithBrowser: mode threads into the candidate/cache decision', () => {
   it('a local-mode run seeds the cache and creates NO candidates/ tree', async () => {
     const config = await makeConfig();
     const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));

@@ -14,7 +14,7 @@ import { runAction } from './runAction.ts';
 /**
  * A 2x2 solid-colour PNG. `scoreDiff` parses real PNG bytes, so the fake page's
  * screenshot and any pre-seeded baseline must be genuine images of matching
- * dimensions — a `Buffer.from('png')` stub would throw inside pngjs.
+ * dimensions; a `Buffer.from('png')` stub would throw inside pngjs.
  */
 function solidPng(r: number, g: number, b: number): Buffer {
   const png = new PNG({ width: 2, height: 2 });
@@ -91,7 +91,7 @@ afterEach(() => {
   tempDirs = [];
 });
 
-describe('runAction — breakpoint threading', () => {
+describe('runAction: breakpoint threading', () => {
   it('tags the result with the breakpoint it ran at and keys the baseline by it', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -129,7 +129,7 @@ describe('runAction — breakpoint threading', () => {
       config,
       breakpoint: 'desktop',
     });
-    // Each breakpoint creates its own baseline — neither sees the other's as
+    // Each breakpoint creates its own baseline; neither sees the other's as
     // pre-existing, so both read as `new` on first capture.
     assert.equal(mobile.status, 'new');
     assert.equal(desktop.status, 'new');
@@ -137,7 +137,7 @@ describe('runAction — breakpoint threading', () => {
   });
 });
 
-describe('runAction — CI mode never writes committed baselines', () => {
+describe('runAction: CI mode never writes committed baselines', () => {
   it('reports new WITHOUT writing into paths.baselines, and writes the candidate instead', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -199,7 +199,7 @@ describe('runAction — CI mode never writes committed baselines', () => {
     });
 
     assert.equal(result.status, 'changed');
-    // Committed baseline stays exactly as seeded — untouched by the run.
+    // Committed baseline stays exactly as seeded; untouched by the run.
     const baselineBytes = await readFile(join(baselineDir, 'desktop.png'));
     assert.deepEqual(baselineBytes, solidPng(10, 20, 30));
     // Candidate carries the proposed new baseline.
@@ -238,7 +238,7 @@ describe('runAction — CI mode never writes committed baselines', () => {
   });
 });
 
-describe('runAction — local mode auto-seeds the cache, never baselines', () => {
+describe('runAction: local mode auto-seeds the cache, never baselines', () => {
   it('auto-seeds a fresh cache entry on a missing-entry run and leaves baselines untouched', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -270,7 +270,7 @@ describe('runAction — local mode auto-seeds the cache, never baselines', () =>
     // The recorded baselinePath points at the cache, so a later `approve` and a
     // re-run both key off the seeded cache entry.
     assert.ok(result.baselinePath?.startsWith(config.paths.localCache));
-    // Local mode writes no candidate tree — that is a CI artifact.
+    // Local mode writes no candidate tree; that is a CI artifact.
     assert.equal(
       await pathExists(
         join(config.paths.report, 'candidates', 'open', 'desktop.png'),
@@ -293,7 +293,7 @@ describe('runAction — local mode auto-seeds the cache, never baselines', () =>
     });
     assert.equal(first.status, 'new');
 
-    // Same actual, second run — the cache entry now exists, so it gates a pass.
+    // Same actual, second run; the cache entry now exists, so it gates a pass.
     const second = await runAction({
       page: fakePage(png),
       action: action('open'),
@@ -333,7 +333,7 @@ describe('runAction — local mode auto-seeds the cache, never baselines', () =>
   it('never reads a committed baseline in local mode (cache miss => new even with a baseline present)', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
-    // A committed baseline of the SAME pixels exists — if local mode read it,
+    // A committed baseline of the SAME pixels exists; if local mode read it,
     // this run would pass. It must not: the cache is empty, so the run seeds it
     // and reports `new`.
     const baselineDir = join(config.paths.baselines, 'open');
@@ -365,7 +365,7 @@ describe('runAction — local mode auto-seeds the cache, never baselines', () =>
   });
 });
 
-describe('runAction — ${breakpoint} interpolation', () => {
+describe('runAction: ${breakpoint} interpolation', () => {
   /** Page that only records the URLs a `navigate` step passes to `goto`. */
   function gotoRecordingPage(urls: string[]): Page {
     return {
@@ -387,7 +387,7 @@ describe('runAction — ${breakpoint} interpolation', () => {
 
   it('resolves ${breakpoint} to the current mode name', async () => {
     // runNavigate resolves the path against baseUrl, so the test config needs
-    // one for `new URL()` to succeed — navConfig supplies it.
+    // one for `new URL()` to succeed; navConfig supplies it.
     const config = await navConfig();
     const urls: string[] = [];
     await runAction({
@@ -418,7 +418,7 @@ describe('runAction — ${breakpoint} interpolation', () => {
   });
 });
 
-describe('runAction — navigation timeout is retryable, infra faults are not', () => {
+describe('runAction: navigation timeout is retryable, infra faults are not', () => {
   /**
    * A page whose `goto` replays a scripted sequence of outcomes: `'timeout'`
    * throws a Playwright-shaped TimeoutError, `'infra'` throws a generic fault,
@@ -493,7 +493,7 @@ describe('runAction — navigation timeout is retryable, infra faults are not', 
     assert.equal(result.failedStepIndex, 0);
   });
 
-  it('does NOT retry a generic infrastructure fault — it fails on the first throw', async () => {
+  it('does NOT retry a generic infrastructure fault: it fails on the first throw', async () => {
     const config = await navConfig();
     const { page, calls } = scriptedGotoPage(['infra', 'ok']);
     const result = await runAction({
@@ -512,7 +512,7 @@ describe('runAction — navigation timeout is retryable, infra faults are not', 
   });
 });
 
-describe('runAction — legacy baseline fallback (local mode, within the cache root)', () => {
+describe('runAction: legacy baseline fallback (local mode, within the cache root)', () => {
   it('compares against the legacy 0.png when the breakpoint entry is absent and does NOT report new', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -600,7 +600,7 @@ describe('runAction — legacy baseline fallback (local mode, within the cache r
   it('leaves a11yChanged undefined when only a legacy 0.png exists with no a11y companion', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
-    // Legacy pixel entry present, but no `a11y.yaml` alongside it — an older
+    // Legacy pixel entry present, but no `a11y.yaml` alongside it; an older
     // project that predates a11y snapshots. The fallback read must not throw on
     // the absent companion; with no baseline tree to compare, a11yChanged stays
     // undefined.
@@ -622,7 +622,7 @@ describe('runAction — legacy baseline fallback (local mode, within the cache r
   });
 });
 
-describe('runAction — legacy baseline fallback (CI mode, within paths.baselines)', () => {
+describe('runAction: legacy baseline fallback (CI mode, within paths.baselines)', () => {
   it('compares against the committed legacy 0.png, passes, and writes NO candidate', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -692,7 +692,7 @@ describe('runAction — legacy baseline fallback (CI mode, within paths.baseline
   });
 });
 
-describe('runAction — CI mode a11y-only drift', () => {
+describe('runAction: CI mode a11y-only drift', () => {
   it('flips status to changed and writes a candidate pair when pixels pass but the aria snapshot drifts', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -718,7 +718,7 @@ describe('runAction — CI mode a11y-only drift', () => {
     // Pixels matched, aria drifted → changed (not pass), a11yChanged recorded.
     assert.equal(result.status, 'changed');
     assert.equal(result.a11yChanged, true);
-    // No pixel diff was produced — a11y-only drift carries no diff image, which
+    // No pixel diff was produced; a11y-only drift carries no diff image, which
     // (with a11yChanged) is what tells this apart from pixel drift downstream.
     assert.equal(result.diffPath, undefined);
 
@@ -746,7 +746,7 @@ describe('runAction — CI mode a11y-only drift', () => {
   it('records the breakpoint-keyed a11y baseline path when the drift came from a breakpoint-source baseline', async () => {
     // Baseline-source is `breakpoint` (a `desktop.a11y.yaml` exists), so the
     // recorded a11yBaselinePath must be the breakpoint-keyed file that was
-    // actually diffed against — a real, on-disk path.
+    // actually diffed against; a real, on-disk path.
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
     const baselineDir = join(config.paths.baselines, 'open');
@@ -775,7 +775,7 @@ describe('runAction — CI mode a11y-only drift', () => {
   it('records the legacy a11y baseline path when the drift came from a legacy-source baseline', async () => {
     // Baseline-source is `legacy` (only `0.png` / `a11y.yaml` exist, no
     // breakpoint-keyed entry). The recorded a11yBaselinePath must mirror the
-    // legacy file that was diffed against — NOT the breakpoint-keyed
+    // legacy file that was diffed against; NOT the breakpoint-keyed
     // `desktop.a11y.yaml`, which does not exist on disk and would be a dangling
     // pointer for any consumer (report, approve) that reads it back.
     const config = await makeConfig();
@@ -872,12 +872,12 @@ describe('runAction — CI mode a11y-only drift', () => {
     assert.equal(result.status, 'changed');
     assert.equal(result.a11yChanged, true);
     // Pixel drift ⇒ a diff image IS produced. A present `diffPath` proves the
-    // pixel-drift branch ran and the pixels-pass branch did NOT — the two are an
+    // pixel-drift branch ran and the pixels-pass branch did NOT; the two are an
     // if/else, and the a11y-only candidate write lives solely in the pass branch.
     // So reaching here proves that write never fired, i.e. no second candidate
     // pair: exactly one pair is written, from the pixel-drift path alone.
     assert.ok(result.diffPath);
-    // Exactly one candidate pair on disk — the files exist and hold the proposed
+    // Exactly one candidate pair on disk; the files exist and hold the proposed
     // render (the actual bytes, uncorrupted by any competing second write).
     assert.ok(await pathExists(candidatePng));
     assert.ok(await pathExists(candidateA11y));
@@ -886,7 +886,7 @@ describe('runAction — CI mode a11y-only drift', () => {
   });
 });
 
-describe('runAction — local mode a11y-only drift stays advisory', () => {
+describe('runAction: local mode a11y-only drift stays advisory', () => {
   it('keeps pass (no status flip, no candidate) when local pixels pass but aria drifts', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -925,11 +925,11 @@ describe('runAction — local mode a11y-only drift stays advisory', () => {
   });
 });
 
-describe('runAction — CI mode size-mismatch drift', () => {
+describe('runAction: CI mode size-mismatch drift', () => {
   it('treats a dimension change as changed, writes a candidate, and never rewrites the baseline', async () => {
     const config = await makeConfig();
     // Seed a breakpoint-keyed committed baseline whose dimensions the actual
-    // will NOT match — a 2x2 baseline vs a 4x4 actual. `scoreDiff` throws
+    // will NOT match; a 2x2 baseline vs a 4x4 actual. `scoreDiff` throws
     // ScreenshotSizeMismatchError, which the runner maps to `changed`.
     const baselineDir = join(config.paths.baselines, 'open');
     await mkdir(baselineDir, { recursive: true });
@@ -988,12 +988,12 @@ describe('runAction — CI mode size-mismatch drift', () => {
     // pixel-drift (size-mismatch) branch carries no `diffPath`, so were it to also
     // emit `a11yChanged`, a `!diffPath` heuristic consumer would misclassify it.
     // The branch deliberately omits `a11yChanged`; this test fails if a future
-    // "natural cleanup" adds it back — even when the aria tree genuinely drifted.
+    // "natural cleanup" adds it back; even when the aria tree genuinely drifted.
     const config = await makeConfig();
     const baselineDir = join(config.paths.baselines, 'open');
     await mkdir(baselineDir, { recursive: true });
     // Seed a 2x2 baseline AND a stale a11y tree, so the aria snapshot really does
-    // drift — proving the omission is the branch's own contract, not an artifact
+    // drift; proving the omission is the branch's own contract, not an artifact
     // of a matching tree.
     await writeFile(join(baselineDir, 'desktop.png'), solidPng(10, 20, 30));
     await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- button "Old"');
@@ -1025,7 +1025,7 @@ describe('runAction — CI mode size-mismatch drift', () => {
   });
 });
 
-describe('runAction — step-level retry on a locator miss (not just nav timeout)', () => {
+describe('runAction: step-level retry on a locator miss (not just nav timeout)', () => {
   /**
    * A page whose click replays a scripted sequence: `'miss'` throws (runClick
    * wraps ANY click error into the retryable LocatorNotFoundError), `'hit'`
@@ -1076,7 +1076,7 @@ describe('runAction — step-level retry on a locator miss (not just nav timeout
       config,
       breakpoint: 'desktop',
     });
-    // First click missed, the retry hit — two attempts, then success.
+    // First click missed, the retry hit; two attempts, then success.
     assert.equal(clicks(), 2);
     assert.equal(result.status, 'pass');
   });
@@ -1124,7 +1124,7 @@ describe('runAction — step-level retry on a locator miss (not just nav timeout
   });
 });
 
-describe('runAction — expect.anyOf race and timeout', () => {
+describe('runAction: expect.anyOf race and timeout', () => {
   /**
    * A page for expect-only runs (empty steps): getByRole and getByText each
    * hand back a locator whose `first().waitFor` resolves or rejects per the
@@ -1159,7 +1159,7 @@ describe('runAction — expect.anyOf race and timeout', () => {
 
   it('passes as soon as one anyOf candidate becomes visible while the other never does', async () => {
     const config = await makeConfig();
-    // The role candidate resolves, the text candidate never — Promise.any still
+    // The role candidate resolves, the text candidate never; Promise.any still
     // fulfils on the single winner. This is the "success looks like X OR Y"
     // contract: the story need not know which renderer the app chose.
     const result = await runAction({
@@ -1193,7 +1193,7 @@ describe('runAction — expect.anyOf race and timeout', () => {
   });
 });
 
-describe('runAction — mask resolution', () => {
+describe('runAction: mask resolution', () => {
   /**
    * A page that records the `mask` array handed to `page.screenshot`, and hands
    * back tagged locators from each resolver so a test can prove which hint
@@ -1295,7 +1295,7 @@ describe('runAction — mask resolution', () => {
   });
 });
 
-describe('runAction — custom diff thresholds move the SSIM gate', () => {
+describe('runAction: custom diff thresholds move the SSIM gate', () => {
   async function seedCache(config: ResolvedConfig, png: Buffer): Promise<void> {
     const cacheDir = join(config.paths.localCache, 'open');
     await mkdir(cacheDir, { recursive: true });
@@ -1317,7 +1317,7 @@ describe('runAction — custom diff thresholds move the SSIM gate', () => {
 
   it('a tightened ssimThreshold flips a would-be pass into changed', async () => {
     const config = await makeConfig();
-    // This pair scores SSIM ~0.997 — a pass under the 0.99 default…
+    // This pair scores SSIM ~0.997; a pass under the 0.99 default…
     await seedCache(config, solidPng(100, 100, 100));
     const tightened = await runAction({
       page: fakePage(solidPng(108, 108, 108)),
@@ -1349,7 +1349,7 @@ describe('runAction — custom diff thresholds move the SSIM gate', () => {
 
   it('a loosened ssimThreshold flips a would-be changed into pass', async () => {
     const config = await makeConfig();
-    // This pair scores SSIM ~0.971 — changed under the 0.99 default…
+    // This pair scores SSIM ~0.971; changed under the 0.99 default…
     await seedCache(config, solidPng(10, 20, 30));
     const loosened = await runAction({
       page: fakePage(solidPng(15, 25, 35)),
@@ -1382,7 +1382,7 @@ describe('runAction — custom diff thresholds move the SSIM gate', () => {
   it('pixelThreshold tunes the reported pixel-diff metric WITHOUT moving the pass/changed gate', async () => {
     // pixelThreshold governs the diff-PNG pixel count only; SSIM alone gates
     // pass vs changed (see the schema doc). This pair scores SSIM ~0.984, so it
-    // is `changed` under both thresholds — but its per-pixel colour delta
+    // is `changed` under both thresholds; but its per-pixel colour delta
     // straddles the two pixel thresholds, so only the reported diffPixels move.
     const config = await makeConfig();
     await seedCache(config, solidPng(100, 100, 100));
@@ -1404,7 +1404,7 @@ describe('runAction — custom diff thresholds move the SSIM gate', () => {
       breakpoint: 'desktop',
       mode: 'local',
     });
-    // Both changed — the gate did not move…
+    // Both changed; the gate did not move…
     assert.equal(tight.status, 'changed');
     assert.equal(loose.status, 'changed');
     // …but the tighter pixel threshold flags all four pixels while the default

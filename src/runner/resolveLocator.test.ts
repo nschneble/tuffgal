@@ -15,7 +15,7 @@ interface RoleCall {
  * records its arguments and returns a distinct sentinel string, so a test can
  * assert BOTH which method fired (by the returned sentinel) and that the other
  * two never ran (by their empty call logs). The precedence chain is the whole
- * contract here — a regression that silently resolves the wrong element would
+ * contract here; a regression that silently resolves the wrong element would
  * still "work" against a single-method mock, so every test pins the losers to
  * zero calls too.
  */
@@ -49,7 +49,7 @@ function spyPage(): {
   return { page, calls };
 }
 
-describe('resolveLocator — precedence chain picks exactly one method', () => {
+describe('resolveLocator: precedence chain picks exactly one method', () => {
   it('role + text → getByRole(role, { name, exact: false }), nothing else', () => {
     const { page, calls } = spyPage();
     const hint: Hint = { role: 'button', text: 'Save' };
@@ -75,7 +75,7 @@ describe('resolveLocator — precedence chain picks exactly one method', () => {
 
     assert.equal(result, 'role-locator');
     assert.equal(calls.getByRole.length, 1);
-    // Role-only must NOT pass a name filter — a spurious `{ name }` here would
+    // Role-only must NOT pass a name filter; a spurious `{ name }` here would
     // over-constrain the match to elements carrying that accessible name.
     assert.deepEqual(calls.getByRole[0], {
       role: 'navigation',
@@ -124,14 +124,14 @@ describe('resolveLocator — precedence chain picks exactly one method', () => {
         return true;
       },
     );
-    // Nothing was resolved — no method fired before the throw.
+    // Nothing was resolved; no method fired before the throw.
     assert.equal(calls.getByRole.length, 0);
     assert.equal(calls.getByText.length, 0);
     assert.equal(calls.locator.length, 0);
   });
 });
 
-describe('resolveLocator — earlier rungs win when several hint fields coexist', () => {
+describe('resolveLocator: earlier rungs win when several hint fields coexist', () => {
   it('role + text beats a co-present selector (role+text is the top rung)', () => {
     const { page, calls } = spyPage();
     const hint: Hint = { role: 'button', text: 'Save', selector: '.save-btn' };
@@ -163,7 +163,7 @@ describe('resolveLocator — earlier rungs win when several hint fields coexist'
 
     assert.equal(result, 'selector-locator');
     assert.deepEqual(calls.locator, ['.cta']);
-    // Text is the noisiest last resort — never reached while a selector exists.
+    // Text is the noisiest last resort; never reached while a selector exists.
     assert.equal(calls.getByText.length, 0);
   });
 });

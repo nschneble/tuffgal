@@ -36,13 +36,13 @@ A `tuffgal run` executes under one of two modes:
 
 - **CI mode** compares against the committed baselines (`paths.baselines`) and
   never writes them. A missing baseline is `new`, an orphaned one is `deleted`,
-  and drift is `changed` — all of which are written into a self-contained
+  and drift is `changed`, all of which are written into a self-contained
   **candidate tree** under `<report>/candidates/` for approval, not committed in
   place. CI mode gates: pending changes exit `2`.
 - **Local mode** is advisory. It compares against a gitignored, per-machine
   cache (`paths.localCache`) so you can self-diff while you iterate, seeding a
   missing entry on first sight. A local run **never reads or writes the
-  committed baselines**, and never fails your build on visual drift — it surfaces
+  committed baselines**, and never fails your build on visual drift. It surfaces
   the signal in the report and on stdout and **exits `0`**. Only a failed story
   (a step that threw) exits `1`; the CI-gating codes `2` and `3` never fire
   locally.
@@ -66,7 +66,7 @@ both writing through the single `approve --from` promotion path:
   downstream, not-yet-shipped repo, so treat this as the direction of travel
   rather than a shipped button today.
 
-Plain `tuffgal approve` (no `--from`) targets your **local cache** only — it
+Plain `tuffgal approve` (no `--from`) targets your **local cache** only. It
 accepts your own self-diff so your next local run is clean. It does not touch the
 committed set.
 
@@ -77,7 +77,7 @@ the promoted baselines were captured under (capture schema, browser version,
 platform, capture mode, breakpoints, device scale factor, frozen time). On the
 next `run --ci` Tuffgal checks the live capture environment against it. A
 pixel-affecting mismatch still runs the comparison, but banners the report and
-exits `3` — the signal is "expect a full re-approve", distinct from ordinary
+exits `3`: the signal is "expect a full re-approve", distinct from ordinary
 pending changes.
 
 ### Exit codes

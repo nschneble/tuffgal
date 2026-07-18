@@ -41,7 +41,7 @@ function ok(over: Partial<EnvironmentManifest> = {}): ManifestReadResult {
   return { status: 'ok', manifest: manifest(over) };
 }
 
-describe('readManifest — parse outcomes', () => {
+describe('readManifest: parse outcomes', () => {
   let dir: string;
   before(() => {
     dir = mkdtempSync(join(tmpdir(), 'tuffgal-manifest-'));
@@ -104,7 +104,7 @@ describe('readManifest — parse outcomes', () => {
   });
 });
 
-describe('compareEnvironment — read-result gating', () => {
+describe('compareEnvironment: read-result gating', () => {
   it('never mismatches on a missing manifest (bootstrap case)', () => {
     const result = compareEnvironment({ status: 'missing' }, manifest());
     assert.equal(result.mismatch, false);
@@ -127,7 +127,7 @@ describe('compareEnvironment — read-result gating', () => {
   });
 });
 
-describe('compareEnvironment — pixel-affecting keys each trigger', () => {
+describe('compareEnvironment: pixel-affecting keys each trigger', () => {
   const cases: Array<{ key: string; over: Partial<EnvironmentManifest> }> = [
     { key: 'captureSchema', over: { captureSchema: 2 } },
     { key: 'browserVersion', over: { browserVersion: '999.0.0.0' } },
@@ -154,7 +154,7 @@ describe('compareEnvironment — pixel-affecting keys each trigger', () => {
   });
 });
 
-describe('compareEnvironment — informational keys never trigger', () => {
+describe('compareEnvironment: informational keys never trigger', () => {
   it('ignores a tuffgalVersion difference', () => {
     const result = compareEnvironment(
       ok(),
@@ -184,7 +184,7 @@ describe('compareEnvironment — informational keys never trigger', () => {
   });
 });
 
-describe('compareEnvironment — breakpoints deep compare', () => {
+describe('compareEnvironment: breakpoints deep compare', () => {
   it('flags a changed dimension', () => {
     const result = compareEnvironment(
       ok(),
@@ -242,7 +242,7 @@ describe('compareEnvironment — breakpoints deep compare', () => {
   });
 });
 
-describe('captureEnvironment — builds the actual side', () => {
+describe('captureEnvironment: builds the actual side', () => {
   const config = {
     captureMode: 'viewport',
     frozenTime: '2026-01-15T12:00:00.000Z',

@@ -7,7 +7,7 @@ import { capturePage, FullPageTooLargeError } from './capture.ts';
 /**
  * A minimal stand-in for the bits of `Page` that `capturePage` touches. It
  * records the order of calls so the test can prove the scroll reset happens
- * before the shutter — the whole point of the fix is that ordering.
+ * before the shutter; the whole point of the fix is that ordering.
  */
 function fakePage(): {
   page: Page;
@@ -64,7 +64,7 @@ describe('capturePage', () => {
 
     // A viewport shot captures exactly the box the flow scrolled to, so
     // resetting the offset would discard the region the story navigated to.
-    // Only the shutter fires — no scroll.
+    // Only the shutter fires; no scroll.
     assert.deepEqual(calls, ['screenshot']);
   });
 
@@ -86,8 +86,8 @@ describe('capturePage', () => {
 });
 
 /**
- * A fake page whose scroll-reset evaluate returns fixed layout dimensions —
- * exactly what the real page-context measurement hands back — so the full-page
+ * A fake page whose scroll-reset evaluate returns fixed layout dimensions ;
+ * exactly what the real page-context measurement hands back; so the full-page
  * area guard can be exercised without a browser.
  */
 function fakePageWithDimensions(dimensions: {
@@ -108,7 +108,7 @@ function fakePageWithDimensions(dimensions: {
   return { page, calls };
 }
 
-describe('capturePage — full-page area guard', () => {
+describe('capturePage: full-page area guard', () => {
   it('throws FullPageTooLargeError before shooting when the page exceeds the cap', async () => {
     const { page, calls } = fakePageWithDimensions({
       width: 1280,
@@ -133,7 +133,7 @@ describe('capturePage — full-page area guard', () => {
       },
     );
 
-    // The shutter must NOT fire once the guard trips — that is the whole point,
+    // The shutter must NOT fire once the guard trips; that is the whole point,
     // to avoid compositing the oversized image at all.
     assert.ok(
       !calls.includes('screenshot'),
@@ -156,7 +156,7 @@ describe('capturePage — full-page area guard', () => {
     assert.deepEqual(calls, ['evaluate', 'screenshot']);
   });
 
-  it('captures at the exact cap — the guard is strict >, so area === maxPixels passes', async () => {
+  it('captures at the exact cap: the guard is strict >, so area === maxPixels passes', async () => {
     const { page, calls } = fakePageWithDimensions({
       width: 3000,
       height: 10_000,
@@ -180,7 +180,7 @@ describe('capturePage — full-page area guard', () => {
       height: 99_999,
     });
 
-    // A cap far below the page's dimensions — but viewport mode is already
+    // A cap far below the page's dimensions; but viewport mode is already
     // bounded by the breakpoint, so the guard must not even measure.
     const buffer = await capturePage(page, [], 'viewport', {
       maxPixels: 1,

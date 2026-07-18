@@ -37,7 +37,7 @@ export function parseHostPort(url: string): { host: string; port: number } {
  * {@link probeHttp}), so once a server is HTTP-readiness-verified a bare TCP
  * accept is sufficient to confirm the process is still up. The false-ready
  * caveat that makes a TCP accept too weak for a cold-booting dev server (see
- * {@link probeHttp}) does not apply here — the server is past boot. Staying on
+ * {@link probeHttp}) does not apply here. The server is past boot. Staying on
  * TCP also keeps the liveness poll agnostic to self-signed HTTPS certs and
  * non-2xx routes, which `fetch` (and thus `probeHttp`) would reject.
  */
@@ -64,14 +64,14 @@ export function probeTcp(
  * Resolves `true` if an HTTP `GET` to `url` returns any non-5xx status within
  * `timeoutMs`, `false` on a 5xx status, connection refusal, TLS/DNS failure, or
  * timeout. Unlike {@link probeTcp}, this proves the server is actually *serving*
- * routes — a dev server (Vite/Next/webpack) binds its socket well before the
+ * routes, a dev server (Vite/Next/webpack) binds its socket well before the
  * bundle finishes compiling, so a bare TCP accept can succeed while requests
  * still 503 or hang. Any received response (2xx/3xx/4xx) means it is up.
  *
  * Redirects are not followed (`redirect: 'manual'`): a 3xx already proves the
  * server is serving, and chasing `Location` risks an external host or a slow
  * login page. Note this does *not* accept self-signed HTTPS certs (fetch
- * rejects them) — an http health-check URL is expected.
+ * rejects them). An http health-check URL is expected.
  */
 export async function probeHttp(
   url: string,

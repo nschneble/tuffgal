@@ -10,7 +10,7 @@ export function interpolate(
   parameters: Record<string, string>,
 ): string {
   // Story parameter keys are an open string record, so hyphen/dot keys are
-  // valid. Match them too — otherwise `${my-key}` wouldn't match at all and the
+  // valid. Match them too. Otherwise `${my-key}` wouldn't match at all and the
   // missing-parameter guard below would never fire, leaking the literal token.
   return template.replace(/\$\{([\w.-]+)\}/g, (_match, name: string) => {
     const value = parameters[name];

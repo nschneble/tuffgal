@@ -69,7 +69,7 @@ function countOccurrences(haystack: string, needle: string): number {
   return count;
 }
 
-describe('renderReport — mixed pass/changed/failed fixture', () => {
+describe('renderReport: mixed pass/changed/failed fixture', () => {
   const result = makeRunResult({
     totals: {
       stories: 3,
@@ -154,9 +154,9 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
   it('puts the count outside the button as an aria-describedby sibling and composes the name from the word + sr-only suffix', () => {
     assert.ok(
       html.includes(
-        '<span class="count" id="summary-count-all">3</span><button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list" aria-describedby="summary-count-all"><span class="indicator label">stories</span><span class="sr-only"> — show all stories</span></button>',
+        '<span class="count" id="summary-count-all">3</span><button type="button" class="summary-filter" data-filter="all" aria-pressed="true" aria-controls="stories-list" aria-describedby="summary-count-all"><span class="indicator label">stories</span><span class="sr-only">, show all stories</span></button>',
       ),
-      'count "3" precedes the button as a described-by sibling; button name is "stories — show all stories"',
+      'count "3" precedes the button as a described-by sibling; button name is "stories, show all stories"',
     );
     assert.ok(
       html.includes(
@@ -308,7 +308,7 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
       'failed tier total is 1',
     );
     // The screens/flows coverage stats were dropped entirely. (`.coverage-detail`
-    // is intentionally NOT asserted here — it is also reused by the diff-stats
+    // is intentionally NOT asserted here; it is also reused by the diff-stats
     // pixel-count markup, so its presence/absence is unrelated to this change.)
     assert.ok(
       !html.includes('summary-item coverage'),
@@ -334,7 +334,7 @@ describe('renderReport — mixed pass/changed/failed fixture', () => {
   });
 });
 
-describe('renderAction — whole row as screenshot disclosure', () => {
+describe('renderAction: whole row as screenshot disclosure', () => {
   it('wraps a shot-bearing action in <details class="shots"> with the full row as <summary class="action-row">', () => {
     const result = makeRunResult({
       totals: {
@@ -485,8 +485,8 @@ describe('renderAction — whole row as screenshot disclosure', () => {
   it('renders the mismatch reason as one accessible clause from the structured pair', () => {
     // A dimension mismatch yields status:changed with a failureMessage but no
     // diffRatio/diffPath. Without a note the row reads as a "changed" with an
-    // empty stats slot and no diff tab — an unexplained no-op. The recorded
-    // reason must fill the slot the "% differs" stat normally occupies — folded
+    // empty stats slot and no diff tab; an unexplained no-op. The recorded
+    // reason must fill the slot the "% differs" stat normally occupies; folded
     // into ONE sentence, each dimension pair rendered in the split idiom (× glyph
     // for sight, spoken "W by H pixels" for AT), read from the structured
     // sizeMismatch pair rather than parsed from the message.
@@ -527,7 +527,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
     );
     assert.ok(
       html.includes(
-        'No pixel diff — screenshot resized from <span class="breakpoint-dimensions" aria-hidden="true">1280×800</span><span class="sr-only">1280 by 800 pixels</span> to <span class="breakpoint-dimensions" aria-hidden="true">1280×2500</span><span class="sr-only">1280 by 2500 pixels</span>.',
+        'No pixel diff. Screenshot resized from <span class="breakpoint-dimensions" aria-hidden="true">1280×800</span><span class="sr-only">1280 by 800 pixels</span> to <span class="breakpoint-dimensions" aria-hidden="true">1280×2500</span><span class="sr-only">1280 by 2500 pixels</span>.',
       ),
       'the note is one clause with both dimension pairs in the split idiom',
     );
@@ -647,7 +647,7 @@ describe('renderAction — whole row as screenshot disclosure', () => {
   });
 });
 
-describe('renderStoryActions — per-breakpoint grouping', () => {
+describe('renderStoryActions: per-breakpoint grouping', () => {
   it('groups tagged actions under labelled regions with mode name + dimensions', () => {
     const result = makeRunResult({
       totals: {
@@ -758,7 +758,7 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
 
   it('renders a single-mode story as a flat list with no breakpoint chrome', () => {
     // The common default `desktop` project ran at one mode: no caption, no
-    // group wrapper — just the historical flat list.
+    // group wrapper; just the historical flat list.
     const result = makeRunResult({
       totals: {
         stories: 1,
@@ -847,7 +847,7 @@ describe('renderStoryActions — per-breakpoint grouping', () => {
   });
 });
 
-describe('renderScreenshots — interactive viewer (interactiveMode:true)', () => {
+describe('renderScreenshots: interactive viewer (interactiveMode:true)', () => {
   function interactiveResult(actionOverrides: Partial<ActionResult> = {}) {
     return makeRunResult({
       totals: {
@@ -998,7 +998,7 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
       REPORT_DIR,
       true,
     );
-    // A single real variant offers no choice — the switcher fieldset and its lone
+    // A single real variant offers no choice; the switcher fieldset and its lone
     // radio collapse away, leaving just the committed image (the baseline here).
     assert.ok(
       !html.includes('class="shot-interactive"'),
@@ -1019,7 +1019,7 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
   it('suppresses the redundant baseline for a new row, collapsing to actual-only', () => {
     // A `new` baseline is written from this run's actual, so its baselinePath
     // points at a byte-identical copy. Surfacing it as a switchable variant
-    // implies a comparison that does not exist — suppress it. With no diff
+    // implies a comparison that does not exist; suppress it. With no diff
     // either, only `actual` remains, so the switcher collapses to image-only.
     const newRow = interactiveResult({
       status: 'new',
@@ -1081,7 +1081,7 @@ describe('renderScreenshots — interactive viewer (interactiveMode:true)', () =
   });
 });
 
-describe('renderScreenshots — interactiveMode dimension-mismatch fallback', () => {
+describe('renderScreenshots: interactiveMode dimension-mismatch fallback', () => {
   // A baseline/actual dimension mismatch yields status:changed + failureMessage
   // but no diffRatio/diffPath: the diff is uncomputable, and press-flipping two
   // differently-sized captures would misalign everything. interactiveMode must
@@ -1180,7 +1180,7 @@ describe('renderScreenshots — interactiveMode dimension-mismatch fallback', ()
   });
 });
 
-describe('formatDate — friendly report-meta timestamp', () => {
+describe('formatDate: friendly report-meta timestamp', () => {
   // formatDate is module-private; assert through renderReport's rendered output
   // (the friendly text appears in the <title> and the report-meta <time>). TZ is
   // pinned to UTC at the top of the file so these are stable across runners.
@@ -1221,7 +1221,7 @@ describe('formatDate — friendly report-meta timestamp', () => {
   });
 });
 
-describe('renderEnvMismatch — capture-environment banner', () => {
+describe('renderEnvMismatch: capture-environment banner', () => {
   it('renders no banner when environment is absent', () => {
     const html = renderReport(makeRunResult(), REPORT_DIR);
     assert.ok(
@@ -1308,7 +1308,7 @@ describe('renderEnvMismatch — capture-environment banner', () => {
     );
     assert.ok(
       html.includes(
-        'Expect a full re-approve — baselines were captured under a different environment.',
+        'Expect a full re-approve. Baselines were captured under a different environment.',
       ),
       'banner body conveys the re-approve consequence',
     );
@@ -1365,7 +1365,7 @@ describe('renderEnvMismatch — capture-environment banner', () => {
   });
 });
 
-describe('renderDeleted — orphaned-baseline section', () => {
+describe('renderDeleted: orphaned-baseline section', () => {
   it('renders no section when deleted is empty', () => {
     const html = renderReport(makeRunResult({ deleted: [] }), REPORT_DIR);
     assert.ok(
@@ -1460,7 +1460,7 @@ describe('renderDeleted — orphaned-baseline section', () => {
   });
 });
 
-describe('renderActionNotes — candidate + a11y-drift notes', () => {
+describe('renderActionNotes: candidate + a11y-drift notes', () => {
   function actionResult(actionOverrides: Partial<ActionResult>) {
     return makeRunResult({
       totals: {
@@ -1623,7 +1623,7 @@ describe('renderActionNotes — candidate + a11y-drift notes', () => {
   });
 });
 
-describe('renderBreakpointFilters — the breakpoint filter dimension', () => {
+describe('renderBreakpointFilters: the breakpoint filter dimension', () => {
   // A run spanning two distinct breakpoints across its stories: mobile 375×667
   // and desktop 1280×800. The filter group renders once, from the distinct
   // breakpoints in first-seen order.
@@ -1869,7 +1869,7 @@ describe('renderBreakpointFilters — the breakpoint filter dimension', () => {
   });
 });
 
-describe('data-breakpoint hooks — every action under exactly one container', () => {
+describe('data-breakpoint hooks: every action under exactly one container', () => {
   it('adds data-breakpoint to each breakpoint-group div in a multi-mode story', () => {
     const html = renderReport(
       makeRunResult({
@@ -1982,7 +1982,7 @@ describe('data-breakpoint hooks — every action under exactly one container', (
   it('never leaves an action outside a [data-breakpoint] container (multi-mode)', () => {
     // Selector invariant: the count of data-breakpoint containers equals the
     // number of distinct modes, and each <ol class="actions"> is either the
-    // hooked flat list or nested under a hooked group div — so every action row
+    // hooked flat list or nested under a hooked group div; so every action row
     // has exactly one [data-breakpoint] ancestor-or-self.
     const html = renderReport(
       makeRunResult({
@@ -2036,7 +2036,7 @@ describe('data-breakpoint hooks — every action under exactly one container', (
   });
 });
 
-describe('renderStory — status marker + sr-only word per tier', () => {
+describe('renderStory: status marker + sr-only word per tier', () => {
   const result = makeRunResult({
     totals: {
       stories: 3,

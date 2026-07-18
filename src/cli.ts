@@ -247,14 +247,14 @@ function failExit(message: string): never {
  * `main` calls it and routes any message through {@link failExit}. Covers the
  * flags that only mean something on a specific subcommand:
  *   - `--new-only`, `--breakpoint`/`--<name>`, and a bare positional narrow an
- *     approval set — meaningless on any command but `approve`.
- *   - `--from`/`--prune` promote a CI candidate tree — only on `approve`.
- *   - `--ci`/`--local` pick the comparison contract — meaningful only on `run`.
+ *     approval set, meaningless on any command but `approve`.
+ *   - `--from`/`--prune` promote a CI candidate tree, only on `approve`.
+ *   - `--ci`/`--local` pick the comparison contract, meaningful only on `run`.
  *
  * `approve` itself is two disjoint modes: plain (cache refresh, accepts the
  * local-narrowing filters) and `--from` (baseline promotion, a whole-tree copy).
- * The filters target the plain cache mode, so `--from` rejects them for v1 —
- * partial `--from` approvals are a PRD backlog item. `--prune` is a `--from`
+ * The filters target the plain cache mode, so `--from` rejects them for v1.
+ * Partial `--from` approvals are a PRD backlog item. `--prune` is a `--from`
  * modifier and is meaningless without it.
  */
 export function validateCommandFlags(

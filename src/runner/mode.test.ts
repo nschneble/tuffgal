@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { resolveRunMode } from './mode.ts';
 
-describe('resolveRunMode — flag precedence', () => {
+describe('resolveRunMode: flag precedence', () => {
   it('--ci forces ci even when the env would default to local', () => {
     assert.equal(resolveRunMode({ ci: true, local: false, env: {} }), 'ci');
   });
@@ -23,7 +23,7 @@ describe('resolveRunMode — flag precedence', () => {
   });
 });
 
-describe('resolveRunMode — env default (no flag)', () => {
+describe('resolveRunMode: env default (no flag)', () => {
   const noFlags = { ci: false, local: false };
 
   it('defaults to ci when CI is a truthy string', () => {

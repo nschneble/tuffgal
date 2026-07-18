@@ -3,14 +3,14 @@ import type { Hint } from '../schema/action.ts';
 
 /**
  * Resolves a hint to a Playwright Locator using a precedence chain. The MVP
- * intentionally stays literal — no LLM fallback. When this throws,
+ * intentionally stays literal, no LLM fallback. When this throws,
  * `runAction` records `LocatorNotFound` and the parent story fails fast.
  *
  * Order:
- *  1. `role + text`  — strongest ARIA contract.
- *  2. `role` alone   — when no name is supplied.
- *  3. `selector`     — explicit escape hatch / cached resolution.
- *  4. `text` alone   — last resort because text-only locators are noisy.
+ *  1. `role + text`: strongest ARIA contract.
+ *  2. `role` alone: when no name is supplied.
+ *  3. `selector`: explicit escape hatch / cached resolution.
+ *  4. `text` alone: last resort because text-only locators are noisy.
  */
 export function resolveLocator(page: Page, hint: Hint): Locator {
   if (hint.role && hint.text) {
@@ -26,7 +26,7 @@ export function resolveLocator(page: Page, hint: Hint): Locator {
     return page.getByText(hint.text, { exact: false });
   }
   throw new LocatorHintError(
-    'hint has no role, selector, or text — cannot resolve',
+    'hint has no role, selector, or text; cannot resolve',
   );
 }
 

@@ -30,7 +30,7 @@ function config(): ResolvedConfig {
   } as unknown as ResolvedConfig;
 }
 
-describe('runNavigate — origin escape guard (runtime defense in depth)', () => {
+describe('runNavigate: origin escape guard (runtime defense in depth)', () => {
   it('throws when the resolved URL lands on another origin', async () => {
     const calls: GotoCall[] = [];
     // Bypasses the schema (which also rejects this) to prove the runtime guard
@@ -55,7 +55,7 @@ describe('runNavigate — origin escape guard (runtime defense in depth)', () =>
   // as defense in depth: the WHATWG URL parser strips tab/newline/carriage
   // return BEFORE resolving, so each control char after the leading slash
   // resolves to a protocol-relative `//evil.com` off the configured baseUrl.
-  // (`\t`, `\n`, `\r` are escape sequences — no raw control bytes in source.)
+  // (`\t`, `\n`, `\r` are escape sequences; no raw control bytes in source.)
   const controlCharVectors: Array<[string, string]> = [
     ['tab', '/\t//evil.com'],
     ['newline', '/\n//evil.com'],
@@ -75,7 +75,7 @@ describe('runNavigate — origin escape guard (runtime defense in depth)', () =>
   }
 });
 
-describe('runNavigate — waitUntil default flip', () => {
+describe('runNavigate: waitUntil default flip', () => {
   it("defaults waitUntil to 'load' when the step omits it", async () => {
     const calls: GotoCall[] = [];
     await runNavigate(recordingPage(calls), '/', config());

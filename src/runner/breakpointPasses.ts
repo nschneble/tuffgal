@@ -13,7 +13,7 @@ function passKey(breakpoint: ResolvedBreakpoint): string {
 }
 
 /**
- * True when `item` renders at `breakpoint` — i.e. its resolved run set (its own
+ * True when `item` renders at `breakpoint`, i.e. its resolved run set (its own
  * `breakpoints` override, else the project default) contains a breakpoint with
  * the same name AND dimensions.
  */
@@ -28,8 +28,8 @@ export function storyRendersAt(
 
 /**
  * The ordered list of breakpoint passes a run executes. Multi-breakpoint runs
- * are driven as one pass per breakpoint — a full reset/seed then the whole
- * schedule — so each breakpoint sees a pristine database instead of inheriting
+ * are driven as one pass per breakpoint (a full reset/seed then the whole
+ * schedule) so each breakpoint sees a pristine database instead of inheriting
  * the previous breakpoint's mutations (the password a `mobile` pass changed no
  * longer leaks into the `desktop` pass). Order follows `config.breakpoints`
  * first so the default run keeps its configured order, then appends any extra

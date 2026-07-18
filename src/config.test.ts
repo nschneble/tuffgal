@@ -222,7 +222,7 @@ describe('loadConfig breakpoint resolution', () => {
   it('defaults paths.localCache to the cache dir the scaffolded .gitignore covers', async () => {
     const resolved = await load('');
     // The default must resolve INSIDE the `tuffgal/` subtree, where the
-    // scaffolded `tuffgal/.gitignore`'s `.cache/` entry actually ignores it —
+    // scaffolded `tuffgal/.gitignore`'s `.cache/` entry actually ignores it ;
     // not `<configDir>/.cache`, which sits a level up and is un-ignored, so a
     // consumer omitting the key would stage hundreds of per-machine PNGs. Derive
     // the covered path from `paths.baselines` (its parent is the `tuffgal/` dir

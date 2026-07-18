@@ -14,7 +14,7 @@ import { pathToFileURL } from 'node:url';
 import { isMainEntry, parseArguments, validateCommandFlags } from './cli.ts';
 import { resolveRunMode } from './runner/mode.ts';
 
-describe('parseArguments — approve filters', () => {
+describe('parseArguments: approve filters', () => {
   it('captures a bare positional story argument', () => {
     const args = parseArguments(['approve', 'user-logs-in']);
     assert.equal(args.command, 'approve');
@@ -71,7 +71,7 @@ describe('parseArguments — approve filters', () => {
   });
 });
 
-describe('parseArguments — unknown flag rejection', () => {
+describe('parseArguments: unknown flag rejection', () => {
   it('throws on an unrecognized dash-prefixed option', () => {
     assert.throws(
       () => parseArguments(['run', '--nope']),
@@ -85,7 +85,7 @@ describe('parseArguments — unknown flag rejection', () => {
   });
 });
 
-describe('parseArguments — run mode flags', () => {
+describe('parseArguments: run mode flags', () => {
   it('captures --ci', () => {
     const args = parseArguments(['run', '--ci']);
     assert.equal(args.ci, true);
@@ -105,7 +105,7 @@ describe('parseArguments — run mode flags', () => {
   });
 });
 
-describe('validateCommandFlags — cross-command flag placement', () => {
+describe('validateCommandFlags: cross-command flag placement', () => {
   it('accepts --ci on the run command', () => {
     assert.equal(
       validateCommandFlags(parseArguments(['run', '--ci'])),
@@ -159,7 +159,7 @@ describe('validateCommandFlags — cross-command flag placement', () => {
     assert.equal(validateCommandFlags(parseArguments(['run'])), undefined);
   });
 
-  it('does NOT itself block both --ci and --local — resolveRunMode owns that', () => {
+  it('does NOT itself block both --ci and --local: resolveRunMode owns that', () => {
     // The both-flags error is routed through resolveRunMode (which `main`
     // catches and sends to failExit), not this pre-flight validator: the flags
     // are individually legal on `run`, and their mutual exclusivity is a
@@ -173,7 +173,7 @@ describe('validateCommandFlags — cross-command flag placement', () => {
   });
 });
 
-describe('parseArguments — approve --from / --prune', () => {
+describe('parseArguments: approve --from / --prune', () => {
   it('parses --from <dir> and --prune', () => {
     const args = parseArguments(['approve', '--from', 'candidates', '--prune']);
     assert.equal(args.from, 'candidates');
@@ -200,7 +200,7 @@ describe('parseArguments — approve --from / --prune', () => {
   });
 });
 
-describe('validateCommandFlags — --from / --prune placement', () => {
+describe('validateCommandFlags: --from / --prune placement', () => {
   it('rejects --from outside approve', () => {
     assert.match(
       validateCommandFlags(parseArguments(['run', '--from', 'x'])) ?? '',
@@ -260,7 +260,7 @@ describe('validateCommandFlags — --from / --prune placement', () => {
   });
 });
 
-describe('isMainEntry — entry-point detection', () => {
+describe('isMainEntry: entry-point detection', () => {
   it('matches when argv[1] is a symlink resolving to the module file', () => {
     const directory = mkdtempSync(join(tmpdir(), 'tuffgal-entry-'));
     try {

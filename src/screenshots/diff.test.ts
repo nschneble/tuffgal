@@ -11,7 +11,7 @@ import {
 /**
  * Builds a solid-colour PNG buffer of the given size. The diff core reads PNG
  * buffers and decides pass/changed, so the fixtures here are real encoded PNGs
- * rather than mocks — the same path pngjs takes at runtime.
+ * rather than mocks; the same path pngjs takes at runtime.
  */
 function solidPng(
   width: number,
@@ -32,7 +32,7 @@ function solidPng(
 const WHITE: [number, number, number, number] = [255, 255, 255, 255];
 const BLACK: [number, number, number, number] = [0, 0, 0, 255];
 
-describe('scoreDiff — zero-diff boundary', () => {
+describe('scoreDiff: zero-diff boundary', () => {
   it('reports no differing pixels and a perfect SSIM for identical images', () => {
     const png = solidPng(16, 16, WHITE);
     const { score } = scoreDiff(png, png, 0.1);
@@ -47,7 +47,7 @@ describe('scoreDiff — zero-diff boundary', () => {
   });
 });
 
-describe('scoreDiff — full-diff boundary', () => {
+describe('scoreDiff: full-diff boundary', () => {
   it('reports every pixel differing and a low SSIM for opposite images', () => {
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 16, BLACK);
@@ -62,13 +62,13 @@ describe('scoreDiff — full-diff boundary', () => {
   });
 });
 
-describe('scoreDiff — never encodes an overlay', () => {
+describe('scoreDiff: never encodes an overlay', () => {
   it('does not deflate-encode a diff PNG while scoring, even for a full diff', (t) => {
     const write = t.mock.method(PNG.sync, 'write');
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 16, BLACK);
     // The solidPng fixtures above encode PNGs, but the spy is installed after
-    // they are built, so any call it records is scoreDiff's own — and there
+    // they are built, so any call it records is scoreDiff's own; and there
     // should be none. Scoring is the common (passing) case; encoding the
     // discarded overlay on every comparison was the waste this split removes.
     const before = write.mock.callCount();
@@ -78,7 +78,7 @@ describe('scoreDiff — never encodes an overlay', () => {
   });
 });
 
-describe('scoreDiff — dimension mismatch', () => {
+describe('scoreDiff: dimension mismatch', () => {
   it('throws ScreenshotSizeMismatchError carrying both dimension pairs', () => {
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 20, WHITE);
@@ -97,7 +97,7 @@ describe('scoreDiff — dimension mismatch', () => {
   });
 });
 
-describe('scoreDiff — corrupt input', () => {
+describe('scoreDiff: corrupt input', () => {
   it('propagates the decode failure rather than swallowing it', () => {
     const valid = solidPng(16, 16, WHITE);
     const garbage = Buffer.from('not a png at all');
@@ -106,7 +106,7 @@ describe('scoreDiff — corrupt input', () => {
   });
 });
 
-describe('renderDiffOverlay — changed branch', () => {
+describe('renderDiffOverlay: changed branch', () => {
   it('encodes a decodable overlay that marks the differing pixels', () => {
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 16, BLACK);
@@ -142,7 +142,7 @@ describe('renderDiffOverlay — changed branch', () => {
   });
 });
 
-describe('scoreDiff + renderDiffOverlay — shared decode', () => {
+describe('scoreDiff + renderDiffOverlay: shared decode', () => {
   it('decodes the image pair exactly once across the changed path', () => {
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 16, BLACK);
@@ -157,7 +157,7 @@ describe('scoreDiff + renderDiffOverlay — shared decode', () => {
 
       // Exactly one pair (baseline + actual) is decoded: scoreDiff reads both,
       // renderDiffOverlay reuses them. Before this split the changed path
-      // decoded twice — four reads. Guard the win at two.
+      // decoded twice; four reads. Guard the win at two.
       assert.equal(read.mock.callCount() - before, 2);
     } finally {
       read.mock.restore();

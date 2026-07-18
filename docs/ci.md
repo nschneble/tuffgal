@@ -4,7 +4,7 @@ Tuffgal runs cleanly in CI without anything Tuffgal-specific: install Node,
 install dependencies, install Chromium, and then invoke
 `tuffgal run --ci --manage-servers`. The harness produces a `results.json` you
 can parse for the actual pass/new/changed/failed counts, a static HTML report
-you can upload as a build artifact for reviewers, and — in CI mode — a
+you can upload as a build artifact for reviewers, and (in CI mode) a
 self-contained **candidate tree** a reviewer promotes into the committed
 baselines.
 
@@ -18,8 +18,8 @@ Under the CI-owned-baselines model, **CI is the only writer of committed
 baselines** and a `tuffgal run --ci` never touches `paths.baselines`. It
 compares the current UI against the committed set and, for anything that drifted
 (`changed`), is brand-new (`new`), or went orphaned (`deleted`), writes the
-proposed images into a candidate tree at `<report>/candidates/` — mirroring the
-`paths.baselines` layout exactly, plus a `results.json` copy — rather than
+proposed images into a candidate tree at `<report>/candidates/` (mirroring the
+`paths.baselines` layout exactly, plus a `results.json` copy) rather than
 committing in place. The one path that writes committed baselines is
 `tuffgal approve --from <candidates>`, run by a human (or bot) who has reviewed
 the diff. See [the model overview](../README.md#ci-owns-the-baselines) and the
@@ -100,7 +100,7 @@ jobs:
 
       # `--ci` forces CI mode: compare against committed baselines, never write
       # them, and gate the PR. ($CI is already truthy on Actions, so the flag is
-      # belt-and-suspenders — but explicit is clearer in a gating job.)
+      # belt-and-suspenders, but explicit is clearer in a gating job.)
       - name: Run Tuffgal
         id: harness
         continue-on-error: true
@@ -109,7 +109,7 @@ jobs:
       # Read results.json so the upload steps below can fork on the actual
       # outcome rather than just the harness exit code. `changed` is drifted
       # baselines, `new` is first-run baselines that have nothing to diff
-      # against yet, `deleted` is orphaned committed baselines — all three land
+      # against yet, `deleted` is orphaned committed baselines. All three land
       # in the candidate tree for a reviewer to promote, whereas `failed` is the
       # debugging case.
       - name: Parse harness outcome
@@ -223,7 +223,7 @@ is already a self-contained approval artifact (it carries its own
 `results.json`), so uploading it on its own keeps the promotion step a plain
 download-and-`approve`.
 
-If you'd rather have a single artifact, drop the second upload step — the full
+If you'd rather have a single artifact, drop the second upload step. The full
 `tuffgal/report/` upload already contains `candidates/`, so you can point
 `approve --from` at `tuffgal/report/candidates` inside it.
 

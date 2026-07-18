@@ -7,7 +7,7 @@ import { pathsFor, withBaselineLock } from './baselineStore.ts';
 const base = '/baselines';
 const report = '/report';
 
-describe('pathsFor — breakpoint keying', () => {
+describe('pathsFor: breakpoint keying', () => {
   it('keys baseline + a11y baseline by breakpoint under the action dir', () => {
     const paths = pathsFor({
       baselinesDir: base,
@@ -77,7 +77,7 @@ describe('pathsFor — breakpoint keying', () => {
   });
 });
 
-describe('pathsFor — breakpoint sanitization', () => {
+describe('pathsFor: breakpoint sanitization', () => {
   it('lowercases and collapses unsafe characters to dashes', () => {
     const paths = pathsFor({
       baselinesDir: base,
@@ -103,10 +103,10 @@ describe('pathsFor — breakpoint sanitization', () => {
   });
 });
 
-describe('pathsFor — legacy fallback', () => {
+describe('pathsFor: legacy fallback', () => {
   it('returns pre-breakpoint baseline locations independent of breakpoint', () => {
     // Legacy paths describe where a pre-feature project committed its single
-    // baseline, so they must NOT carry the breakpoint — the same `0.png` is
+    // baseline, so they must NOT carry the breakpoint; the same `0.png` is
     // the fallback for every breakpoint of the action.
     const desktop = pathsFor({
       baselinesDir: base,
@@ -129,7 +129,7 @@ describe('pathsFor — legacy fallback', () => {
   });
 });
 
-describe('pathsFor — comparison root', () => {
+describe('pathsFor: comparison root', () => {
   it('defaults every baseline-side path to baselinesDir when no root is given', () => {
     // Zero behaviour change: omitting comparisonRoot must reproduce the exact
     // pre-parameter layout under baselinesDir.
@@ -173,7 +173,7 @@ describe('pathsFor — comparison root', () => {
   });
 });
 
-describe('pathsFor — candidate paths', () => {
+describe('pathsFor: candidate paths', () => {
   it('derives candidate png + a11y under <report>/candidates/<action>/<breakpoint>', () => {
     // Candidates mirror the baselines/ layout so approval is a plain tree copy.
     const paths = pathsFor({
@@ -213,7 +213,7 @@ describe('pathsFor — candidate paths', () => {
   });
 });
 
-describe('withBaselineLock — per-breakpoint isolation', () => {
+describe('withBaselineLock: per-breakpoint isolation', () => {
   it('serializes callers sharing a key but lets distinct keys run in parallel', async () => {
     // Same key (one breakpoint's baseline): the second critical section must
     // not start until the first settles, mirroring the read-then-write race

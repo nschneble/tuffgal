@@ -36,8 +36,8 @@ function routeCapturingPage(): {
 
 /**
  * A fake `Route` reporting a fixed request method and recording which of the
- * two terminal calls the handler made — `fallback` (let the real network
- * proceed) or `fulfill` (synthesise a response) — with the exact fulfill
+ * two terminal calls the handler made; `fallback` (let the real network
+ * proceed) or `fulfill` (synthesise a response); with the exact fulfill
  * options so the content-type / body branches can be pinned.
  */
 function fakeRoute(method: string): {
@@ -69,7 +69,7 @@ function fakeRoute(method: string): {
   };
 }
 
-describe('runIntercept — method filter', () => {
+describe('runIntercept: method filter', () => {
   it('falls back to the real network when the request method does not match the filter', async () => {
     const { page, handler } = routeCapturingPage();
     await runIntercept(page, '**/api/links', { status: 500 }, 'POST');
@@ -98,7 +98,7 @@ describe('runIntercept — method filter', () => {
 
   it('fulfills any method when no filter is supplied (the filter short-circuits)', async () => {
     const { page, handler } = routeCapturingPage();
-    // No method arg — `method && ...` short-circuits, so every method fulfills.
+    // No method arg; `method && ...` short-circuits, so every method fulfills.
     await runIntercept(page, '**/api/links', { status: 204 });
 
     const { route, fallbackCount, fulfillOptions } = fakeRoute('DELETE');
@@ -109,7 +109,7 @@ describe('runIntercept — method filter', () => {
   });
 });
 
-describe('runIntercept — body branches', () => {
+describe('runIntercept: body branches', () => {
   it('fulfills with status only and NO content-type when the body is undefined', async () => {
     const { page, handler } = routeCapturingPage();
     // Documented past bug: forcing application/json on an empty body made

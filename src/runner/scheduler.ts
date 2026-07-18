@@ -10,7 +10,7 @@ export interface ScheduledStory extends StoryFile {
    * breakpoint pass even when `needs` (the scheduler-facing set) is stripped to
    * the in-pass subset by {@link adaptNeedsForPass}. `resolveStorageStateForNeeds`
    * reads this so a consumer whose producer rendered in a DIFFERENT pass still
-   * loads that producer's on-disk auth state — otherwise the consumer would
+   * loads that producer's on-disk auth state. Otherwise the consumer would
    * render logged-out. Absent on stories that never went through
    * `adaptNeedsForPass` (direct callers/tests), where `needs` is already the
    * full set; the auth path falls back to `needs` then.
@@ -235,7 +235,7 @@ function skipDependents(
       // run loop populates, so downstream consumers (report, totals,
       // exit code) see the chain of effects instead of a silent absence.
       ordered.push(item);
-      // Propagate skip transitively — the now-skipped item's "produces"
+      // Propagate skip transitively. The now-skipped item's "produces"
       // labels stay unsatisfied, so other consumers of the same label
       // will be caught by the next loop iteration.
       skipDependents(item, scheduled, context, ordered);

@@ -16,8 +16,8 @@ const SCREENS_SUBDIR = 'screens';
  * action's declared `action` field.
  *
  * `baselineRoot` is the set the run compares against: committed `paths.baselines`
- * in CI mode, the per-machine `paths.localCache` in local mode (the caller — see
- * `coverageComparisonRoot` — picks it by mode so a local run never reads
+ * in CI mode, the per-machine `paths.localCache` in local mode (the caller, see
+ * `coverageComparisonRoot`, picks it by mode so a local run never reads
  * `paths.baselines`). The metric's meaning is the same either way: how many
  * screens have a baseline to diff against.
  */

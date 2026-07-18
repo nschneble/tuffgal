@@ -7,23 +7,23 @@ import type { RunResult } from '../schema/result.ts';
  * unit-testable in isolation.
  *
  * Precedence, highest wins:
- *   - `1` — one or more stories failed (a step threw / the harness broke).
+ *   - `1`: one or more stories failed (a step threw / the harness broke).
  *     Always outranks every other signal: a broken run's failure is the
  *     headline, not the visual diff it never got to compute cleanly.
- *   - `3` — CI mode only: the committed environment manifest is present but its
+ *   - `3`: CI mode only: the committed environment manifest is present but its
  *     pixel-affecting keys diverge from this run's capture environment (a
- *     platform/browser/capture-mode/… drift). The comparison still ran — this
- *     is not an abort — but the diffs are computed against baselines rendered in
+ *     platform/browser/capture-mode/… drift). The comparison still ran (this
+ *     is not an abort) but the diffs are computed against baselines rendered in
  *     a different environment, so the signal is "expect a full re-approve",
  *     distinct from ordinary pending changes. Outranks `2`: an environment
  *     mismatch subsumes and explains the `new`/`changed` churn it produces.
- *   - `2` — CI mode only: pending baseline changes a human must approve —
+ *   - `2`: CI mode only: pending baseline changes a human must approve,
  *     `new` or `changed` stories, or `deleted` (orphaned committed baselines an
- *     approve/prune should retire). This is the PR-gate signal — the run itself
+ *     approve/prune should retire). This is the PR-gate signal. The run itself
  *     succeeded, but committed baselines don't yet reflect the current UI. A
  *     deleted-only run still gates: the baseline set has drifted from the story
  *     set even though nothing rendered differently.
- *   - `0` — clean: every story passed, the environment matched (or no manifest
+ *   - `0`: clean: every story passed, the environment matched (or no manifest
  *     to check), and no baselines were orphaned.
  *
  * Local mode never emits `2` or `3`: local runs are advisory and never read

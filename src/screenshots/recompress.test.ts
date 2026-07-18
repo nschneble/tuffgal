@@ -17,7 +17,7 @@ import {
 /**
  * Builds a real encoded PNG whose pixels are a deterministic gradient/noise mix.
  * A flat solid colour compresses to almost nothing and hides size differences,
- * so this fixture varies every channel per pixel — representative of the busy,
+ * so this fixture varies every channel per pixel; representative of the busy,
  * high-frequency captures the recompress pass actually targets. The default
  * pngjs encoder here mirrors nothing about the source encoder Playwright uses;
  * we deliberately hand recompress a buffer it can improve on by first writing
@@ -47,7 +47,7 @@ function pixelsOf(png: Buffer): Buffer {
   return PNG.sync.read(png).data;
 }
 
-describe('recompressPng — losslessness', () => {
+describe('recompressPng: losslessness', () => {
   it('decodes pixel-identical to the input (round-trip)', () => {
     const input = noisyPng(64, 48);
     const output = recompressPng(input);
@@ -73,7 +73,7 @@ describe('recompressPng — losslessness', () => {
   });
 });
 
-describe('recompressPng — size', () => {
+describe('recompressPng: size', () => {
   it('is no larger than the input for a representative fixture', () => {
     // Encode the fixture with the weakest settings pngjs offers, then recompress.
     const bloated = noisyPng(96, 96, { deflateLevel: 0, filterType: 0 });
@@ -109,7 +109,7 @@ describe('recompressPng — size', () => {
   });
 });
 
-describe('writeDurablePng — recompress integration', () => {
+describe('writeDurablePng: recompress integration', () => {
   it('recompresses a durable write and stays readable by the diff path', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'tuffgal-recompress-'));
     try {
@@ -126,7 +126,7 @@ describe('writeDurablePng — recompress integration', () => {
       );
 
       // The written baseline must round-trip through the exact read helper and
-      // diff core the runner uses — same file, zero pixel diff, perfect SSIM.
+      // diff core the runner uses; same file, zero pixel diff, perfect SSIM.
       const readBack = await readBaseline(path);
       assert.ok(
         readBack !== undefined,
@@ -143,7 +143,7 @@ describe('writeDurablePng — recompress integration', () => {
   });
 });
 
-describe('writeTransientPng — skips recompress', () => {
+describe('writeTransientPng: skips recompress', () => {
   it('writes the given bytes verbatim, without the recompress pass', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'tuffgal-transient-'));
     try {
@@ -158,7 +158,7 @@ describe('writeTransientPng — skips recompress', () => {
       assert.equal(
         onDisk.length,
         source.length,
-        'transient write must not shrink the source — no recompress',
+        'transient write must not shrink the source; no recompress',
       );
       assert.deepEqual(
         onDisk,
