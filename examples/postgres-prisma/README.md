@@ -53,7 +53,7 @@ examples/postgres-prisma/
 
 ## Why two files, not one?
 
-`setup.ts` runs once per environment to provision a database and apply schema migrations. `database.ts` runs on every `tuffgal run` to wipe data and reseed the deterministic user. They have different lifecycles, so they live in different files.
+`setup.ts` runs once per environment to provision a database and apply schema migrations. `database.ts` runs once per breakpoint pass on every `tuffgal run` to wipe data and reseed the deterministic user. They have different lifecycles, so they live in different files.
 
 If your project has no migrations or you provision DBs some other way (Docker compose, ephemeral containers per CI job), you can drop `setup.ts` entirely. Only `database.ts` is required for the bridge.
 

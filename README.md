@@ -109,7 +109,7 @@ Precedence is `1` > `3` > `2` > `0`. Local mode only ever exits `1` or `0`.
 - Storage-state persistence across stories
 - Static HTML reporter
 - V8 coverage (optional via `monocart-coverage-reports`)
-- Per-run DB reset + per-breakpoint fixture hooks (consumer-supplied via config),
+- Per-breakpoint-pass DB reset + per-story fixture hooks (consumer-supplied via config),
   plus a `${breakpoint}` interpolation token for per-mode test data
 - Process supervisor for dev-server hot-reload rot (it happens)
 
