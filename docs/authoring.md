@@ -97,6 +97,32 @@ value. A placeholder with no supplied value fails loudly rather than
 leaking the literal `${name}`. An action may be reused by many stories,
 each supplying its own map.
 
+### The injected `${breakpoint}` token
+
+Alongside the story-supplied parameters, Tuffgal injects one built-in
+placeholder, `${breakpoint}`, holding the name of the mode the action is
+currently rendering at (`mobile` / `tablet` / `laptop` / `desktop`, or a
+custom mode name). It is available everywhere author parameters interpolate —
+hint `text`/`selector`, `input`/`type` `value`s, and `mask` selectors — and,
+unlike declared parameters, you do **not** list it in the action's
+`parameters` array.
+
+Its purpose is to key test-created data per mode so the same action run across
+several breakpoints does not collide on shared state. For example, registering
+`fresh+${breakpoint}@example.test` yields a distinct account at each viewport
+instead of every pass fighting over one email:
+
+```json
+{
+  "kind": "input",
+  "hint": { "role": "textbox", "text": "Email" },
+  "value": "fresh+${breakpoint}@example.test"
+}
+```
+
+A story parameter literally named `breakpoint` overrides the injected value —
+your explicit map always wins.
+
 ## Hint resolution
 
 Every interactive step (e.g. `click`, `input`, `waitFor`) takes a `hint`,
@@ -129,6 +155,12 @@ disambiguate.
 | `type`      | Press a key/combo on the page (e.g. `Esc`, `Ctrl+K`)      |
 | `wait`      | Block for `ms` milliseconds (use sparingly; see below)    |
 | `waitFor`   | Block until `hint` resolves (no interaction)              |
+
+`navigate`'s optional `waitUntil` overrides Playwright's `page.goto` ready
+signal (`'load'` | `'domcontentloaded'` | `'networkidle'` | `'commit'`). It
+defaults to `'load'`; opt a specific step into `'networkidle'` only when the
+page genuinely quiesces, since apps with long-lived sockets or polling never
+reach `networkidle` and stall to the navigation timeout.
 
 Avoid `wait` whenever `waitFor` would do. A locator-aware wait survives
 layout speedups, but a wall-clock wait does not. The legitimate use for

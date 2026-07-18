@@ -174,6 +174,7 @@ import { defineConfig } from 'tuffgal';
 export default defineConfig({
   apiHost: 'http://localhost:3000',
   baseUrl: process.env.APP_BASE_URL ?? 'http://localhost:5173',
+  breakpoints: [{ name: 'desktop', width: 1280, height: 800 }],
   database: {
     reset: async () => {
       /* TRUNCATE, reseed test user */
@@ -200,7 +201,6 @@ export default defineConfig({
     stories: 'tuffgal/stories',
   },
   storageStatePins: ['session_token'],
-  viewport: { width: 1280, height: 800 },
   workers: undefined,
 });
 ```
@@ -275,7 +275,8 @@ database: {
 }
 ```
 
-Tuffgal calls `reset()` once per run (before the scheduler starts) and
+Tuffgal calls `reset()` once per breakpoint pass (before that pass dispatches
+its first story, so a single-breakpoint run calls it once) and
 `fixtures[name]()` per story declaration. The story DAG handles ordering.
 
 ### Dev-server bridge

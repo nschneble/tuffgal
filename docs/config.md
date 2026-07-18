@@ -95,7 +95,7 @@ export default defineConfig({
     // relative to this file, defaults to root directory
     cwd: '.',
 
-    // TCP probe
+    // HTTP GET readiness probe (any non-5xx response is ready); use an http URL
     healthCheck: [{ url: 'http://localhost:5173', timeoutMs: 30_000 }],
 
     shutdownSignal: 'SIGTERM',
@@ -238,6 +238,27 @@ This applies to every captured action across every breakpoint. Switching modes
 changes the image dimensions, so existing baselines stop matching and report
 `new` until you `approve` fresh ones.
 
+### `maxFullPagePixels?: number`
+
+Safety cap on a `fullPage` capture's total area, in pixels (`width × height`).
+Defaults to `30_000_000` (e.g. `1280 × ~23_400`) — well above realistic long
+pages, but below runaway heights.
+
+A `fullPage` shot composites the whole scrollable document, so an
+infinite-scroll or runaway-tall page decodes to an enormous RGBA array
+(4 bytes/pixel) and can exhaust memory across workers. When a page's measured
+layout area exceeds this cap, the run fails with a clear error naming the
+story/action instead of risking an out-of-memory crash. Raise the cap for a
+legitimately tall page, or switch that story to `captureMode: 'viewport'`.
+
+Only `fullPage` captures are bounded — `viewport` shots are already capped by
+the breakpoint dimensions, so this field has no effect under the default
+`captureMode`.
+
+```ts
+maxFullPagePixels: 30_000_000,
+```
+
 ### `interactiveMode?: boolean`
 
 How each captured action's screenshots are presented in the report. Default:
@@ -314,16 +335,21 @@ per-story database reset. See
 Used by `tuffgal run --manage-servers` and `tuffgal supervise`. Skip when
 you run the dev servers yourself.
 
-| Field             | Type                                         | Default     | Meaning                                             |
-| ----------------- | -------------------------------------------- | ----------- | --------------------------------------------------- |
-| `command`         | `string`                                     | _required_  | Shell command. Run via `sh -c` so pipes + `&&` work |
-| `cwd`             | `string?`                                    | `rootDir`   | Working directory relative to the config file       |
-| `healthCheck`     | `Array<{ url: string; timeoutMs?: number }>` | _required_  | URLs probed via TCP `connect` before ready          |
-| `shutdownGraceMs` | `number?`                                    | `5000`      | Grace period before `SIGKILL`                       |
-| `shutdownSignal`  | `NodeJS.Signals?`                            | `'SIGTERM'` | Signal sent on shutdown                             |
+| Field             | Type                                         | Default     | Meaning                                                          |
+| ----------------- | -------------------------------------------- | ----------- | ---------------------------------------------------------------- |
+| `command`         | `string`                                     | _required_  | Shell command. Run via `sh -c` so pipes + `&&` work              |
+| `cwd`             | `string?`                                    | `rootDir`   | Working directory relative to the config file                    |
+| `healthCheck`     | `Array<{ url: string; timeoutMs?: number }>` | _required_  | URLs probed with an HTTP `GET`; any non-5xx response marks ready |
+| `shutdownGraceMs` | `number?`                                    | `5000`      | Grace period before `SIGKILL`                                    |
+| `shutdownSignal`  | `NodeJS.Signals?`                            | `'SIGTERM'` | Signal sent on shutdown                                          |
 
-Health-check URLs are probed via TCP (not HTTP) so self-signed certificates
-and 404 responses do not block readiness.
+Before a `--manage-servers` run starts, each health-check URL is probed with an
+HTTP `GET`: any non-5xx response (2xx/3xx/4xx) marks it ready, so a 404 does not
+block but a still-compiling server that 5xxs keeps the poll going. This proves
+the server is actually serving routes, not merely that it has bound its socket.
+Use an `http` URL — a self-signed HTTPS certificate is rejected by the probe.
+(The separate `tuffgal supervise` liveness poll, once servers are past boot,
+uses a cheaper TCP check; see [supervisor.md](supervisor.md).)
 
 ### `flowInventory?: string`
 
@@ -375,6 +401,7 @@ import {
   type ActionStatus,
   type ApproveOptions,
   type BreakpointName,
+  type BreakpointSelector,
   type DatabaseBridge,
   type DevServerBridge,
   type Hint,
