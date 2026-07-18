@@ -31,8 +31,15 @@ export function parseHostPort(url: string): { host: string; port: number } {
 
 /**
  * Resolves `true` if a TCP connection to `host:port` opens within `timeoutMs`,
- * `false` on error or timeout. Used to gate dev-server readiness without an
- * HTTP round-trip, so self-signed certs and 404s don't block.
+ * `false` on error or timeout. This is a cheap up/down LIVENESS check, not a
+ * readiness gate: `supervise.ts`'s `probeAllHealthchecks` polls it against dev
+ * servers that were already proven to be serving routes at startup (via
+ * {@link probeHttp}), so once a server is HTTP-readiness-verified a bare TCP
+ * accept is sufficient to confirm the process is still up. The false-ready
+ * caveat that makes a TCP accept too weak for a cold-booting dev server (see
+ * {@link probeHttp}) does not apply here — the server is past boot. Staying on
+ * TCP also keeps the liveness poll agnostic to self-signed HTTPS certs and
+ * non-2xx routes, which `fetch` (and thus `probeHttp`) would reject.
  */
 export function probeTcp(
   host: string,

@@ -335,7 +335,6 @@ function makeOptions(
     produces: [],
     actions: new Map([['open', waitAction('open')]]),
     config,
-    headed: false,
     ...overrides,
   };
 }

@@ -156,6 +156,24 @@ describe('capturePage — full-page area guard', () => {
     assert.deepEqual(calls, ['evaluate', 'screenshot']);
   });
 
+  it('captures at the exact cap — the guard is strict >, so area === maxPixels passes', async () => {
+    const { page, calls } = fakePageWithDimensions({
+      width: 3000,
+      height: 10_000,
+    });
+
+    // area = 3000 × 10_000 = 30_000_000, exactly the cap. The guard rejects on
+    // `area > maxPixels`, so the exact-boundary page is NOT rejected (off-by-one
+    // pin: === passes, only a strictly larger page throws).
+    const buffer = await capturePage(page, [], 'fullPage', {
+      maxPixels: 30_000_000,
+      label: 'story "exact.json" action "scroll" (desktop)',
+    });
+
+    assert.ok(Buffer.isBuffer(buffer));
+    assert.deepEqual(calls, ['evaluate', 'screenshot']);
+  });
+
   it('never measures or guards a viewport capture', async () => {
     const { page, calls } = fakePageWithDimensions({
       width: 99_999,

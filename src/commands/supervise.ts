@@ -188,6 +188,10 @@ async function probeAllHealthchecks(
 
 function probeUrl(url: string): Promise<boolean> {
   const { host, port } = parseHostPort(url);
+  // A bare TCP up/down check is deliberate here: the supervisor only polls
+  // servers that were already HTTP-readiness-verified at startup, so liveness
+  // needs no route-serving proof — and TCP stays agnostic to self-signed HTTPS
+  // health-check URLs that `probeHttp`'s fetch would reject (see probeTcp).
   return probeTcp(host, port, HEALTHCHECK_PROBE_TIMEOUT_MS);
 }
 

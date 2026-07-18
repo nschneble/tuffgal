@@ -356,9 +356,10 @@ async function planActionDir(
  * non-PNG payload aborts the whole approve with zero writes. Decoding the bytes
  * already held on the plan (not a fresh read) is what makes the decode-check and
  * the eventual write see the same payload. `writeDurablePng`'s own recompress
- * step SWALLOWS a decode failure (it falls back to writing the given bytes), which is
- * the right behaviour for a trusted capture but wrong for an untrusted artifact
- * — a corrupt candidate PNG must fail closed, not land verbatim as a baseline.
+ * step SWALLOWS a decode failure (it falls back to writing the given bytes),
+ * which is the right behaviour for a trusted capture but wrong for an untrusted
+ * artifact — a corrupt candidate PNG must fail closed, not land verbatim as a
+ * baseline.
  */
 async function assertAllPngsDecode(plan: PlannedWrite[]): Promise<void> {
   for (const write of plan) {

@@ -34,7 +34,6 @@ export interface RunStoryOptions {
   produces: string[];
   actions: Map<string, Action>;
   config: ResolvedConfig;
-  headed: boolean;
   coverage?: CoverageCollector;
   /**
    * Render only this breakpoint. The run driver passes one breakpoint per

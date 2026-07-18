@@ -433,6 +433,11 @@ describe('runAll — shared browser lifecycle', () => {
       return browser;
     };
 
+    // Snapshot the signal-listener counts before the run so we can prove the
+    // finally removes exactly the handlers it installed.
+    const sigintBefore = process.listenerCount('SIGINT');
+    const sigtermBefore = process.listenerCount('SIGTERM');
+
     const result = await runAll(
       config,
       { headed: false, mode: 'local' },
@@ -449,6 +454,19 @@ describe('runAll — shared browser lifecycle', () => {
     // Closed exactly once, on the normal finally path — no leak, no double-close.
     assert.equal(closes, 1, 'browser closed once on completion');
     assert.equal(result.totals.stories, 2);
+    // The finally removes both SIGINT/SIGTERM listeners it installed: net zero
+    // added across a full runAll, so repeated in-process runs don't leak
+    // handlers (the no-listener-leak invariant the docstring claims).
+    assert.equal(
+      process.listenerCount('SIGINT'),
+      sigintBefore,
+      'SIGINT listener must be removed after runAll',
+    );
+    assert.equal(
+      process.listenerCount('SIGTERM'),
+      sigtermBefore,
+      'SIGTERM listener must be removed after runAll',
+    );
   });
 });
 
