@@ -1024,3 +1024,392 @@ describe('runAction — CI mode size-mismatch drift', () => {
     assert.equal(result.a11yChanged, undefined);
   });
 });
+
+describe('runAction — step-level retry on a locator miss (not just nav timeout)', () => {
+  /**
+   * A page whose click replays a scripted sequence: `'miss'` throws (runClick
+   * wraps ANY click error into the retryable LocatorNotFoundError), `'hit'`
+   * resolves. Records the click count so a test can prove how many attempts
+   * fired. The `{ role, text }` hint routes through getByRole, so that returns
+   * the scripted handle; getByText/locator mirror it for completeness.
+   */
+  function clickScriptPage(script: Array<'miss' | 'hit'>): {
+    page: Page;
+    clicks: () => number;
+  } {
+    let call = 0;
+    const handle = {
+      async click(): Promise<void> {
+        const outcome = script[call] ?? 'hit';
+        call += 1;
+        if (outcome === 'miss') {
+          throw new Error('locator.click: Timeout 1000ms exceeded');
+        }
+      },
+    };
+    const locator = { first: () => handle };
+    const page = {
+      getByRole: () => locator,
+      getByText: () => locator,
+      locator: () => locator,
+    } as unknown as Page;
+    return { page, clicks: () => call };
+  }
+
+  function clickAction(attempts: number, backoffMs: number): Action {
+    return {
+      action: 'save',
+      steps: [{ kind: 'click', hint: { role: 'button', text: 'Save' } }],
+      screenshot: false,
+      retry: { attempts, backoffMs },
+    } as unknown as Action;
+  }
+
+  it('retries a locator miss and succeeds when the element hydrates on the next attempt', async () => {
+    const config = await makeConfig();
+    const { page, clicks } = clickScriptPage(['miss', 'hit']);
+    const result = await runAction({
+      page,
+      action: clickAction(2, 0),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // First click missed, the retry hit — two attempts, then success.
+    assert.equal(clicks(), 2);
+    assert.equal(result.status, 'pass');
+  });
+
+  it('fails the action once the attempts budget is exhausted by repeated misses', async () => {
+    const config = await makeConfig();
+    const { page, clicks } = clickScriptPage(['miss', 'miss', 'miss']);
+    const result = await runAction({
+      page,
+      action: clickAction(3, 0),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // All three attempts missed → the step fails on the exhausted budget.
+    assert.equal(clicks(), 3);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failedStepIndex, 0);
+  });
+
+  it('scales the backoff by the attempt number (backoffMs * attempt)', async (t) => {
+    const config = await makeConfig();
+    // Spy on the timer `sleep` schedules, calling through so the promise still
+    // resolves. Only `sleep` schedules a timer on this fake page (screenshot is
+    // off), so every recorded delay is a retry backoff.
+    const timeout = t.mock.method(globalThis, 'setTimeout');
+    const before = timeout.mock.callCount();
+    const { page } = clickScriptPage(['miss', 'miss', 'miss']);
+    const result = await runAction({
+      page,
+      action: clickAction(3, 50),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    assert.equal(result.status, 'failed');
+    const delays = timeout.mock.calls
+      .slice(before)
+      .map((call) => call.arguments[1]);
+    // Sleeps fire only BETWEEN attempts: after attempt 1 (50×1) and attempt 2
+    // (50×2). The final failing attempt (3) rethrows with no trailing sleep.
+    assert.deepEqual(delays, [50, 100]);
+  });
+});
+
+describe('runAction — expect.anyOf race and timeout', () => {
+  /**
+   * A page for expect-only runs (empty steps): getByRole and getByText each
+   * hand back a locator whose `first().waitFor` resolves or rejects per the
+   * flags, so a test can make one candidate win the race or make all of them
+   * time out.
+   */
+  function expectPage(opts: { role: boolean; text: boolean }): Page {
+    const makeLocator = (visible: boolean) => ({
+      first: () => ({
+        async waitFor(): Promise<void> {
+          if (!visible) throw new Error('waitFor: element not visible');
+        },
+      }),
+    });
+    return {
+      getByRole: () => makeLocator(opts.role),
+      getByText: () => makeLocator(opts.text),
+    } as unknown as Page;
+  }
+
+  function expectAction(timeoutMs: number): Action {
+    return {
+      action: 'await-toast',
+      steps: [],
+      screenshot: false,
+      expect: {
+        anyOf: [{ role: 'status' }, { text: 'Saved' }],
+        timeoutMs,
+      },
+    } as unknown as Action;
+  }
+
+  it('passes as soon as one anyOf candidate becomes visible while the other never does', async () => {
+    const config = await makeConfig();
+    // The role candidate resolves, the text candidate never — Promise.any still
+    // fulfils on the single winner. This is the "success looks like X OR Y"
+    // contract: the story need not know which renderer the app chose.
+    const result = await runAction({
+      page: expectPage({ role: true, text: false }),
+      action: expectAction(1000),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    assert.equal(result.status, 'pass');
+  });
+
+  it('fails with an ExpectationTimedOutError message when no candidate resolves', async () => {
+    const config = await makeConfig();
+    const result = await runAction({
+      page: expectPage({ role: false, text: false }),
+      action: expectAction(5),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    assert.equal(result.status, 'failed');
+    // Steps ran clean (there are none), so the failure indexes one past them.
+    assert.equal(result.failedStepIndex, 0);
+    assert.match(
+      result.failureMessage ?? '',
+      /expect\.anyOf did not resolve within 5ms/,
+    );
+  });
+});
+
+describe('runAction — mask resolution', () => {
+  /**
+   * A page that records the `mask` array handed to `page.screenshot`, and hands
+   * back tagged locators from each resolver so a test can prove which hint
+   * mapped to which Playwright call. `locator('body')` additionally answers
+   * `ariaSnapshot` for the a11y capture that runs alongside the shot; other
+   * selectors stay bare so a mask locator deep-equals cleanly.
+   */
+  function maskRecordingPage(shot: Buffer): {
+    page: Page;
+    masks: () => unknown[];
+  } {
+    let recorded: unknown[] = [];
+    const page = {
+      async waitForTimeout(): Promise<void> {},
+      async evaluate(): Promise<void> {},
+      async screenshot(opts: { mask?: unknown[] }): Promise<Buffer> {
+        recorded = opts.mask ?? [];
+        return shot;
+      },
+      getByRole(role: string) {
+        return { tag: 'role', role };
+      },
+      getByText(text: string) {
+        return { tag: 'text', text };
+      },
+      locator(selector: string) {
+        if (selector === 'body') {
+          return {
+            tag: 'selector',
+            selector,
+            async ariaSnapshot(): Promise<string> {
+              return '- document';
+            },
+          };
+        }
+        return { tag: 'selector', selector };
+      },
+    } as unknown as Page;
+    return { page, masks: () => recorded };
+  }
+
+  function maskAction(mask?: unknown[]): Action {
+    return {
+      action: 'open',
+      steps: [{ kind: 'wait', ms: 0 }],
+      screenshot: true,
+      mask,
+    } as unknown as Action;
+  }
+
+  it('passes an empty mask array to the shutter when mask is undefined', async () => {
+    const config = await makeConfig();
+    const { page, masks } = maskRecordingPage(solidPng(10, 20, 30));
+    await runAction({
+      page,
+      action: maskAction(undefined),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.deepEqual(masks(), []);
+  });
+
+  it('short-circuits an explicitly empty mask list to no locators', async () => {
+    const config = await makeConfig();
+    const { page, masks } = maskRecordingPage(solidPng(10, 20, 30));
+    await runAction({
+      page,
+      action: maskAction([]),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.deepEqual(masks(), []);
+  });
+
+  it('resolves each mask hint through the locator precedence and forwards them in order', async () => {
+    const config = await makeConfig();
+    const { page, masks } = maskRecordingPage(solidPng(10, 20, 30));
+    await runAction({
+      page,
+      action: maskAction([{ role: 'status' }, { selector: '.toast' }]),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // Two hints → two resolved locators, in order, each routed to the method its
+    // hint shape selects: role → getByRole, selector → page.locator.
+    assert.deepEqual(masks(), [
+      { tag: 'role', role: 'status' },
+      { tag: 'selector', selector: '.toast' },
+    ]);
+  });
+});
+
+describe('runAction — custom diff thresholds move the SSIM gate', () => {
+  async function seedCache(config: ResolvedConfig, png: Buffer): Promise<void> {
+    const cacheDir = join(config.paths.localCache, 'open');
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(join(cacheDir, 'desktop.png'), png);
+    await writeFile(join(cacheDir, 'desktop.a11y.yaml'), '- document');
+  }
+
+  function diffAction(diff: {
+    ssimThreshold?: number;
+    pixelThreshold?: number;
+  }): Action {
+    return {
+      action: 'open',
+      steps: [{ kind: 'wait', ms: 0 }],
+      screenshot: true,
+      diff,
+    } as unknown as Action;
+  }
+
+  it('a tightened ssimThreshold flips a would-be pass into changed', async () => {
+    const config = await makeConfig();
+    // This pair scores SSIM ~0.997 — a pass under the 0.99 default…
+    await seedCache(config, solidPng(100, 100, 100));
+    const tightened = await runAction({
+      page: fakePage(solidPng(108, 108, 108)),
+      action: diffAction({ ssimThreshold: 0.999 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // …but 0.997 < 0.999, so the tighter gate marks it changed.
+    assert.equal(tightened.status, 'changed');
+  });
+
+  it('the same pair passes under the default ssimThreshold (the flip baseline)', async () => {
+    const config = await makeConfig();
+    await seedCache(config, solidPng(100, 100, 100));
+    const result = await runAction({
+      page: fakePage(solidPng(108, 108, 108)),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.equal(result.status, 'pass');
+  });
+
+  it('a loosened ssimThreshold flips a would-be changed into pass', async () => {
+    const config = await makeConfig();
+    // This pair scores SSIM ~0.971 — changed under the 0.99 default…
+    await seedCache(config, solidPng(10, 20, 30));
+    const loosened = await runAction({
+      page: fakePage(solidPng(15, 25, 35)),
+      action: diffAction({ ssimThreshold: 0.95 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // …but 0.971 >= 0.95, so the looser gate accepts it as a pass.
+    assert.equal(loosened.status, 'pass');
+  });
+
+  it('the same pair is changed under the default ssimThreshold (the flip baseline)', async () => {
+    const config = await makeConfig();
+    await seedCache(config, solidPng(10, 20, 30));
+    const result = await runAction({
+      page: fakePage(solidPng(15, 25, 35)),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.equal(result.status, 'changed');
+  });
+
+  it('pixelThreshold tunes the reported pixel-diff metric WITHOUT moving the pass/changed gate', async () => {
+    // pixelThreshold governs the diff-PNG pixel count only; SSIM alone gates
+    // pass vs changed (see the schema doc). This pair scores SSIM ~0.984, so it
+    // is `changed` under both thresholds — but its per-pixel colour delta
+    // straddles the two pixel thresholds, so only the reported diffPixels move.
+    const config = await makeConfig();
+    await seedCache(config, solidPng(100, 100, 100));
+    const tight = await runAction({
+      page: fakePage(solidPng(120, 120, 120)),
+      action: diffAction({ pixelThreshold: 0.01 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    const loose = await runAction({
+      page: fakePage(solidPng(120, 120, 120)),
+      action: diffAction({ pixelThreshold: 0.1 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // Both changed — the gate did not move…
+    assert.equal(tight.status, 'changed');
+    assert.equal(loose.status, 'changed');
+    // …but the tighter pixel threshold flags all four pixels while the default
+    // flags none, proving the override reaches the pixel-diff metric.
+    assert.equal(tight.diffPixels, 4);
+    assert.equal(loose.diffPixels, 0);
+  });
+});
