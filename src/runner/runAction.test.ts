@@ -12,7 +12,7 @@ import { pathExists } from '../util.ts';
 import { runAction } from './runAction.ts';
 
 /**
- * A 2x2 solid-colour PNG. `diffPngs` parses real PNG bytes, so the fake page's
+ * A 2x2 solid-colour PNG. `scoreDiff` parses real PNG bytes, so the fake page's
  * screenshot and any pre-seeded baseline must be genuine images of matching
  * dimensions — a `Buffer.from('png')` stub would throw inside pngjs.
  */
@@ -929,7 +929,7 @@ describe('runAction — CI mode size-mismatch drift', () => {
   it('treats a dimension change as changed, writes a candidate, and never rewrites the baseline', async () => {
     const config = await makeConfig();
     // Seed a breakpoint-keyed committed baseline whose dimensions the actual
-    // will NOT match — a 2x2 baseline vs a 4x4 actual. `diffPngs` throws
+    // will NOT match — a 2x2 baseline vs a 4x4 actual. `scoreDiff` throws
     // ScreenshotSizeMismatchError, which the runner maps to `changed`.
     const baselineDir = join(config.paths.baselines, 'open');
     await mkdir(baselineDir, { recursive: true });

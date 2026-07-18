@@ -3,7 +3,11 @@ import type { Action, Hint, Step } from '../schema/action.ts';
 import type { ActionResult, ActionStatus } from '../schema/result.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { capturePage } from '../screenshots/capture.ts';
-import { diffPngs, ScreenshotSizeMismatchError } from '../screenshots/diff.ts';
+import {
+  renderDiffOverlay,
+  scoreDiff,
+  ScreenshotSizeMismatchError,
+} from '../screenshots/diff.ts';
 import {
   type BaselinePaths,
   deleteIfExists,
@@ -420,8 +424,11 @@ async function captureAndCompare(
   try {
     const pixelThreshold = action.diff?.pixelThreshold ?? 0.1;
     const ssimThreshold = action.diff?.ssimThreshold ?? 0.99;
-    const outcome = diffPngs(baselinePng, actualPng, pixelThreshold);
-    const passesSsim = outcome.ssimScore >= ssimThreshold;
+    // Score first — SSIM plus the reported pixel metrics — without encoding
+    // the overlay. The red-highlight diff image is expensive to encode and is
+    // discarded on a pass, so it is rendered only on the changed branch below.
+    const score = scoreDiff(baselinePng, actualPng, pixelThreshold);
+    const passesSsim = score.ssimScore >= ssimThreshold;
     if (passesSsim) {
       await deleteIfExists(paths.diff);
       // A11y-only drift: pixels match but the committed aria snapshot has moved.
@@ -444,15 +451,20 @@ async function captureAndCompare(
         status: a11yDriftInCi ? 'changed' : 'pass',
         baselinePath: paths.baseline,
         actualPath: paths.actual,
-        diffPixels: outcome.diffPixels,
-        diffRatio: outcome.diffRatio,
-        ssimScore: outcome.ssimScore,
+        diffPixels: score.diffPixels,
+        diffRatio: score.diffRatio,
+        ssimScore: score.ssimScore,
         a11yChanged: a11yChanged || undefined,
         a11yBaselinePath: a11yBaselinePathForRead,
         a11yActualPath: paths.a11yActual,
       });
     }
-    await writePng(paths.diff, outcome.diffPng);
+    // Changed → the human needs the red-highlight overlay. This is the only
+    // branch that pays the pixelmatch-fill + PNG encode cost.
+    await writePng(
+      paths.diff,
+      renderDiffOverlay(baselinePng, actualPng, pixelThreshold),
+    );
     // A `changed` action in CI mode proposes a new baseline — emit it to the
     // candidate tree so approval is a plain tree copy. Local mode does not
     // (its comparison target is the auto-managed cache, not a human-approved
@@ -463,9 +475,9 @@ async function captureAndCompare(
       baselinePath: paths.baseline,
       actualPath: paths.actual,
       diffPath: paths.diff,
-      diffPixels: outcome.diffPixels,
-      diffRatio: outcome.diffRatio,
-      ssimScore: outcome.ssimScore,
+      diffPixels: score.diffPixels,
+      diffRatio: score.diffRatio,
+      ssimScore: score.ssimScore,
       a11yChanged: a11yChanged || undefined,
       a11yBaselinePath: a11yBaselinePathForRead,
       a11yActualPath: paths.a11yActual,

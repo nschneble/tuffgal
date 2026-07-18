@@ -6,7 +6,7 @@ import { describe, it } from 'node:test';
 
 import { PNG } from 'pngjs';
 
-import { diffPngs } from './diff.ts';
+import { scoreDiff } from './diff.ts';
 import { readBaseline, recompressPng, writePng } from './baselineStore.ts';
 
 /**
@@ -126,7 +126,7 @@ describe('writePng — recompress integration', () => {
       );
       assert.deepEqual(pixelsOf(readBack), pixelsOf(source));
 
-      const outcome = diffPngs(readBack, source, 0.1);
+      const outcome = scoreDiff(readBack, source, 0.1);
       assert.equal(outcome.diffPixels, 0);
       assert.ok(outcome.ssimScore >= 0.9999);
     } finally {
