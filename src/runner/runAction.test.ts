@@ -411,6 +411,109 @@ describe('runAction — ${breakpoint} interpolation', () => {
   });
 });
 
+describe('runAction — navigation timeout is retryable, infra faults are not', () => {
+  /**
+   * A page whose `goto` replays a scripted sequence of outcomes: `'timeout'`
+   * throws a Playwright-shaped TimeoutError, `'infra'` throws a generic fault,
+   * `'ok'` resolves. Records the call count so a test can prove whether a retry
+   * fired. Anything past the end of the script resolves `ok`.
+   */
+  function scriptedGotoPage(script: Array<'timeout' | 'infra' | 'ok'>): {
+    page: Page;
+    calls: () => number;
+  } {
+    let call = 0;
+    const page = {
+      async goto(): Promise<null> {
+        const outcome = script[call] ?? 'ok';
+        call += 1;
+        if (outcome === 'timeout') {
+          const error = new Error('page.goto: Timeout 15000ms exceeded');
+          // Playwright's navigation timeout surfaces as a TimeoutError; the
+          // classifier keys on this name.
+          error.name = 'TimeoutError';
+          throw error;
+        }
+        if (outcome === 'infra') {
+          throw new Error('net::ERR_CONNECTION_REFUSED');
+        }
+        return null;
+      },
+    } as unknown as Page;
+    return { page, calls: () => call };
+  }
+
+  function navigateOnlyAction(attempts: number): Action {
+    return {
+      action: 'visit',
+      steps: [{ kind: 'navigate', path: '/' }],
+      screenshot: false,
+      // backoffMs 0 keeps the retry loop from actually sleeping between tries.
+      retry: { attempts, backoffMs: 0 },
+    } as unknown as Action;
+  }
+
+  async function navConfig(): Promise<ResolvedConfig> {
+    const config = await makeConfig();
+    Object.assign(config as object, {
+      baseUrl: 'http://localhost',
+      navigationTimeoutMs: 1000,
+    });
+    return config;
+  }
+
+  it('retries a navigation timeout and succeeds on the second attempt', async () => {
+    const config = await navConfig();
+    const { page, calls } = scriptedGotoPage(['timeout', 'ok']);
+    const result = await runAction({
+      page,
+      action: navigateOnlyAction(2),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // The first timeout was retried; the retry navigated cleanly.
+    assert.equal(calls(), 2);
+    assert.equal(result.status, 'pass');
+  });
+
+  it('fails the action when every navigation attempt times out (retry budget exhausted)', async () => {
+    const config = await navConfig();
+    const { page, calls } = scriptedGotoPage(['timeout', 'timeout']);
+    const result = await runAction({
+      page,
+      action: navigateOnlyAction(2),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // Both attempts were made, then the action failed on the exhausted budget.
+    assert.equal(calls(), 2);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failedStepIndex, 0);
+  });
+
+  it('does NOT retry a generic infrastructure fault — it fails on the first throw', async () => {
+    const config = await navConfig();
+    const { page, calls } = scriptedGotoPage(['infra', 'ok']);
+    const result = await runAction({
+      page,
+      action: navigateOnlyAction(2),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // A non-timeout, non-locator fault rethrows immediately: goto ran ONCE, so
+    // the scripted `ok` second entry was never reached.
+    assert.equal(calls(), 1);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failureMessage, 'net::ERR_CONNECTION_REFUSED');
+  });
+});
+
 describe('runAction — legacy baseline fallback (local mode, within the cache root)', () => {
   it('compares against the legacy 0.png when the breakpoint entry is absent and does NOT report new', async () => {
     const config = await makeConfig();

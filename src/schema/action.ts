@@ -47,14 +47,27 @@ export type Hint = z.infer<typeof hintSchema>;
 export const stepSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('navigate'),
-    path: z.string().startsWith('/'),
     /**
-     * Override Playwright's `page.goto` ready signal. Defaults to
-     * `'networkidle'`, which suits production builds but can starve on
-     * dev servers with long-tail external fetches (CDN font, gravatar,
-     * placeholder images). Drop to `'domcontentloaded'` or `'load'` for
-     * pages where the visual baseline is stable well before networkidle
-     * settles. See Playwright docs for full semantics.
+     * Root-relative path, navigated against `config.baseUrl`. Must be a single
+     * slash-rooted `/path`: protocol-relative (`//host`), backslash (`/\host`,
+     * which browsers normalise to `//host`), and absolute-URL forms are
+     * rejected so a story can never drive the browser off the target origin.
+     * The runner re-asserts the resolved origin as defense in depth.
+     */
+    path: z
+      .string()
+      .regex(
+        /^\/(?![/\\])/,
+        'navigate path must be a slash-rooted "/path" — protocol-relative ("//host"), backslash ("/\\host"), and absolute-URL forms are rejected',
+      ),
+    /**
+     * Override Playwright's `page.goto` ready signal. Defaults to `'load'`.
+     * `'networkidle'` remains available as an explicit opt-in but is a poor
+     * default: on apps with long-lived sockets or polling it never settles, so
+     * every navigation stalls to the full navigation timeout. Opt into
+     * `'networkidle'` only for pages you know go quiet; use `'commit'` or
+     * `'domcontentloaded'` for earlier ready signals. See Playwright docs for
+     * full semantics.
      */
     waitUntil: z
       .enum(['load', 'domcontentloaded', 'networkidle', 'commit'])

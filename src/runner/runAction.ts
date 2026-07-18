@@ -165,13 +165,30 @@ async function dispatchWithRetry(
       return;
     } catch (error) {
       lastError = error;
-      if (!(error instanceof LocatorNotFoundError) || attempt === attempts) {
+      if (!isRetryable(error) || attempt === attempts) {
         throw error;
       }
       await sleep(backoffMs * attempt);
     }
   }
   throw lastError;
+}
+
+/**
+ * Only transient faults are retried; real infrastructure errors rethrow
+ * immediately so a genuine fault is not masked by burning the retry budget:
+ *   - `LocatorNotFoundError` — the UI has not hydrated the target element yet.
+ *   - a Playwright navigation `TimeoutError` — `page.goto` did not reach its
+ *     ready signal in time (a slow first paint, a lagging dev server), which a
+ *     re-drive routinely clears. Classified by `name` so it holds whether the
+ *     timeout arrives as Playwright's `errors.TimeoutError` or is reconstructed
+ *     across an async boundary.
+ * Anything else (connection refused, protocol error, an origin-escape throw)
+ * is a NON-retryable fault and rethrows on the first occurrence.
+ */
+function isRetryable(error: unknown): boolean {
+  if (error instanceof LocatorNotFoundError) return true;
+  return error instanceof Error && error.name === 'TimeoutError';
 }
 
 async function dispatch(

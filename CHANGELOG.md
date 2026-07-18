@@ -6,7 +6,27 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Changed
+
+- `navigate` now defaults `waitUntil` to `'load'` instead of `'networkidle'`.
+  `networkidle` never settles on apps with long-lived sockets or polling, so
+  every navigation stalled to the full navigation timeout. Stories can still
+  opt into any `waitUntil` (including `'networkidle'`) via the step field.
+  Committed baselines may need a one-time re-approval if the earlier ready
+  signal shifts capture timing.
+
+### Fixed
+
+- A Playwright navigation timeout is now retryable under the action's `retry`
+  budget instead of failing the action on the first timeout. Non-timeout
+  infrastructure faults still fail fast without burning retries.
+
+### Security
+
+- `navigate` rejects protocol-relative (`//host`), backslash (`/\host`), and
+  absolute-URL paths that could drive the browser off the target origin and
+  screenshot an off-origin response. The runner also re-asserts the resolved
+  origin against `baseUrl` as defense in depth.
 
 ## [0.2.0-alpha.3] — 2026-07-16
 
