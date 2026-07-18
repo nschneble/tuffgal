@@ -2,7 +2,7 @@ import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { chromium } from 'playwright';
+import { chromium, type Browser } from 'playwright';
 import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
 import type { Action } from '../schema/action.ts';
 import type {
@@ -21,7 +21,7 @@ import {
   type ManagedDevServers,
 } from './bridges/devServers.ts';
 import { CoverageCollector } from './coverage.ts';
-import { mergeStoryStatus, runStory } from './runStory.ts';
+import { mergeStoryStatus, runStoryWithBrowser } from './runStory.ts';
 import {
   buildSchedule,
   drainSchedule,
@@ -78,26 +78,52 @@ const HEARTBEAT_FILE = '.heartbeat';
  * Loads every action and story from the configured paths, resets the
  * consumer-supplied test database, schedules stories according to their
  * needs/produces DAG, and drives execution across a fixed worker pool.
- * Returns the aggregate `RunResult` so the CLI can set the process exit
- * code.
+ * Returns the aggregate `RunResult` so the CLI can set the process exit code.
+ *
+ * Owns the run's shared lifecycle: it launches ONE browser (injectable via
+ * `launchBrowser` for tests) that every story reuses (each opening its own
+ * isolated context per breakpoint) and registers a SIGINT/SIGTERM handler that
+ * closes that browser and stops any `--manage-servers` dev-servers before
+ * exiting non-zero, so an interrupted run (Ctrl-C, CI cancel) orphans neither.
+ * Both the normal finally path and the signal handler tear down through the
+ * same idempotent {@link createRunTeardown}, so nothing double-closes.
  */
 export async function runAll(
   config: ResolvedConfig,
   options: RunCliOptions,
+  launchBrowser: () => Promise<Browser> = () =>
+    chromium.launch({ headless: !options.headed }),
 ): Promise<RunResult> {
   const startedAt = new Date();
   const mode: RunMode = options.mode ?? 'local';
-  let managedServers: ManagedDevServers | undefined;
-  if (options.manageServers) {
-    managedServers = await startManagedDevServers(config);
-  }
-  // Heartbeat is opportunistic. A sibling supervisor process can poll this
-  // file to know whether the dev servers are still in active use.
-  await touchHeartbeat(config);
-  const coverage = options.coverage
-    ? new CoverageCollector(config.paths.report)
-    : undefined;
+  // Single owner for the run's teardownable handles: the shared browser and any
+  // managed dev-servers. Torn down exactly once (on the normal finally path OR
+  // on a SIGINT/SIGTERM, whichever fires first), so neither an interrupted run's
+  // in-flight Chromium nor its detached dev-server groups orphan.
+  const handles: RunHandles = {};
+  const teardown = createRunTeardown(handles);
+  const onSignal = createSignalTeardownHandler(teardown);
   try {
+    // Register signal teardown INSIDE the try so the finally always removes the
+    // listeners again (no listener leak across repeated in-process runs) and a
+    // fault during setup still unwinds through the same teardown.
+    process.once('SIGINT', onSignal);
+    process.once('SIGTERM', onSignal);
+    if (options.manageServers) {
+      handles.managedServers = await startManagedDevServers(config);
+    }
+    // Launch ONE browser for the whole run. Every story still opens its own
+    // isolated `browser.newContext()` per breakpoint (see runStoryWithBrowser),
+    // so the shared browser preserves per-story isolation while paying a single
+    // cold Chromium launch instead of one per (story × breakpoint) pass.
+    const browser = await launchBrowser();
+    handles.browser = browser;
+    // Heartbeat is opportunistic. A sibling supervisor process can poll this
+    // file to know whether the dev servers are still in active use.
+    await touchHeartbeat(config);
+    const coverage = options.coverage
+      ? new CoverageCollector(config.paths.report)
+      : undefined;
     const actions = await loadActions(config.paths.actions);
     const allStories = await loadStories(config.paths.stories);
     const scheduled = buildSchedule(allStories);
@@ -120,7 +146,7 @@ export async function runAll(
 
     // Run each breakpoint as its own pass: a full reset/seed, then the whole
     // schedule rendered at that one breakpoint. This is what keeps breakpoints
-    // isolated — a destructive story can mutate the seeded database in the
+    // isolated. A destructive story can mutate the seeded database in the
     // `mobile` pass without the `desktop` pass ever seeing it, because the next
     // pass starts from a fresh reset. Results are merged back per story below.
     const partsByFile = new Map<string, StoryResult[]>();
@@ -131,7 +157,7 @@ export async function runAll(
         storyRendersAt(item, config, breakpoint),
       );
       if (participating.length === 0) continue;
-      // Header for every pass — single- and multi-breakpoint alike. The reset
+      // Header for every pass, single- and multi-breakpoint alike. The reset
       // sits beneath the header so the "fresh database" line reads as part of
       // this pass's setup; a trailing blank line then separates setup from the
       // streaming result lines.
@@ -151,10 +177,10 @@ export async function runAll(
             item,
             actions,
             config,
-            options.headed,
             coverage,
             breakpoint,
             mode,
+            browser,
           ),
         () => {},
         (_item, result) =>
@@ -182,7 +208,7 @@ export async function runAll(
 
     const finishedAt = new Date();
     // Screen coverage measures how many screens have a baseline in the set this
-    // run compares against — the committed `paths.baselines` in CI mode, the
+    // run compares against: the committed `paths.baselines` in CI mode, the
     // per-machine `paths.localCache` in local mode. Local runs never read
     // `paths.baselines` (PRD invariant). Both the metric and `runAction` pick
     // their root through the shared `comparisonRootFor`, so the metric measures
@@ -197,10 +223,10 @@ export async function runAll(
     ]);
     // Orphan scan: committed baselines whose action ran no story this run are
     // retired candidates (status `deleted`). Only meaningful for an UNFILTERED
-    // CI run — a `--story` filter runs a deliberate subset, so unselected
+    // CI run. A `--story` filter runs a deliberate subset, so unselected
     // stories' baselines would look orphaned when they are merely unvisited; we
     // skip the scan rather than mark live baselines deleted. Local mode never
-    // reads `paths.baselines`, so it never scans. Detection only — pruning is a
+    // reads `paths.baselines`, so it never scans. Detection only. Pruning is a
     // later wave, so the baselines directory stays untouched here.
     const deleted: DeletedBaseline[] = shouldScanForOrphans(
       mode,
@@ -213,11 +239,18 @@ export async function runAll(
       : [];
     const totals = summarise(results);
     totals.deleted = deleted.length;
-    // Capture-environment provenance: what this run rendered under, and — in CI
-    // mode — whether it drifted from the committed baselines' manifest. Local
+    // Capture-environment provenance: what this run rendered under, and (in CI
+    // mode) whether it drifted from the committed baselines' manifest. Local
     // mode never reads `paths.baselines`, so `expected` stays null and mismatch
     // is always false (see resolveEnvironmentReport).
-    const environment = await resolveEnvironmentReport(config, mode);
+    const environment = await resolveEnvironmentReport(
+      config,
+      mode,
+      async () => ({
+        name: 'chromium',
+        version: browser.version(),
+      }),
+    );
     const runResult: RunResult = {
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
@@ -235,7 +268,7 @@ export async function runAll(
       config.interactiveMode,
     );
     // In CI mode the `<report>/candidates/` tree is the self-contained approval
-    // artifact — copy the run's `results.json` beside the candidate renders so a
+    // artifact. Copy the run's `results.json` beside the candidate renders so a
     // downstream `approve --from <candidates>` has the outcome data (which
     // actions are new/changed, and later the environment/deleted blocks) without
     // needing the rest of the report dir. Only meaningful in CI mode, where the
@@ -250,33 +283,87 @@ export async function runAll(
     }
     return runResult;
   } finally {
-    if (managedServers) {
-      await managedServers.stop();
-    }
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
+    await teardown();
   }
+}
+
+/** The run's teardownable handles: the shared browser and any managed servers. */
+interface RunHandles {
+  browser?: Pick<Browser, 'close'>;
+  managedServers?: ManagedDevServers;
+}
+
+/**
+ * Builds the run's single teardown: closes the shared browser and stops any
+ * managed dev-servers, exactly once. The `done` latch makes it idempotent so
+ * the normal finally path and a racing signal handler cannot double-close.
+ * Whichever calls first tears down, the other is a no-op. Reads the handles off
+ * the shared object at CALL time (not capture time), so a signal that arrives
+ * mid-setup still tears down whatever has been launched so far. `allSettled`
+ * closes both independently: a browser that throws on close must not prevent
+ * the dev-servers from being stopped.
+ */
+export function createRunTeardown(handles: RunHandles): () => Promise<void> {
+  let done = false;
+  return async () => {
+    if (done) return;
+    done = true;
+    await Promise.allSettled([
+      handles.browser?.close(),
+      handles.managedServers?.stop(),
+    ]);
+  };
+}
+
+/**
+ * Wraps a {@link createRunTeardown} teardown in a SIGINT/SIGTERM handler: tear
+ * the run's handles down, then exit non-zero (an interrupted run is a failure,
+ * not a clean pass). `exit` is injected (defaulting to `process.exit`) so a
+ * test can drive the handler directly, asserting it closes the browser, stops
+ * the servers, and requests a non-zero exit, without raising a real signal in
+ * the test runner. Idempotent by construction: it delegates to the shared
+ * teardown, so a second signal cannot double-close.
+ */
+export function createSignalTeardownHandler(
+  teardown: () => Promise<void>,
+  exit: (code: number) => void = (code) => process.exit(code),
+): () => void {
+  return () => {
+    void teardown().finally(() => exit(1));
+  };
 }
 
 function runScheduledStory(
   item: ScheduledStory,
   actions: Map<string, Action>,
   config: ResolvedConfig,
-  headed: boolean,
   coverage: CoverageCollector | undefined,
   breakpoint: ResolvedBreakpoint,
   mode: RunMode,
+  browser: Browser,
 ): Promise<StoryResult> {
-  return runStory({
-    story: item.story,
-    file: item.file,
-    needs: item.needs,
-    produces: item.produces,
-    actions,
-    config,
-    headed,
-    coverage,
-    breakpoint,
-    mode,
-  });
+  // Drive the story against the run's SHARED browser rather than launching a
+  // per-story Chromium. `startedAt` is stamped here, as this story's work
+  // begins, so its reported duration excludes time it waited in the queue.
+  const startedAt = new Date();
+  return runStoryWithBrowser(
+    browser,
+    {
+      story: item.story,
+      file: item.file,
+      needs: item.needs,
+      authNeeds: item.authNeeds,
+      produces: item.produces,
+      actions,
+      config,
+      coverage,
+      breakpoint,
+      mode,
+    },
+    startedAt,
+  );
 }
 
 function matchesFilter(item: ScheduledStory, filter: string): boolean {
@@ -309,7 +396,7 @@ async function touchHeartbeat(config: ResolvedConfig): Promise<void> {
       'utf8',
     );
   } catch {
-    // The heartbeat is opportunistic — a missing parent dir or a disk
+    // The heartbeat is opportunistic. A missing parent dir or a disk
     // hiccup should not fail the entire run.
   }
 }
@@ -319,7 +406,7 @@ async function touchHeartbeat(config: ResolvedConfig): Promise<void> {
  * candidate tree is a self-contained approval artifact. `writeReport` has
  * already written `<report>/results.json`; this places a sibling copy under
  * candidates. The candidates dir may not exist yet (a run where every action
- * passed writes no candidate renders), so it is created first — an empty
+ * passed writes no candidate renders), so it is created first. An empty
  * `candidates/` carrying only `results.json` still correctly describes "nothing
  * to approve".
  */
@@ -336,7 +423,7 @@ export async function copyResultsIntoCandidates(
  * `paths.baselines` in CI mode, per-machine `paths.localCache` in local mode.
  * A thin, coverage-named alias over the shared {@link comparisonRootFor} so the
  * metric counts screens against the SAME set the run (via `runAction`) diffed
- * against — the mode→root mapping now lives once, in `mode.ts`. Preserved as a
+ * against. The mode→root mapping now lives once, in `mode.ts`. Preserved as a
  * named export because the coverage metric's PRD invariant (a local run never
  * reads `paths.baselines`) reads most clearly against a coverage-specific name.
  */
@@ -345,23 +432,6 @@ export function coverageComparisonRoot(
   mode: RunMode,
 ): string {
   return comparisonRootFor(config, mode);
-}
-
-/**
- * Reads the launched Chromium's `browser.version()` so the run's environment
- * manifest records the exact browser build the baselines were rendered against —
- * the single pixel-affecting fact that only a live browser can report. Launched
- * throwaway (not the per-story browsers, which spin up and tear down inside the
- * schedule) because the version is invariant across stories, so one probe covers
- * the whole run. Kept narrow: launch, read, close.
- */
-async function captureBrowserIdentity(): Promise<CapturedBrowser> {
-  const browser = await chromium.launch({ headless: true });
-  try {
-    return { name: 'chromium', version: browser.version() };
-  } finally {
-    await browser.close();
-  }
 }
 
 /**
@@ -376,14 +446,14 @@ const LOCAL_BROWSER_IDENTITY = { name: 'chromium', version: '' } as const;
 
 /**
  * Builds the run's {@link EnvironmentReport}: the environment this run captured
- * under (`actual`), and — in CI mode — the committed `<baselines>/manifest.json`
+ * under (`actual`), and (in CI mode) the committed `<baselines>/manifest.json`
  * (`expected`) plus whether their pixel-affecting keys diverge.
  *
- * The live browser-version probe ({@link captureBrowserIdentity}) runs in CI
- * mode ONLY. Local mode never reads `paths.baselines`, so `expected` is always
- * `null` and `browserVersion` is never compared against anything — launching a
- * throwaway chromium just to stamp a value nothing reads is pure cost, so local
- * mode fills the browser identity with an empty sentinel and skips the probe.
+ * The live browser-version probe runs in CI mode ONLY. Local mode never reads
+ * `paths.baselines`, so `expected` is always `null` and `browserVersion` is
+ * never compared against anything. Reading a browser version just to stamp a
+ * value nothing reads is pure cost, so local mode fills the browser identity
+ * with an empty sentinel and skips the probe entirely.
  *
  * In CI mode a missing manifest is the bootstrap case (no expectation yet, no
  * mismatch); a malformed one surfaces as a mismatch note (see
@@ -391,19 +461,20 @@ const LOCAL_BROWSER_IDENTITY = { name: 'chromium', version: '' } as const;
  * it read cleanly, so a malformed file reports `null` here while still driving a
  * mismatch.
  *
- * `probe` is the live browser-identity reader, injected (defaulting to the real
- * {@link captureBrowserIdentity}) so a test can assert it is invoked in CI mode
- * and NEVER invoked in local mode without launching a real chromium.
+ * `probe` is the live browser-identity reader. `runAll` passes one that reads
+ * the run's SHARED browser handle (`browser.version()`), so no throwaway
+ * Chromium is launched just to stamp the version; a test injects its own probe
+ * to assert it is invoked in CI mode and NEVER invoked in local mode.
  */
 export async function resolveEnvironmentReport(
   config: ResolvedConfig,
   mode: RunMode,
-  probe: () => Promise<CapturedBrowser> = captureBrowserIdentity,
+  probe: () => Promise<CapturedBrowser>,
 ): Promise<EnvironmentReport> {
   if (mode !== 'ci') {
     // Local mode never gates on `browserVersion` (expected is always null), so
     // skip the browser launch entirely. The empty sentinel is shape-valid and
-    // never promoted — a local run writes no candidate tree, and `approve --from`
+    // never promoted. A local run writes no candidate tree, and `approve --from`
     // refuses non-ci candidates outright.
     const actual = captureEnvironment(config, LOCAL_BROWSER_IDENTITY);
     return { expected: null, actual, mismatch: false, mismatchKeys: [] };
@@ -420,7 +491,7 @@ export async function resolveEnvironmentReport(
  * Rolls a set of story results into the outcome counts. `deleted` counts
  * orphaned baselines, which are a run-level detection (not a per-story outcome),
  * so it always seeds `0` here; `runAll` overwrites the run-total `deleted` from
- * the orphan scan. Per-breakpoint pass summaries keep `0`, which is correct —
+ * the orphan scan. Per-breakpoint pass summaries keep `0`, which is correct.
  * an orphan is not attributable to a single breakpoint pass.
  */
 export function summarise(results: StoryResult[]): RunResult['totals'] {
@@ -462,7 +533,7 @@ export function formatResultLine(
 /**
  * One Summary bullet for a breakpoint pass: `• <parts> on "<name>" breakpoint`,
  * where `<parts>` joins only the nonzero outcome categories in a fixed order
- * (passed, new, changed, failed) — e.g. `2 passed, 1 changed`. Falls back to
+ * (passed, new, changed, failed), e.g. `2 passed, 1 changed`. Falls back to
  * `0 passed` for the degenerate all-zero pass the run loop never actually
  * emits (it `continue`s past a pass with no participating stories).
  */
@@ -481,8 +552,8 @@ export function formatSummaryBullet(
 
 /**
  * Emits the end-of-run tail: a `Summary` section with one bullet per breakpoint
- * pass — counted from that pass's own results, not the merged-across-passes
- * rollup — then the `Report:` line. The report link is a `file://` URL so
+ * pass (counted from that pass's own results, not the merged-across-passes
+ * rollup), then the `Report:` line. The report link is a `file://` URL so
  * terminals that recognise file URIs (iTerm2, Warp, VS Code) render it as a
  * clickable link.
  */
@@ -498,7 +569,7 @@ function writeRunSummary(
 }
 
 /**
- * The breakpoint names that drove a merged story to its status — the modes the
+ * The breakpoint names that drove a merged story to its status, the modes the
  * reader actually needs to inspect. A `changed` story that drifted only at
  * `desktop` tags `[desktop]`, not the `mobile` pass that stayed clean. Returns
  * empty (no tag) when the story spans a single breakpoint, since there is

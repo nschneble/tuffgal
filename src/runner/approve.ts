@@ -33,7 +33,7 @@ export interface ApproveSummary {
 /**
  * `approve` is dual-mode. Plain `approve` (this module, {@link approveAll})
  * refreshes the local per-machine comparison cache (`paths.localCache`) from the
- * last run's `<report>/results.json`. Advisory — it never writes committed
+ * last run's `<report>/results.json`. Advisory. It never writes committed
  * baselines. The other half, `approve --from <dir>` (`approveFrom`), promotes a
  * CI candidate tree into the committed `paths.baselines` set and lives in its
  * own module (`approveFrom.ts`), since the two commands share no code beyond the
@@ -45,17 +45,17 @@ export interface ApproveSummary {
  * comparison cache with every `changed` or `new` action's actual screenshot.
  * The accessibility-tree snapshot (`a11y.yaml`) travels alongside the PNG so
  * the cached a11y baseline stays in lock-step with the visual one. The optional
- * filters — `storyFilter` (one story), `breakpoints` (named modes), and
- * `newOnly` (new not changed) — compose as an AND: an action is refreshed only
+ * filters, `storyFilter` (one story), `breakpoints` (named modes), and
+ * `newOnly` (new not changed), compose as an AND: an action is refreshed only
  * when it clears every filter that was supplied.
  *
  * This command targets `paths.localCache` ONLY. It never writes the committed
- * `paths.baselines` set — those are owned by CI and written solely through the
+ * `paths.baselines` set. Those are owned by CI and written solely through the
  * approval flow (`approve --from`, a later wave). Each recorded baseline path is
  * re-rooted onto `paths.localCache`, keeping its `<action>/<file>` tail, so a
  * plain `approve` refreshes the cache regardless of which mode produced the run
  * (the recorded root may be the cache or, for an older CI run's results, the
- * committed baselines dir — either way the copy lands in the cache).
+ * committed baselines dir, either way the copy lands in the cache).
  */
 export async function approveAll(
   config: ResolvedConfig,

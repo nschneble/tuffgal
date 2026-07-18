@@ -9,13 +9,13 @@ const PLAYWRIGHT_COVERAGE_OPTIONS = { resetOnNavigation: false } as const;
 /**
  * Collects V8 JS + CSS coverage from every Playwright page the harness
  * opens during a run, then hands the aggregate to monocart-coverage-reports
- * for V8, Istanbul, and console summary output. Disabled by default — turn
+ * for V8, Istanbul, and console summary output. Disabled by default. Turn
  * on with `tuffgal run --coverage`.
  *
  * Two stages:
- *   1. `startForPage(page)` — call after every `newPage` so coverage spans
+ *   1. `startForPage(page)`: call after every `newPage` so coverage spans
  *      every navigation the story performs.
- *   2. `stopForPage(page)` — call before `context.close()` to drain the
+ *   2. `stopForPage(page)`: call before `context.close()` to drain the
  *      entries into the aggregate.
  *
  * `generate()` runs once at end-of-run.
@@ -67,10 +67,10 @@ export class CoverageCollector {
       ]);
       await this.mcr.add([...js, ...css]);
     } catch (error) {
-      // A page may already be closing when we stop — best effort, do not
+      // A page may already be closing when we stop. Best effort, do not
       // fail the run because we missed coverage on one tab.
       process.stderr.write(
-        `coverage: stopForPage failed — ${error instanceof Error ? error.message : String(error)}\n`,
+        `coverage: stopForPage failed: ${error instanceof Error ? error.message : String(error)}\n`,
       );
     }
   }

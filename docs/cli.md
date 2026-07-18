@@ -46,14 +46,14 @@ multi-breakpoint project runs one pass per breakpoint, each behind a fresh
 
 **Mode.** A run executes under one of two comparison contracts. **CI mode**
 compares actuals against the committed `paths.baselines` set (the source of
-truth) and never writes it — a missing baseline is `new`, an orphaned one is
+truth) and never writes it: a missing baseline is `new`, an orphaned one is
 `deleted`, and drift is `changed`; the run writes a candidate tree under
 `<report>/candidates/` for approval. **Local mode** compares against the
 per-machine gitignored `paths.localCache`, auto-seeding a missing entry, and is
 purely advisory. Mode resolves from `--ci` / `--local` (an explicit flag always
 wins); with neither, it defaults to CI when `$CI` is truthy, else local.
 
-**Exit code.** Local mode exits `1` when `totals.failed > 0`, else `0` — visual
+**Exit code.** Local mode exits `1` when `totals.failed > 0`, else `0`. Visual
 drift never fails a local run. CI mode adds `3` (committed environment manifest
 diverged) and `2` (pending `new`/`changed`/`deleted` baselines to approve), with
 precedence `1` > `3` > `2` > `0`. See the [exit-codes table](#exit-codes) below
@@ -71,7 +71,7 @@ against your own accepted image. Prints
 `Refreshed N cache entries; skipped M actions.`
 
 Under the CI-owned-baselines model, this cache refresh never touches the
-committed baselines — it accepts your own local self-diff so your next local run
+committed baselines. It accepts your own local self-diff so your next local run
 is clean, nothing more. Committed baselines are written only by `approve --from`
 (below), so a developer running `approve` locally can never overwrite the
 source-of-truth set.
@@ -93,8 +93,8 @@ action is approved.
 `--from` is the CI/bot promotion path: point it at a candidate tree unzipped
 from a CI run's `<report>/candidates/` artifact (or the implicit "download the
 candidates artifact and run `approve --from`" flow). It refuses any candidate
-whose `results.json` reports `mode !== 'ci'` or `totals.failed > 0` — only a
-clean CI run is a source of truth — and it writes or refreshes
+whose `results.json` reports `mode !== 'ci'` or `totals.failed > 0` (only a
+clean CI run is a source of truth) and it writes or refreshes
 `<baselines>/manifest.json` from the candidate run's captured environment, so
 the next `run --ci` can detect environment drift. Add `--prune` to also retire
 the orphaned baselines the run flagged as `deleted`. Prints

@@ -97,7 +97,7 @@ interface CandidateResultsOverrides {
  * Writes a `results.json` into the candidate tree. Everything not overridden is
  * inert filler that clears `parseRunResult`'s shallow shape check; the overrides
  * (see {@link CandidateResultsOverrides}) let a test force the exact promotability
- * -gate shape it exercises — including omitting the `mode`, `totals`, or
+ * -gate shape it exercises; including omitting the `mode`, `totals`, or
  * `environment` keys entirely.
  */
 async function writeCandidateResults(
@@ -214,7 +214,7 @@ async function assertZeroWrites(
   assert.deepEqual([...after.entries()].sort(), [...before.entries()].sort());
 }
 
-describe('approveFrom — happy path', () => {
+describe('approveFrom: happy path', () => {
   it('promotes a candidate tree into baselines and writes the manifest', async () => {
     const bytes = await writeCandidatePng('open', 'desktop', 1, 'tree-open');
     await writeCandidateResults();
@@ -274,7 +274,7 @@ describe('approveFrom — happy path', () => {
   });
 });
 
-describe('approveFrom — prune', () => {
+describe('approveFrom: prune', () => {
   it('deletes orphaned baselines listed in results.deleted', async () => {
     // Seed an orphan (PNG + companion) plus a live baseline that must survive.
     await mkdir(join(baselinesDir, 'gone'), { recursive: true });
@@ -288,7 +288,7 @@ describe('approveFrom — prune', () => {
       {
         action: 'gone',
         breakpoint: 'desktop',
-        // Absolute paths from another machine — must be IGNORED by prune.
+        // Absolute paths from another machine; must be IGNORED by prune.
         baselinePaths: ['/evil/gone/desktop.png'],
       },
     ];
@@ -348,7 +348,7 @@ describe('approveFrom — prune', () => {
   });
 });
 
-describe('approveFrom — fail closed (zero writes)', () => {
+describe('approveFrom: fail closed (zero writes)', () => {
   it('rejects a stray top-level file (.sh)', async () => {
     await writeCandidatePng('open', 'desktop');
     await writeCandidateResults();
@@ -484,13 +484,13 @@ describe('approveFrom — fail closed (zero writes)', () => {
   it('commits bytes eagerly, independent of the source after it returns', async () => {
     // TOCTOU guard, observable half. The fix reads each source ONCE during
     // validation, retains its bytes on the plan, and writes those retained bytes
-    // — the source is never re-opened. The externally observable consequence is
+    //; the source is never re-opened. The externally observable consequence is
     // that promotion is fully eager: once approveFrom returns, the committed
     // baseline is a pure function of the bytes that passed validation, so
     // corrupting or deleting the source afterwards cannot change it. (The exact
-    // mid-window swap can't be black-box driven here — `approve.ts` binds
+    // mid-window swap can't be black-box driven here; `approve.ts` binds
     // `readFile` as an ESM import, which can't be swapped underneath a running
-    // call — so this asserts the eager-write contract the retained buffer
+    // call; so this asserts the eager-write contract the retained buffer
     // guarantees rather than reproducing the race itself.)
     const original = await writeCandidatePng('open', 'desktop', 3);
     await writeCandidateResults();
@@ -532,7 +532,7 @@ describe('approveFrom — fail closed (zero writes)', () => {
   });
 });
 
-describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
+describe('approveFrom: refuses a non-promotable run (zero writes)', () => {
   it('rejects a local-mode candidate tree', async () => {
     // A local run renders against the per-machine cache on the developer's own
     // platform; its pixels must never become committed baselines.
@@ -546,7 +546,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
 
   it('rejects a candidate tree with no recorded mode (pre-mode artifact)', async () => {
     // An older artifact predating the `mode` field is treated as non-ci and
-    // refused — only a current `mode: 'ci'` run is eligible.
+    // refused; only a current `mode: 'ci'` run is eligible.
     await writeCandidatePng('open', 'desktop');
     await writeCandidateResults({ mode: undefined });
     await assertZeroWrites(
@@ -556,7 +556,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
   });
 
   it('rejects a candidate tree from a run with failed stories', async () => {
-    // A failed run produces a PARTIAL candidate tree — promoting it would commit
+    // A failed run produces a PARTIAL candidate tree; promoting it would commit
     // an incomplete baseline set.
     await writeCandidatePng('open', 'desktop');
     await writeCandidateResults({ failed: 2 });
@@ -569,7 +569,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
   it('rejects a candidate whose results.json omits totals entirely', async () => {
     // A truncated/foreign artifact can reach the gate with no `totals` object.
     // Reading `result.totals.failed` would throw a raw TypeError (not an
-    // ApproveFromError) — the guard must fail closed with the trust-boundary type.
+    // ApproveFromError); the guard must fail closed with the trust-boundary type.
     await writeCandidatePng('open', 'desktop');
     await writeCandidateResults({ totals: null });
     await assertZeroWrites(
@@ -581,7 +581,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
   it('rejects a candidate whose totals is present but totals.failed is missing', async () => {
     // The silent-pass trap: `undefined > 0` is `false`, so an absent `failed`
     // would sail through the promotability gate. It must be refused, not assumed
-    // zero — a run whose fail count is unknown is not a source of truth.
+    // zero; a run whose fail count is unknown is not a source of truth.
     await writeCandidatePng('open', 'desktop');
     await writeCandidateResults({
       totals: { stories: 0, passed: 0, changed: 0, new: 0, deleted: 0 },
@@ -593,7 +593,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
   });
 
   it('rejects a candidate whose totals.failed is non-numeric', async () => {
-    // A non-numeric `failed` (e.g. a string) is neither `> 0` nor throwing —
+    // A non-numeric `failed` (e.g. a string) is neither `> 0` nor throwing ;
     // another silent-pass shape the shape-guard must catch.
     await writeCandidatePng('open', 'desktop');
     await writeCandidateResults({
@@ -614,7 +614,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
 
   it('rejects malformed JSON in results.json through approveFrom', async () => {
     // The shared reader has its own malformed-JSON test, but approveFrom must
-    // surface it as an ApproveFromError with zero writes — exercise that path
+    // surface it as an ApproveFromError with zero writes; exercise that path
     // here, not just the reader in isolation.
     await writeCandidatePng('open', 'desktop');
     await writeFile(
@@ -629,7 +629,7 @@ describe('approveFrom — refuses a non-promotable run (zero writes)', () => {
   });
 });
 
-describe('approveFrom — prune safety', () => {
+describe('approveFrom: prune safety', () => {
   it('never deletes outside baselines even for a traversal action name', async () => {
     await writeCandidatePng('open', 'desktop');
     // An invalid action name in results.deleted must abort before any delete.

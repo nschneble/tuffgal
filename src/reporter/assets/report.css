@@ -347,7 +347,7 @@ h2 {
   color: var(--new-fg);
 }
 
-/* "all" stays NEUTRAL — never a status color, never blue. Pressed is a filled
+/* "all" stays NEUTRAL; never a status color, never blue. Pressed is a filled
    neutral pill (it is pressed-by-default at load, so this is the resting view). */
 .summary-item[data-status='all'] .summary-filter {
   color: var(--text);
@@ -364,7 +364,7 @@ h2 {
   outline-offset: 2px;
 }
 
-/* Breakpoint filter — the SECOND, independent single-select filter dimension,
+/* Breakpoint filter; the SECOND, independent single-select filter dimension,
    rendered below the status totals inside the summary region (only for
    multi-breakpoint runs). A role="group" row of neutral pills; report.js ANDs it
    with the status filter. The row sits on the page --bg with a top gap that also
@@ -376,15 +376,15 @@ h2 {
   margin-top: 0.75rem;
 }
 
-/* Neutral pills — no status hue, so the two filter rows read as siblings by
+/* Neutral pills; no status hue, so the two filter rows read as siblings by
    geometry, not color. Same pill geometry/radius as the status filter.
    Default is an OUTLINE pill: transparent bg, --text-muted border (≥3:1 vs --bg
    in both themes → 1.4.11), --text label (≥4.5:1 → 1.4.3). Hover brightens the
    border + adds a faint neutral tint. Pressed is a FILLED pill: --text fill,
-   --bg label, bold weight — the ONLY filled + bold pill, so the pressed state is
+   --bg label, bold weight; the ONLY filled + bold pill, so the pressed state is
    never conveyed by color alone (1.4.1); the inverse fill clears 4.5:1 in both
    themes. Focus ring is --accent 2px / offset 2px, painted on the page --bg
-   outside the pill — identical to the status filter. Target size ≥24×24 via
+   outside the pill; identical to the status filter. Target size ≥24×24 via
    min-height/min-width (2.5.8). Stays a <button>: it filters in place. */
 .breakpoint-filter {
   display: inline-flex;
@@ -497,7 +497,7 @@ h2 {
   font-size: 0.8125rem;
 }
 
-/* Link-styled verbs ("Expand" / "Collapse") — still <button>s, they act in
+/* Link-styled verbs ("Expand" / "Collapse"); still <button>s, they act in
    place. The underline is the affordance; verbs exceed 24px wide intrinsically,
    so min-height alone carries 2.5.8. */
 .story-bulk-toggle-button {
@@ -527,7 +527,7 @@ h2 {
 }
 
 /* Disabled verb: removing the underline is the color-independent cue (no
-   opacity — it can compound below the contrast floor). Disabled controls are
+   opacity; it can compound below the contrast floor). Disabled controls are
    1.4.3/1.4.11 exempt, but the state stays perceptible without color. */
 .story-bulk-toggle-button:disabled {
   color: var(--text-subtle);
@@ -931,7 +931,7 @@ summary.action-row:focus-visible {
    chip focus ring is never clipped by the stage overflow nor painted over
    screenshot pixels. The chips reuse `.chip--toggle` (border `--border-bright`,
    `--accent` focus ring) and the same `.shot-radio-label` base styles as the
-   radio-tab viewer — permanently visible, no interactiveMode-specific chip
+   radio-tab viewer; permanently visible, no interactiveMode-specific chip
    styling. Visible chips are the mouse/touch path to every variant (including
    Diff, which the press gesture does not cover) and double as the viewer's
    only visible affordance; the press-and-hold blink-compare in report.js is
@@ -946,9 +946,9 @@ summary.action-row:focus-visible {
   border: 0;
 }
 
-/* Persistent caption naming the DISPLAYED variant — the committed one, or the
+/* Persistent caption naming the DISPLAYED variant; the committed one, or the
    press-and-hold preview while it is held (report.js keeps it in sync). Text on
-   `--text` (≥4.5:1), so the active variant is never conveyed by color alone —
+   `--text` (≥4.5:1), so the active variant is never conveyed by color alone ;
    it pairs the checked chip's accent border with this readable label.
    aria-hidden keeps it visual only: the checked radio is the single accessible
    source of committed state. */
@@ -964,7 +964,7 @@ summary.action-row:focus-visible {
 
 /* The stage clips the screenshot to the viewport height. Its border uses
    `--border-bright` (3:1 non-text contrast). overflow:hidden only ever clips
-   the image — the controls live in the sibling fieldset above. */
+   the image; the controls live in the sibling fieldset above. */
 .shot-stage {
   margin-top: 0.5rem;
   margin-left: 2.2rem;

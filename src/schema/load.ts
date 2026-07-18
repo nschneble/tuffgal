@@ -50,7 +50,7 @@ export async function loadStories(storiesDir: string): Promise<StoryFile[]> {
     if (previousPath !== undefined) {
       throw new LoadError(
         path,
-        `duplicate story filename "${file}" — already loaded from ${previousPath}. ` +
+        `duplicate story filename "${file}"; already loaded from ${previousPath}. ` +
           `Story files are addressed by basename, so two files with the same name in ` +
           `different subdirectories collide. Rename one.`,
       );

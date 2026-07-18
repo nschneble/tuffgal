@@ -5,7 +5,7 @@ import type { ResolvedConfig } from '../config.ts';
 import {
   ACTION_NAME_PATTERN,
   BREAKPOINT_SEGMENT_PATTERN,
-  writePng,
+  writeDurablePng,
   writeText,
 } from '../screenshots/baselineStore.ts';
 import {
@@ -35,7 +35,7 @@ export interface ApproveFromOptions {
    * When `true`, delete committed baseline entries the candidate run's
    * `results.json` recorded as orphaned (`results.deleted`). Prune targets are
    * always recomputed locally under `paths.baselines` from each entry's
-   * `action`/`breakpoint` — never the artifact's own `baselinePaths[]` strings,
+   * `action`/`breakpoint`, never the artifact's own `baselinePaths[]` strings,
    * which describe another machine's filesystem.
    */
   prune?: boolean;
@@ -58,7 +58,7 @@ interface PlannedWrite {
   kind: 'png' | 'a11y';
   /**
    * The source's bytes, read ONCE during the validation phase and retained here.
-   * Phase 2 writes exactly these bytes — it never re-reads `source` — so the
+   * Phase 2 writes exactly these bytes (it never re-reads `source`) so the
    * committed baseline is provably the same payload that passed validation (PNG
    * decode-check for `png`, verbatim copy for `a11y`). Closes the TOCTOU window
    * where a process with write access to the candidate tree could swap `source`
@@ -71,7 +71,7 @@ interface PlannedWrite {
 
 /**
  * Error thrown when the candidate tree fails a trust-boundary check. Carries no
- * extra data — the message is the whole contract. Distinct type so the CLI can
+ * extra data. The message is the whole contract. Distinct type so the CLI can
  * present it plainly; every throw here happens BEFORE any write, so the promise
  * rejecting guarantees `paths.baselines` was not touched.
  */
@@ -88,11 +88,11 @@ export class ApproveFromError extends Error {
  * `paths.baselines` set, and writes `<baselines>/manifest.json` from the
  * candidate run's captured environment.
  *
- * TRUST BOUNDARY. `<dir>` is an untrusted artifact — a human or bot unzipped it
+ * TRUST BOUNDARY. `<dir>` is an untrusted artifact. A human or bot unzipped it
  * from CI. This is the only path that writes committed baselines, so it is
  * fail-closed and validate-all-then-write:
  *   1. `results.json` must parse, describe a clean CI run (`mode: 'ci'` with
- *      `totals.failed === 0` — never promote a local or broken run's partial
+ *      `totals.failed === 0`, never promote a local or broken run's partial
  *      tree, see {@link assertPromotableRun}), and carry a well-shaped
  *      `environment.actual` block (validated against the manifest shape, not
  *      just present).
@@ -102,13 +102,13 @@ export class ApproveFromError extends Error {
  *      entry aborts with {@link ApproveFromError} and zero filesystem changes.
  *
  * Every candidate file's bytes are read once during phase 1 and RETAINED for
- * phase 2, which writes exactly those bytes — the sources are never re-read, so
+ * phase 2, which writes exactly those bytes. The sources are never re-read, so
  * the committed baseline is provably the payload that passed validation (no
  * decode-swap / symlink-swap window between the check and the write).
  *
- * PNGs are written through {@link writePng} (decode→recompress→encode), so the
- * promoted baseline is losslessly recompressed and provably decodable in one
- * step — never a raw `copyFile` of unvalidated artifact bytes.
+ * PNGs are written through {@link writeDurablePng} (decode→recompress→encode),
+ * so the promoted baseline is losslessly recompressed and provably decodable in
+ * one step, never a raw `copyFile` of unvalidated artifact bytes.
  */
 export async function approveFrom(
   config: ResolvedConfig,
@@ -117,7 +117,7 @@ export async function approveFrom(
   const candidateDir = options.from;
   await assertRealDirectory(candidateDir);
 
-  // Phase 1 — validate the whole tree and build a write plan. Every source is
+  // Phase 1: validate the whole tree and build a write plan. Every source is
   // read exactly ONCE here and its bytes are retained on the plan; no writes yet.
   const result = await readCandidateResults(candidateDir);
   assertPromotableRun(result);
@@ -128,12 +128,12 @@ export async function approveFrom(
     ? computePruneTargets(result, config.paths.baselines)
     : [];
 
-  // Phase 2 — every check passed; commit the RETAINED bytes. Nothing is re-read
+  // Phase 2: every check passed; commit the RETAINED bytes. Nothing is re-read
   // from the candidate tree here, so the bytes committed are exactly the bytes
   // that were validated (no decode-swap / symlink-swap window).
   for (const write of plan) {
     if (write.kind === 'png') {
-      await writePng(write.destination, write.bytes);
+      await writeDurablePng(write.destination, write.bytes);
     } else {
       await writeText(write.destination, write.bytes.toString('utf8'));
     }
@@ -197,36 +197,36 @@ async function readCandidateResults(dir: string): Promise<RunResult> {
 /**
  * Refuses to promote a candidate tree that did not come from a clean CI run.
  * Three fail-closed gates, all derived from the candidate's own `results.json`:
- *   - `mode !== 'ci'` — a local (advisory) run's candidate tree is rendered
+ *   - `mode !== 'ci'`: a local (advisory) run's candidate tree is rendered
  *     against the per-machine cache on the developer's own platform, so
  *     promoting it commits cross-platform pixels the CI gate would immediately
  *     re-flag. Only a CI-mode run's renders are eligible for the committed set.
- *   - `totals.failed` is not a number — `parseRunResult` validates only that
+ *   - `totals.failed` is not a number: `parseRunResult` validates only that
  *     `stories` is an array, so a truncated or foreign artifact can reach here
  *     with `totals` (or `totals.failed`) missing or non-numeric. Reading it
  *     unguarded would either throw a raw `TypeError` (not an `ApproveFromError`,
  *     breaking the trust-boundary contract) or, worse, evaluate `undefined > 0`
  *     to `false` and SILENTLY pass the gate. A non-numeric `failed` is therefore
  *     an explicit fail-closed refusal, not an assumed-zero.
- *   - `totals.failed > 0` — a run with failed stories produced a PARTIAL tree
+ *   - `totals.failed > 0`: a run with failed stories produced a PARTIAL tree
  *     (broken stories wrote no candidate, or wrote a candidate mid-failure), so
  *     promoting it would commit an incomplete baseline set. A broken run is
  *     never a source of truth.
  * All abort before any write. `mode` is read defensively (older artifacts may
- * omit it) — a missing `mode` is treated as non-`ci` and refused, since only a
+ * omit it). A missing `mode` is treated as non-`ci` and refused, since only a
  * current CI run stamps `mode: 'ci'`.
  */
 function assertPromotableRun(result: RunResult): void {
   if (result.mode !== 'ci') {
     throw new ApproveFromError(
       `Candidate results.json was produced by a ${result.mode ?? 'pre-mode'} ` +
-        'run, not a CI run — only `mode: "ci"` candidates may be promoted into ' +
+        'run, not a CI run; only `mode: "ci"` candidates may be promoted into ' +
         'committed baselines. Re-run under `tuffgal run --ci`.',
     );
   }
   if (typeof result.totals?.failed !== 'number') {
     throw new ApproveFromError(
-      'Candidate results.json is missing a numeric totals.failed count — the ' +
+      'Candidate results.json is missing a numeric totals.failed count. The ' +
         'artifact is truncated or was not produced by tuffgal. Refusing to ' +
         'promote a run whose pass/fail status cannot be verified.',
     );
@@ -234,7 +234,7 @@ function assertPromotableRun(result: RunResult): void {
   if (result.totals.failed > 0) {
     throw new ApproveFromError(
       `Candidate results.json reports ${result.totals.failed} failed ` +
-        'story(ies) — a broken run produces a partial candidate tree that must ' +
+        'story(ies); a broken run produces a partial candidate tree that must ' +
         'never be promoted. Fix the failures and re-run before approving.',
     );
   }
@@ -259,7 +259,7 @@ function extractEnvironment(result: RunResult): EnvironmentManifest {
   const actual = result.environment?.actual;
   if (!actual) {
     throw new ApproveFromError(
-      'Candidate results.json has no environment block — it was produced by a ' +
+      'Candidate results.json has no environment block; it was produced by a ' +
         'pre-manifest tuffgal. Re-run with a manifest-aware version before ' +
         'approving, so baselines/manifest.json can be written.',
     );
@@ -278,7 +278,7 @@ function extractEnvironment(result: RunResult): EnvironmentManifest {
  * Enforces the whole allow-list: top level holds only `results.json` and action
  * directories; each action directory holds only `<breakpoint>.png` /
  * `<breakpoint>.a11y.yaml` (or legacy `0.png` / `a11y.yaml`). Every other shape
- * — stray extensions, nested dirs, dotfiles, symlinks, traversal names — aborts.
+ * (stray extensions, nested dirs, dotfiles, symlinks, traversal names) aborts.
  * Every PNG is decoded here so a corrupt payload fails validation, not a write.
  */
 async function planWrites(
@@ -302,7 +302,7 @@ async function planWrites(
     }
     if (!ACTION_NAME_PATTERN.test(entry.name)) {
       throw new ApproveFromError(
-        `Invalid action directory name "${entry.name}" — must be ` +
+        `Invalid action directory name "${entry.name}": must be ` +
           'lowercase-kebab ([a-z0-9-]+)',
       );
     }
@@ -314,7 +314,7 @@ async function planWrites(
 /**
  * Validates one action directory's contents and returns its planned writes. Each
  * source file is read exactly once here (after its symlink/name checks pass) and
- * its bytes are retained on the {@link PlannedWrite} for phase 2 — the source is
+ * its bytes are retained on the {@link PlannedWrite} for phase 2. The source is
  * never re-read, closing the validate-then-swap TOCTOU window.
  */
 async function planActionDir(
@@ -336,11 +336,11 @@ async function planActionDir(
       );
     }
     const kind = classifyCandidateFile(file.name, `${action}/${file.name}`);
-    // Read once, after the symlink check, and retain the bytes — phase 2 writes
+    // Read once, after the symlink check, and retain the bytes. Phase 2 writes
     // exactly these, never re-reading `source`.
     const bytes = await readFile(source);
-    // The destination is derived purely from validated names — never from any
-    // path string in the artifact — so it always lands inside <baselines>.
+    // The destination is derived purely from validated names (never from any
+    // path string in the artifact), so it always lands inside <baselines>.
     plan.push({
       source,
       destination: join(baselinesDir, action, file.name),
@@ -355,10 +355,11 @@ async function planActionDir(
  * Decodes every planned PNG's RETAINED bytes (validation phase) so a corrupt or
  * non-PNG payload aborts the whole approve with zero writes. Decoding the bytes
  * already held on the plan (not a fresh read) is what makes the decode-check and
- * the eventual write see the same payload. `writePng`'s own recompress step
- * SWALLOWS a decode failure (it falls back to writing the given bytes), which is
- * the right behaviour for a trusted capture but wrong for an untrusted artifact
- * — a corrupt candidate PNG must fail closed, not land verbatim as a baseline.
+ * the eventual write see the same payload. `writeDurablePng`'s own recompress
+ * step SWALLOWS a decode failure (it falls back to writing the given bytes),
+ * which is the right behaviour for a trusted capture but wrong for an untrusted
+ * artifact. A corrupt candidate PNG must fail closed, not land verbatim as a
+ * baseline.
  */
 async function assertAllPngsDecode(plan: PlannedWrite[]): Promise<void> {
   for (const write of plan) {
@@ -428,7 +429,7 @@ function assertSafeName(name: string, context: string): void {
   }
 }
 
-/** Aborts if `path` is a symlink — never follow a link out of the tree. */
+/** Aborts if `path` is a symlink. Never follow a link out of the tree. */
 async function assertNotSymlink(path: string): Promise<void> {
   const stats = await lstat(path);
   if (stats.isSymbolicLink()) {
@@ -441,7 +442,7 @@ async function assertNotSymlink(path: string): Promise<void> {
 /**
  * Recomputes the local prune targets for `--prune` from the candidate run's
  * `results.deleted`, entirely under the resolved `baselinesDir`. The artifact's
- * own `baselinePaths[]` strings are ignored — they describe the CI machine's
+ * own `baselinePaths[]` strings are ignored. They describe the CI machine's
  * filesystem and could point anywhere. Instead each entry's `action` +
  * `breakpoint` is re-validated and re-rooted here, so a prune can only ever
  * delete files inside this repo's baselines directory.

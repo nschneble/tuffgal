@@ -12,9 +12,9 @@ import { pathExists } from '../util.ts';
 import { runAction } from './runAction.ts';
 
 /**
- * A 2x2 solid-colour PNG. `diffPngs` parses real PNG bytes, so the fake page's
+ * A 2x2 solid-colour PNG. `scoreDiff` parses real PNG bytes, so the fake page's
  * screenshot and any pre-seeded baseline must be genuine images of matching
- * dimensions — a `Buffer.from('png')` stub would throw inside pngjs.
+ * dimensions; a `Buffer.from('png')` stub would throw inside pngjs.
  */
 function solidPng(r: number, g: number, b: number): Buffer {
   const png = new PNG({ width: 2, height: 2 });
@@ -72,11 +72,26 @@ async function makeConfig(): Promise<ResolvedConfig> {
   } as unknown as ResolvedConfig;
 }
 
+/**
+ * A base config augmented with the `baseUrl` + `navigationTimeoutMs` a
+ * `navigate` step needs (`runNavigate` resolves the path against `baseUrl`, and
+ * `page.goto` reads the timeout). Shared by every test that drives a navigate
+ * step so the augmentation lives in one place instead of being re-inlined.
+ */
+async function navConfig(): Promise<ResolvedConfig> {
+  const config = await makeConfig();
+  Object.assign(config as object, {
+    baseUrl: 'http://localhost',
+    navigationTimeoutMs: 1000,
+  });
+  return config;
+}
+
 afterEach(() => {
   tempDirs = [];
 });
 
-describe('runAction — breakpoint threading', () => {
+describe('runAction: breakpoint threading', () => {
   it('tags the result with the breakpoint it ran at and keys the baseline by it', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -114,7 +129,7 @@ describe('runAction — breakpoint threading', () => {
       config,
       breakpoint: 'desktop',
     });
-    // Each breakpoint creates its own baseline — neither sees the other's as
+    // Each breakpoint creates its own baseline; neither sees the other's as
     // pre-existing, so both read as `new` on first capture.
     assert.equal(mobile.status, 'new');
     assert.equal(desktop.status, 'new');
@@ -122,7 +137,7 @@ describe('runAction — breakpoint threading', () => {
   });
 });
 
-describe('runAction — CI mode never writes committed baselines', () => {
+describe('runAction: CI mode never writes committed baselines', () => {
   it('reports new WITHOUT writing into paths.baselines, and writes the candidate instead', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -184,7 +199,7 @@ describe('runAction — CI mode never writes committed baselines', () => {
     });
 
     assert.equal(result.status, 'changed');
-    // Committed baseline stays exactly as seeded — untouched by the run.
+    // Committed baseline stays exactly as seeded; untouched by the run.
     const baselineBytes = await readFile(join(baselineDir, 'desktop.png'));
     assert.deepEqual(baselineBytes, solidPng(10, 20, 30));
     // Candidate carries the proposed new baseline.
@@ -223,7 +238,7 @@ describe('runAction — CI mode never writes committed baselines', () => {
   });
 });
 
-describe('runAction — local mode auto-seeds the cache, never baselines', () => {
+describe('runAction: local mode auto-seeds the cache, never baselines', () => {
   it('auto-seeds a fresh cache entry on a missing-entry run and leaves baselines untouched', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -255,7 +270,7 @@ describe('runAction — local mode auto-seeds the cache, never baselines', () =>
     // The recorded baselinePath points at the cache, so a later `approve` and a
     // re-run both key off the seeded cache entry.
     assert.ok(result.baselinePath?.startsWith(config.paths.localCache));
-    // Local mode writes no candidate tree — that is a CI artifact.
+    // Local mode writes no candidate tree; that is a CI artifact.
     assert.equal(
       await pathExists(
         join(config.paths.report, 'candidates', 'open', 'desktop.png'),
@@ -278,7 +293,7 @@ describe('runAction — local mode auto-seeds the cache, never baselines', () =>
     });
     assert.equal(first.status, 'new');
 
-    // Same actual, second run — the cache entry now exists, so it gates a pass.
+    // Same actual, second run; the cache entry now exists, so it gates a pass.
     const second = await runAction({
       page: fakePage(png),
       action: action('open'),
@@ -318,7 +333,7 @@ describe('runAction — local mode auto-seeds the cache, never baselines', () =>
   it('never reads a committed baseline in local mode (cache miss => new even with a baseline present)', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
-    // A committed baseline of the SAME pixels exists — if local mode read it,
+    // A committed baseline of the SAME pixels exists; if local mode read it,
     // this run would pass. It must not: the cache is empty, so the run seeds it
     // and reports `new`.
     const baselineDir = join(config.paths.baselines, 'open');
@@ -350,7 +365,7 @@ describe('runAction — local mode auto-seeds the cache, never baselines', () =>
   });
 });
 
-describe('runAction — ${breakpoint} interpolation', () => {
+describe('runAction: ${breakpoint} interpolation', () => {
   /** Page that only records the URLs a `navigate` step passes to `goto`. */
   function gotoRecordingPage(urls: string[]): Page {
     return {
@@ -371,13 +386,9 @@ describe('runAction — ${breakpoint} interpolation', () => {
   }
 
   it('resolves ${breakpoint} to the current mode name', async () => {
-    const config = await makeConfig();
     // runNavigate resolves the path against baseUrl, so the test config needs
-    // one for `new URL()` to succeed.
-    Object.assign(config as object, {
-      baseUrl: 'http://localhost',
-      navigationTimeoutMs: 1000,
-    });
+    // one for `new URL()` to succeed; navConfig supplies it.
+    const config = await navConfig();
     const urls: string[] = [];
     await runAction({
       page: gotoRecordingPage(urls),
@@ -391,11 +402,7 @@ describe('runAction — ${breakpoint} interpolation', () => {
   });
 
   it('lets a story parameter named breakpoint override the injected value', async () => {
-    const config = await makeConfig();
-    Object.assign(config as object, {
-      baseUrl: 'http://localhost',
-      navigationTimeoutMs: 1000,
-    });
+    const config = await navConfig();
     const urls: string[] = [];
     await runAction({
       page: gotoRecordingPage(urls),
@@ -411,7 +418,101 @@ describe('runAction — ${breakpoint} interpolation', () => {
   });
 });
 
-describe('runAction — legacy baseline fallback (local mode, within the cache root)', () => {
+describe('runAction: navigation timeout is retryable, infra faults are not', () => {
+  /**
+   * A page whose `goto` replays a scripted sequence of outcomes: `'timeout'`
+   * throws a Playwright-shaped TimeoutError, `'infra'` throws a generic fault,
+   * `'ok'` resolves. Records the call count so a test can prove whether a retry
+   * fired. Anything past the end of the script resolves `ok`.
+   */
+  function scriptedGotoPage(script: Array<'timeout' | 'infra' | 'ok'>): {
+    page: Page;
+    calls: () => number;
+  } {
+    let call = 0;
+    const page = {
+      async goto(): Promise<null> {
+        const outcome = script[call] ?? 'ok';
+        call += 1;
+        if (outcome === 'timeout') {
+          const error = new Error('page.goto: Timeout 15000ms exceeded');
+          // Playwright's navigation timeout surfaces as a TimeoutError; the
+          // classifier keys on this name.
+          error.name = 'TimeoutError';
+          throw error;
+        }
+        if (outcome === 'infra') {
+          throw new Error('net::ERR_CONNECTION_REFUSED');
+        }
+        return null;
+      },
+    } as unknown as Page;
+    return { page, calls: () => call };
+  }
+
+  function navigateOnlyAction(attempts: number): Action {
+    return {
+      action: 'visit',
+      steps: [{ kind: 'navigate', path: '/' }],
+      screenshot: false,
+      // backoffMs 0 keeps the retry loop from actually sleeping between tries.
+      retry: { attempts, backoffMs: 0 },
+    } as unknown as Action;
+  }
+
+  it('retries a navigation timeout and succeeds on the second attempt', async () => {
+    const config = await navConfig();
+    const { page, calls } = scriptedGotoPage(['timeout', 'ok']);
+    const result = await runAction({
+      page,
+      action: navigateOnlyAction(2),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // The first timeout was retried; the retry navigated cleanly.
+    assert.equal(calls(), 2);
+    assert.equal(result.status, 'pass');
+  });
+
+  it('fails the action when every navigation attempt times out (retry budget exhausted)', async () => {
+    const config = await navConfig();
+    const { page, calls } = scriptedGotoPage(['timeout', 'timeout']);
+    const result = await runAction({
+      page,
+      action: navigateOnlyAction(2),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // Both attempts were made, then the action failed on the exhausted budget.
+    assert.equal(calls(), 2);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failedStepIndex, 0);
+  });
+
+  it('does NOT retry a generic infrastructure fault: it fails on the first throw', async () => {
+    const config = await navConfig();
+    const { page, calls } = scriptedGotoPage(['infra', 'ok']);
+    const result = await runAction({
+      page,
+      action: navigateOnlyAction(2),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // A non-timeout, non-locator fault rethrows immediately: goto ran ONCE, so
+    // the scripted `ok` second entry was never reached.
+    assert.equal(calls(), 1);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failureMessage, 'net::ERR_CONNECTION_REFUSED');
+  });
+});
+
+describe('runAction: legacy baseline fallback (local mode, within the cache root)', () => {
   it('compares against the legacy 0.png when the breakpoint entry is absent and does NOT report new', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -499,7 +600,7 @@ describe('runAction — legacy baseline fallback (local mode, within the cache r
   it('leaves a11yChanged undefined when only a legacy 0.png exists with no a11y companion', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
-    // Legacy pixel entry present, but no `a11y.yaml` alongside it — an older
+    // Legacy pixel entry present, but no `a11y.yaml` alongside it; an older
     // project that predates a11y snapshots. The fallback read must not throw on
     // the absent companion; with no baseline tree to compare, a11yChanged stays
     // undefined.
@@ -521,7 +622,7 @@ describe('runAction — legacy baseline fallback (local mode, within the cache r
   });
 });
 
-describe('runAction — legacy baseline fallback (CI mode, within paths.baselines)', () => {
+describe('runAction: legacy baseline fallback (CI mode, within paths.baselines)', () => {
   it('compares against the committed legacy 0.png, passes, and writes NO candidate', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -591,7 +692,7 @@ describe('runAction — legacy baseline fallback (CI mode, within paths.baseline
   });
 });
 
-describe('runAction — CI mode a11y-only drift', () => {
+describe('runAction: CI mode a11y-only drift', () => {
   it('flips status to changed and writes a candidate pair when pixels pass but the aria snapshot drifts', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -617,7 +718,7 @@ describe('runAction — CI mode a11y-only drift', () => {
     // Pixels matched, aria drifted → changed (not pass), a11yChanged recorded.
     assert.equal(result.status, 'changed');
     assert.equal(result.a11yChanged, true);
-    // No pixel diff was produced — a11y-only drift carries no diff image, which
+    // No pixel diff was produced; a11y-only drift carries no diff image, which
     // (with a11yChanged) is what tells this apart from pixel drift downstream.
     assert.equal(result.diffPath, undefined);
 
@@ -645,7 +746,7 @@ describe('runAction — CI mode a11y-only drift', () => {
   it('records the breakpoint-keyed a11y baseline path when the drift came from a breakpoint-source baseline', async () => {
     // Baseline-source is `breakpoint` (a `desktop.a11y.yaml` exists), so the
     // recorded a11yBaselinePath must be the breakpoint-keyed file that was
-    // actually diffed against — a real, on-disk path.
+    // actually diffed against; a real, on-disk path.
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
     const baselineDir = join(config.paths.baselines, 'open');
@@ -674,7 +775,7 @@ describe('runAction — CI mode a11y-only drift', () => {
   it('records the legacy a11y baseline path when the drift came from a legacy-source baseline', async () => {
     // Baseline-source is `legacy` (only `0.png` / `a11y.yaml` exist, no
     // breakpoint-keyed entry). The recorded a11yBaselinePath must mirror the
-    // legacy file that was diffed against — NOT the breakpoint-keyed
+    // legacy file that was diffed against; NOT the breakpoint-keyed
     // `desktop.a11y.yaml`, which does not exist on disk and would be a dangling
     // pointer for any consumer (report, approve) that reads it back.
     const config = await makeConfig();
@@ -771,12 +872,12 @@ describe('runAction — CI mode a11y-only drift', () => {
     assert.equal(result.status, 'changed');
     assert.equal(result.a11yChanged, true);
     // Pixel drift ⇒ a diff image IS produced. A present `diffPath` proves the
-    // pixel-drift branch ran and the pixels-pass branch did NOT — the two are an
+    // pixel-drift branch ran and the pixels-pass branch did NOT; the two are an
     // if/else, and the a11y-only candidate write lives solely in the pass branch.
     // So reaching here proves that write never fired, i.e. no second candidate
     // pair: exactly one pair is written, from the pixel-drift path alone.
     assert.ok(result.diffPath);
-    // Exactly one candidate pair on disk — the files exist and hold the proposed
+    // Exactly one candidate pair on disk; the files exist and hold the proposed
     // render (the actual bytes, uncorrupted by any competing second write).
     assert.ok(await pathExists(candidatePng));
     assert.ok(await pathExists(candidateA11y));
@@ -785,7 +886,7 @@ describe('runAction — CI mode a11y-only drift', () => {
   });
 });
 
-describe('runAction — local mode a11y-only drift stays advisory', () => {
+describe('runAction: local mode a11y-only drift stays advisory', () => {
   it('keeps pass (no status flip, no candidate) when local pixels pass but aria drifts', async () => {
     const config = await makeConfig();
     const png = solidPng(10, 20, 30);
@@ -824,11 +925,11 @@ describe('runAction — local mode a11y-only drift stays advisory', () => {
   });
 });
 
-describe('runAction — CI mode size-mismatch drift', () => {
+describe('runAction: CI mode size-mismatch drift', () => {
   it('treats a dimension change as changed, writes a candidate, and never rewrites the baseline', async () => {
     const config = await makeConfig();
     // Seed a breakpoint-keyed committed baseline whose dimensions the actual
-    // will NOT match — a 2x2 baseline vs a 4x4 actual. `diffPngs` throws
+    // will NOT match; a 2x2 baseline vs a 4x4 actual. `scoreDiff` throws
     // ScreenshotSizeMismatchError, which the runner maps to `changed`.
     const baselineDir = join(config.paths.baselines, 'open');
     await mkdir(baselineDir, { recursive: true });
@@ -887,12 +988,12 @@ describe('runAction — CI mode size-mismatch drift', () => {
     // pixel-drift (size-mismatch) branch carries no `diffPath`, so were it to also
     // emit `a11yChanged`, a `!diffPath` heuristic consumer would misclassify it.
     // The branch deliberately omits `a11yChanged`; this test fails if a future
-    // "natural cleanup" adds it back — even when the aria tree genuinely drifted.
+    // "natural cleanup" adds it back; even when the aria tree genuinely drifted.
     const config = await makeConfig();
     const baselineDir = join(config.paths.baselines, 'open');
     await mkdir(baselineDir, { recursive: true });
     // Seed a 2x2 baseline AND a stale a11y tree, so the aria snapshot really does
-    // drift — proving the omission is the branch's own contract, not an artifact
+    // drift; proving the omission is the branch's own contract, not an artifact
     // of a matching tree.
     await writeFile(join(baselineDir, 'desktop.png'), solidPng(10, 20, 30));
     await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- button "Old"');
@@ -921,5 +1022,394 @@ describe('runAction — CI mode size-mismatch drift', () => {
     // unset so the size-mismatch result is never misread as a11y-only drift.
     assert.ok(result.failureMessage);
     assert.equal(result.a11yChanged, undefined);
+  });
+});
+
+describe('runAction: step-level retry on a locator miss (not just nav timeout)', () => {
+  /**
+   * A page whose click replays a scripted sequence: `'miss'` throws (runClick
+   * wraps ANY click error into the retryable LocatorNotFoundError), `'hit'`
+   * resolves. Records the click count so a test can prove how many attempts
+   * fired. The `{ role, text }` hint routes through getByRole, so that returns
+   * the scripted handle; getByText/locator mirror it for completeness.
+   */
+  function clickScriptPage(script: Array<'miss' | 'hit'>): {
+    page: Page;
+    clicks: () => number;
+  } {
+    let call = 0;
+    const handle = {
+      async click(): Promise<void> {
+        const outcome = script[call] ?? 'hit';
+        call += 1;
+        if (outcome === 'miss') {
+          throw new Error('locator.click: Timeout 1000ms exceeded');
+        }
+      },
+    };
+    const locator = { first: () => handle };
+    const page = {
+      getByRole: () => locator,
+      getByText: () => locator,
+      locator: () => locator,
+    } as unknown as Page;
+    return { page, clicks: () => call };
+  }
+
+  function clickAction(attempts: number, backoffMs: number): Action {
+    return {
+      action: 'save',
+      steps: [{ kind: 'click', hint: { role: 'button', text: 'Save' } }],
+      screenshot: false,
+      retry: { attempts, backoffMs },
+    } as unknown as Action;
+  }
+
+  it('retries a locator miss and succeeds when the element hydrates on the next attempt', async () => {
+    const config = await makeConfig();
+    const { page, clicks } = clickScriptPage(['miss', 'hit']);
+    const result = await runAction({
+      page,
+      action: clickAction(2, 0),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // First click missed, the retry hit; two attempts, then success.
+    assert.equal(clicks(), 2);
+    assert.equal(result.status, 'pass');
+  });
+
+  it('fails the action once the attempts budget is exhausted by repeated misses', async () => {
+    const config = await makeConfig();
+    const { page, clicks } = clickScriptPage(['miss', 'miss', 'miss']);
+    const result = await runAction({
+      page,
+      action: clickAction(3, 0),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    // All three attempts missed → the step fails on the exhausted budget.
+    assert.equal(clicks(), 3);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failedStepIndex, 0);
+  });
+
+  it('scales the backoff by the attempt number (backoffMs * attempt)', async (t) => {
+    const config = await makeConfig();
+    // Spy on the timer `sleep` schedules, calling through so the promise still
+    // resolves. Only `sleep` schedules a timer on this fake page (screenshot is
+    // off), so every recorded delay is a retry backoff.
+    const timeout = t.mock.method(globalThis, 'setTimeout');
+    const before = timeout.mock.callCount();
+    const { page } = clickScriptPage(['miss', 'miss', 'miss']);
+    const result = await runAction({
+      page,
+      action: clickAction(3, 50),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    assert.equal(result.status, 'failed');
+    const delays = timeout.mock.calls
+      .slice(before)
+      .map((call) => call.arguments[1]);
+    // Sleeps fire only BETWEEN attempts: after attempt 1 (50×1) and attempt 2
+    // (50×2). The final failing attempt (3) rethrows with no trailing sleep.
+    assert.deepEqual(delays, [50, 100]);
+  });
+});
+
+describe('runAction: expect.anyOf race and timeout', () => {
+  /**
+   * A page for expect-only runs (empty steps): getByRole and getByText each
+   * hand back a locator whose `first().waitFor` resolves or rejects per the
+   * flags, so a test can make one candidate win the race or make all of them
+   * time out.
+   */
+  function expectPage(opts: { role: boolean; text: boolean }): Page {
+    const makeLocator = (visible: boolean) => ({
+      first: () => ({
+        async waitFor(): Promise<void> {
+          if (!visible) throw new Error('waitFor: element not visible');
+        },
+      }),
+    });
+    return {
+      getByRole: () => makeLocator(opts.role),
+      getByText: () => makeLocator(opts.text),
+    } as unknown as Page;
+  }
+
+  function expectAction(timeoutMs: number): Action {
+    return {
+      action: 'await-toast',
+      steps: [],
+      screenshot: false,
+      expect: {
+        anyOf: [{ role: 'status' }, { text: 'Saved' }],
+        timeoutMs,
+      },
+    } as unknown as Action;
+  }
+
+  it('passes as soon as one anyOf candidate becomes visible while the other never does', async () => {
+    const config = await makeConfig();
+    // The role candidate resolves, the text candidate never; Promise.any still
+    // fulfils on the single winner. This is the "success looks like X OR Y"
+    // contract: the story need not know which renderer the app chose.
+    const result = await runAction({
+      page: expectPage({ role: true, text: false }),
+      action: expectAction(1000),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    assert.equal(result.status, 'pass');
+  });
+
+  it('fails with an ExpectationTimedOutError message when no candidate resolves', async () => {
+    const config = await makeConfig();
+    const result = await runAction({
+      page: expectPage({ role: false, text: false }),
+      action: expectAction(5),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+    });
+    assert.equal(result.status, 'failed');
+    // Steps ran clean (there are none), so the failure indexes one past them.
+    assert.equal(result.failedStepIndex, 0);
+    assert.match(
+      result.failureMessage ?? '',
+      /expect\.anyOf did not resolve within 5ms/,
+    );
+  });
+});
+
+describe('runAction: mask resolution', () => {
+  /**
+   * A page that records the `mask` array handed to `page.screenshot`, and hands
+   * back tagged locators from each resolver so a test can prove which hint
+   * mapped to which Playwright call. `locator('body')` additionally answers
+   * `ariaSnapshot` for the a11y capture that runs alongside the shot; other
+   * selectors stay bare so a mask locator deep-equals cleanly.
+   */
+  function maskRecordingPage(shot: Buffer): {
+    page: Page;
+    masks: () => unknown[];
+  } {
+    let recorded: unknown[] = [];
+    const page = {
+      async waitForTimeout(): Promise<void> {},
+      async evaluate(): Promise<void> {},
+      async screenshot(opts: { mask?: unknown[] }): Promise<Buffer> {
+        recorded = opts.mask ?? [];
+        return shot;
+      },
+      getByRole(role: string) {
+        return { tag: 'role', role };
+      },
+      getByText(text: string) {
+        return { tag: 'text', text };
+      },
+      locator(selector: string) {
+        if (selector === 'body') {
+          return {
+            tag: 'selector',
+            selector,
+            async ariaSnapshot(): Promise<string> {
+              return '- document';
+            },
+          };
+        }
+        return { tag: 'selector', selector };
+      },
+    } as unknown as Page;
+    return { page, masks: () => recorded };
+  }
+
+  function maskAction(mask?: unknown[]): Action {
+    return {
+      action: 'open',
+      steps: [{ kind: 'wait', ms: 0 }],
+      screenshot: true,
+      mask,
+    } as unknown as Action;
+  }
+
+  it('passes an empty mask array to the shutter when mask is undefined', async () => {
+    const config = await makeConfig();
+    const { page, masks } = maskRecordingPage(solidPng(10, 20, 30));
+    await runAction({
+      page,
+      action: maskAction(undefined),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.deepEqual(masks(), []);
+  });
+
+  it('short-circuits an explicitly empty mask list to no locators', async () => {
+    const config = await makeConfig();
+    const { page, masks } = maskRecordingPage(solidPng(10, 20, 30));
+    await runAction({
+      page,
+      action: maskAction([]),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.deepEqual(masks(), []);
+  });
+
+  it('resolves each mask hint through the locator precedence and forwards them in order', async () => {
+    const config = await makeConfig();
+    const { page, masks } = maskRecordingPage(solidPng(10, 20, 30));
+    await runAction({
+      page,
+      action: maskAction([{ role: 'status' }, { selector: '.toast' }]),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // Two hints → two resolved locators, in order, each routed to the method its
+    // hint shape selects: role → getByRole, selector → page.locator.
+    assert.deepEqual(masks(), [
+      { tag: 'role', role: 'status' },
+      { tag: 'selector', selector: '.toast' },
+    ]);
+  });
+});
+
+describe('runAction: custom diff thresholds move the SSIM gate', () => {
+  async function seedCache(config: ResolvedConfig, png: Buffer): Promise<void> {
+    const cacheDir = join(config.paths.localCache, 'open');
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(join(cacheDir, 'desktop.png'), png);
+    await writeFile(join(cacheDir, 'desktop.a11y.yaml'), '- document');
+  }
+
+  function diffAction(diff: {
+    ssimThreshold?: number;
+    pixelThreshold?: number;
+  }): Action {
+    return {
+      action: 'open',
+      steps: [{ kind: 'wait', ms: 0 }],
+      screenshot: true,
+      diff,
+    } as unknown as Action;
+  }
+
+  it('a tightened ssimThreshold flips a would-be pass into changed', async () => {
+    const config = await makeConfig();
+    // This pair scores SSIM ~0.997; a pass under the 0.99 default…
+    await seedCache(config, solidPng(100, 100, 100));
+    const tightened = await runAction({
+      page: fakePage(solidPng(108, 108, 108)),
+      action: diffAction({ ssimThreshold: 0.999 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // …but 0.997 < 0.999, so the tighter gate marks it changed.
+    assert.equal(tightened.status, 'changed');
+  });
+
+  it('the same pair passes under the default ssimThreshold (the flip baseline)', async () => {
+    const config = await makeConfig();
+    await seedCache(config, solidPng(100, 100, 100));
+    const result = await runAction({
+      page: fakePage(solidPng(108, 108, 108)),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.equal(result.status, 'pass');
+  });
+
+  it('a loosened ssimThreshold flips a would-be changed into pass', async () => {
+    const config = await makeConfig();
+    // This pair scores SSIM ~0.971; changed under the 0.99 default…
+    await seedCache(config, solidPng(10, 20, 30));
+    const loosened = await runAction({
+      page: fakePage(solidPng(15, 25, 35)),
+      action: diffAction({ ssimThreshold: 0.95 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // …but 0.971 >= 0.95, so the looser gate accepts it as a pass.
+    assert.equal(loosened.status, 'pass');
+  });
+
+  it('the same pair is changed under the default ssimThreshold (the flip baseline)', async () => {
+    const config = await makeConfig();
+    await seedCache(config, solidPng(10, 20, 30));
+    const result = await runAction({
+      page: fakePage(solidPng(15, 25, 35)),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.equal(result.status, 'changed');
+  });
+
+  it('pixelThreshold tunes the reported pixel-diff metric WITHOUT moving the pass/changed gate', async () => {
+    // pixelThreshold governs the diff-PNG pixel count only; SSIM alone gates
+    // pass vs changed (see the schema doc). This pair scores SSIM ~0.984, so it
+    // is `changed` under both thresholds; but its per-pixel colour delta
+    // straddles the two pixel thresholds, so only the reported diffPixels move.
+    const config = await makeConfig();
+    await seedCache(config, solidPng(100, 100, 100));
+    const tight = await runAction({
+      page: fakePage(solidPng(120, 120, 120)),
+      action: diffAction({ pixelThreshold: 0.01 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    const loose = await runAction({
+      page: fakePage(solidPng(120, 120, 120)),
+      action: diffAction({ pixelThreshold: 0.1 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // Both changed; the gate did not move…
+    assert.equal(tight.status, 'changed');
+    assert.equal(loose.status, 'changed');
+    // …but the tighter pixel threshold flags all four pixels while the default
+    // flags none, proving the override reaches the pixel-diff metric.
+    assert.equal(tight.diffPixels, 4);
+    assert.equal(loose.diffPixels, 0);
   });
 });

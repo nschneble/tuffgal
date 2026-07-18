@@ -1,4 +1,4 @@
-import { access, readdir } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CoverageMetric } from '../schema/result.ts';
 
@@ -6,13 +6,18 @@ const SCREENS_SUBDIR = 'screens';
 
 /**
  * Walks every `visit-*.json` action under `<actions>/screens/` and reports how
- * many have a baseline screenshot at `<baselineRoot>/<action-name>/0.png`. The
- * action name is taken from the filename (minus the `.json` suffix), which by
- * convention matches the action's declared `action` field.
+ * many have at least one baseline screenshot under
+ * `<baselineRoot>/<action-name>/`. The runner keys baselines by breakpoint
+ * (`<breakpoint>.png`, e.g. `desktop.png`) and a project baselined before that
+ * feature keeps a single legacy `0.png`; either counts, so a screen is covered
+ * when its action directory holds any `.png` file (non-PNG siblings such as the
+ * `<breakpoint>.a11y.yaml` snapshots are ignored). The action name is taken from
+ * the filename (minus the `.json` suffix), which by convention matches the
+ * action's declared `action` field.
  *
  * `baselineRoot` is the set the run compares against: committed `paths.baselines`
- * in CI mode, the per-machine `paths.localCache` in local mode (the caller — see
- * `coverageComparisonRoot` — picks it by mode so a local run never reads
+ * in CI mode, the per-machine `paths.localCache` in local mode (the caller, see
+ * `coverageComparisonRoot`, picks it by mode so a local run never reads
  * `paths.baselines`). The metric's meaning is the same either way: how many
  * screens have a baseline to diff against.
  */
@@ -33,10 +38,17 @@ export async function computeScreenCoverage(
     .sort();
   const missing: string[] = [];
   for (const name of screenNames) {
-    const baseline = join(baselineRoot, name, '0.png');
+    const actionDir = join(baselineRoot, name);
+    let hasBaseline = false;
     try {
-      await access(baseline);
+      const baselineFiles = await readdir(actionDir);
+      hasBaseline = baselineFiles.some((file) =>
+        file.toLowerCase().endsWith('.png'),
+      );
     } catch {
+      hasBaseline = false;
+    }
+    if (!hasBaseline) {
       missing.push(name);
     }
   }

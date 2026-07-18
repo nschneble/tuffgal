@@ -10,7 +10,7 @@ import { access } from 'node:fs/promises';
 export interface DatabaseBridge {
   /**
    * Wipes the test database and reseeds the deterministic test user. Called
-   * once per breakpoint pass, before that pass dispatches its first story — so
+   * once per breakpoint pass, before that pass dispatches its first story, so
    * a single-breakpoint run calls it once, and an N-breakpoint run calls it N
    * times, giving each breakpoint a pristine database. Keep it fast.
    */
@@ -35,9 +35,11 @@ export interface DevServerBridge {
   /** Working directory, relative to the config file's location. */
   cwd?: string;
   /**
-   * URLs to poll before considering the dev server stack ready. Each entry
-   * is probed via TCP `connect` (not HTTP) so self-signed certificates and
-   * 404 responses do not block readiness.
+   * URLs to poll before considering the dev server stack ready. Each entry is
+   * probed with an HTTP `GET`; any non-5xx response (2xx/3xx/4xx) marks it
+   * ready, so a 404 does not block but a still-compiling server that 5xxs keeps
+   * the poll going. This proves the server is serving routes rather than merely
+   * having bound its socket. Use an http URL. Self-signed HTTPS is rejected.
    */
   healthCheck: Array<{ url: string; timeoutMs?: number }>;
   /** Signal sent on shutdown. Defaults to `SIGTERM`. */
@@ -71,9 +73,9 @@ export type BreakpointName = keyof typeof BREAKPOINTS;
 
 /**
  * How much of the page each screenshot captures:
- *   - `viewport` — only the breakpoint's `width x height` box, matching what a
+ *   - `viewport`: only the breakpoint's `width x height` box, matching what a
  *     real user sees above the fold. The default.
- *   - `fullPage` — the whole scrollable document, however tall. Catches
+ *   - `fullPage`: the whole scrollable document, however tall. Catches
  *     below-the-fold regressions at the cost of viewport fidelity (a long page
  *     renders at e.g. 1280x2500 instead of 1280x800).
  */
@@ -93,8 +95,8 @@ export type ResolvedBreakpoint = {
 
 /**
  * One breakpoint selection in `config.breakpoints` (and per-story
- * `breakpoints`): either a bare registry name — render at that mode's built-in
- * dimensions — or `{ name, width?, height? }` to override the viewport for that
+ * `breakpoints`): either a bare registry name (render at that mode's built-in
+ * dimensions) or `{ name, width?, height? }` to override the viewport for that
  * mode. An omitted `width`/`height` inherits the registry default for the
  * named mode. Bare-string entries keep older `['mobile', 'desktop']` configs
  * working unchanged.
@@ -122,7 +124,7 @@ export interface PathsConfig {
    * Per-machine, gitignored comparison cache for local (advisory) mode. Local
    * runs self-diff against this instead of the committed `baselines` set, so a
    * developer's platform pixels never fight CI's. Defaults to `tuffgal/.cache`
-   * (relative to the config dir) — inside the same `tuffgal/` subtree as the
+   * (relative to the config dir), inside the same `tuffgal/` subtree as the
    * scaffolded `tuffgal/.gitignore`, whose `.cache/` entry ignores it. Committed
    * baselines are never written here.
    */
@@ -145,7 +147,7 @@ export interface TuffgalConfig {
   apiHost?: string;
   /**
    * localStorage keys to persist across stories. Cookie-based apps may
-   * leave this empty — cookies always persist via Playwright's storage
+   * leave this empty. Cookies always persist via Playwright's storage
    * state.
    */
   storageStatePins?: string[];
@@ -153,7 +155,7 @@ export interface TuffgalConfig {
    * Breakpoint modes this project runs, drawn from the built-in
    * {@link BREAKPOINTS} registry (`mobile` | `tablet` | `laptop` | `desktop`).
    * Each entry is either a bare name (registry dimensions) or
-   * `{ name, width?, height? }` to override that mode's viewport — an omitted
+   * `{ name, width?, height? }` to override that mode's viewport, an omitted
    * `width`/`height` inherits the registry default. Order is preserved; when a
    * name repeats, the first entry wins and later duplicates are dropped. Omit
    * the field to run a single `desktop` breakpoint (1280x800).
@@ -166,6 +168,18 @@ export interface TuffgalConfig {
    * {@link CaptureMode}.
    */
   captureMode?: CaptureMode;
+  /**
+   * Safety cap on a `fullPage` capture's total area, in pixels (width ×
+   * height). A `fullPage` shot composites the whole scrollable document, so an
+   * infinite-scroll or runaway-tall page decodes to an enormous RGBA array
+   * (4 bytes/pixel) and can exhaust memory across workers. When a page's
+   * measured layout area exceeds this cap, the run fails with a clear,
+   * actionable error naming the story/action instead of risking an OOM. Only
+   * `fullPage` captures are bounded. `viewport` shots are already capped by the
+   * breakpoint dimensions. Defaults to 30_000_000 (e.g. 1280×~23_400), well
+   * above realistic long pages but below runaway heights.
+   */
+  maxFullPagePixels?: number;
   /** Default Playwright locator + action timeout. Defaults to 10_000. */
   defaultTimeoutMs?: number;
   /** Default navigation timeout. Defaults to 15_000. */
@@ -198,7 +212,7 @@ export interface TuffgalConfig {
 }
 
 /**
- * Resolved config — every optional field replaced with a concrete value
+ * Resolved config, every optional field replaced with a concrete value
  * so downstream consumers can rely on the shape without per-field `??`.
  * Returned by `loadConfig`. Not part of the public surface.
  */
@@ -218,6 +232,8 @@ export interface ResolvedConfig {
   breakpoints: [ResolvedBreakpoint, ...ResolvedBreakpoint[]];
   /** Resolved screenshot scope; defaults to `viewport`. */
   captureMode: CaptureMode;
+  /** Resolved full-page area cap in pixels; defaults to 30_000_000. */
+  maxFullPagePixels: number;
   defaultTimeoutMs: number;
   navigationTimeoutMs: number;
   frozenTime: string;
@@ -231,6 +247,7 @@ export interface ResolvedConfig {
 
 const DEFAULTS = {
   captureMode: 'viewport',
+  maxFullPagePixels: 30_000_000,
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',
@@ -284,7 +301,7 @@ export async function loadConfig(cwd: string): Promise<ResolvedConfig> {
  * dereferences it. The config module is dynamically imported, so TypeScript
  * cannot guarantee it actually matches `TuffgalConfig`; without this a missing
  * `paths` or a non-string `baseUrl` throws an opaque TypeError inside
- * `resolveConfig`. Validation covers the fields `resolveConfig` reads — the
+ * `resolveConfig`. Validation covers the fields `resolveConfig` reads. The
  * `database`/`devServers` bridges hold functions and are left to fail at their
  * own call sites. `source` is the config file path, surfaced in every message.
  */
@@ -321,6 +338,7 @@ export function assertValidConfig(input: unknown, source: string): void {
     'defaultTimeoutMs',
     'navigationTimeoutMs',
     'workers',
+    'maxFullPagePixels',
   ] as const) {
     const value = config[key];
     if (value !== undefined && (typeof value !== 'number' || value <= 0)) {
@@ -411,6 +429,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     storageStatePins: input.storageStatePins ?? [],
     breakpoints,
     captureMode: input.captureMode ?? DEFAULTS.captureMode,
+    maxFullPagePixels: input.maxFullPagePixels ?? DEFAULTS.maxFullPagePixels,
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:
       input.navigationTimeoutMs ?? DEFAULTS.navigationTimeoutMs,
@@ -466,7 +485,7 @@ export function resolveSelectorList(
 
 /**
  * Resolves `config.breakpoints` to an always-non-empty list: the explicit
- * selectors when set (order preserved, duplicate names dropped — first wins),
+ * selectors when set (order preserved, duplicate names dropped, first wins),
  * else a single `desktop` breakpoint (1280x800). `assertValidConfig` has
  * already rejected unknown/empty `breakpoints`, so a non-empty input dedupes to
  * at least one entry; the cast restores the non-empty tuple type that lets

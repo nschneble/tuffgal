@@ -30,7 +30,7 @@ function config(): ResolvedConfig {
 /**
  * Where a recorded `baselinePath` actually lands after a plain `approve`: the
  * cache root, keeping the `<action>/<file>` tail. Every assertion that seeded a
- * `report/baselines/<action>/<file>` path checks the copy under this instead —
+ * `report/baselines/<action>/<file>` path checks the copy under this instead ;
  * plain approve refreshes the cache, never the committed baselines.
  */
 function inCache(baselinePath: string): string {
@@ -95,7 +95,7 @@ function story(
   };
 }
 
-describe('approveAll — errors', () => {
+describe('approveAll: errors', () => {
   it('throws a helpful error when no prior run exists', async () => {
     await assert.rejects(approveAll(config(), {}), /No prior run found/);
   });
@@ -106,7 +106,7 @@ describe('approveAll — errors', () => {
   });
 });
 
-describe('approveAll — promotion', () => {
+describe('approveAll: promotion', () => {
   it('promotes changed and new, skips pass/failed/skipped', async () => {
     const changedActual = await actual('changed');
     const newActual = await actual('new');
@@ -178,7 +178,7 @@ describe('approveAll — promotion', () => {
     // runner (Wave 3) emits breakpoint-keyed paths, promotion is per-breakpoint
     // correct for free: each `<action>.<breakpoint>.actual.png` lands on its
     // own `<action>/<breakpoint>.png` and the a11y pair travels with it. This
-    // guards that contract — two breakpoints of one action must not clobber.
+    // guards that contract; two breakpoints of one action must not clobber.
     const desktopActual = await actual('submit.desktop');
     const mobileActual = await actual('submit.mobile');
     const desktopA11y = join(report, 'submit.desktop.a11y.yaml');

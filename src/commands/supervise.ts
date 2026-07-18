@@ -36,13 +36,13 @@ export interface SuperviseOptions {
  * Long-running supervisor around `config.devServers.command`. Solves
  * three problems observed during heavy harness iteration:
  *
- *   1. Hot-reload rot — after many file-watch restarts the framework
+ *   1. Hot-reload rot: after many file-watch restarts the framework
  *      drifts into a broken state. Supervisor probes every declared
  *      healthcheck URL and restarts the whole tree on failure.
- *   2. Forgotten dev servers — supervisor self-terminates after a
+ *   2. Forgotten dev servers: supervisor self-terminates after a
  *      wall-clock cap and after an idle window with no heartbeat from
  *      `tuffgal run`.
- *   3. Manual signal management — SIGINT/SIGTERM teardown kills the
+ *   3. Manual signal management: SIGINT/SIGTERM teardown kills the
  *      whole detached process group, not just the shell wrapper.
  *
  * Each invocation of `tuffgal run` writes
@@ -188,6 +188,10 @@ async function probeAllHealthchecks(
 
 function probeUrl(url: string): Promise<boolean> {
   const { host, port } = parseHostPort(url);
+  // A bare TCP up/down check is deliberate here: the supervisor only polls
+  // servers that were already HTTP-readiness-verified at startup, so liveness
+  // needs no route-serving proof, and TCP stays agnostic to self-signed HTTPS
+  // health-check URLs that `probeHttp`'s fetch would reject (see probeTcp).
   return probeTcp(host, port, HEALTHCHECK_PROBE_TIMEOUT_MS);
 }
 
@@ -196,7 +200,7 @@ function heartbeatIsStale(heartbeatPath: string, idleLimitMs: number): boolean {
     const stat = statSync(heartbeatPath);
     return Date.now() - stat.mtimeMs > idleLimitMs;
   } catch {
-    // No heartbeat yet — count grace period from supervisor start so a
+    // No heartbeat yet. Count grace period from supervisor start so a
     // fresh shell does not immediately kill itself.
     return false;
   }

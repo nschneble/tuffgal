@@ -8,14 +8,27 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
-## [0.2.0-alpha.3] — 2026-07-16
+## [0.2.0-alpha.4] – 2026-07-18
+
+### Changed
+
+- `navigate` now defaults `waitUntil` to `'load'` because `networkidle`
+  causes every navigation to stall to the full navigation timeout
+- `navigate` rejects protocol-relative, backslash, and absolute-URL paths
+  that could drive the browser off the target origin
+
+### Fixed
+
+- Playwright navigation timeouts fail an action on the first timeout
+
+## [0.2.0-alpha.3] – 2026-07-16
 
 ### Added
 
 Deep links for HTML report stories. Allows Tuffgal action to link directly
 to changed stories in PR comments.
 
-## [0.2.0-alpha.2] — 2026-07-12
+## [0.2.0-alpha.2] – 2026-07-12
 
 Report improvements. The HTML report picks up a breakpoint filter, sharper
 status filtering, and an interactive viewer redesigned around
@@ -45,7 +58,7 @@ blink-comparing what changed.
 - "Expanded changed in 1 stories" pluralization in bulk-toggle announcement
 - `npm run preview` silently never rendered interactive mode
 
-## [0.2.0-alpha.1] — 2026-07-10
+## [0.2.0-alpha.1] – 2026-07-10
 
 CI-owned baselines. CI is now the sole writer of committed baselines. Local
 runs are advisory self-diffs. Committed visual changes are a PR review
@@ -101,20 +114,20 @@ gate, approved from a CI candidate tree rather than by any local `approve`.
   - pngjs, deflate level 9 + adaptive filtering
   - Never lossy, never quantized
 
-## [0.1.0-alpha.14] — 2026-07-04
+## [0.1.0-alpha.14] – 2026-07-04
 
 ### Fixed
 
 A `viewport` capture no longer resets the page's scroll offset before shooting.
 
-## [0.1.0-alpha.13] — 2026-06-30
+## [0.1.0-alpha.13] – 2026-06-30
 
 ### Changed
 
 HTML report filters have been merged with the summary row. Plus a few other
 miscellaneous UI/UX improvements.
 
-## [0.1.0-alpha.12] — 2026-06-27
+## [0.1.0-alpha.12] – 2026-06-27
 
 ### Fixed
 
@@ -124,7 +137,7 @@ the unresolved symlink path against the symlink-resolved module URL, so
 `main()` never ran. The script now resolves `argv[1]` through realpath
 before the comparison.
 
-## [0.1.0-alpha.11] — 2026-06-26
+## [0.1.0-alpha.11] – 2026-06-26
 
 ### Added
 
@@ -145,7 +158,7 @@ before the comparison.
 - Multiple breakpoint runs no longer leak database state
 - Report filters now only show matching actions inside each story
 
-## [0.1.0-alpha.10] — 2026-06-22
+## [0.1.0-alpha.10] – 2026-06-22
 
 ### Added
 
@@ -155,7 +168,7 @@ before the comparison.
 
 - Per-breakpoint database isolation
 
-## [0.1.0-alpha.9] — 2026-06-21
+## [0.1.0-alpha.9] – 2026-06-21
 
 ### Added
 
@@ -165,7 +178,7 @@ before the comparison.
   - Each `config.breakpoints` entry is a bare name (registry dimensions) or `{ name, width?, height? }` to override that mode's size; an omitted axis inherits the registry default
   - Order preserved; when a name repeats, the first entry wins
   - Omit `breakpoints` to run a single `desktop` mode (1280×800)
-  - Per-story `breakpoints` field, same shape, that **replaces** the project's modes for that story — a story may run a mode the project does not configure, and its overrides resolve against the registry
+  - Per-story `breakpoints` field, same shape, that **replaces** the project's modes for that story; a story may run a mode the project does not configure, and its overrides resolve against the registry
   - Breakpoint grouping in the HTML report, each group labelled with the real capture size; a single-mode story renders as a flat list with no breakpoint chrome
   - Pre-breakpoint baselines at `<action>/0.png` are read as fallbacks until promoted
 
@@ -175,13 +188,13 @@ before the comparison.
 a single mode's size with `breakpoints: [{ name: 'desktop', width, height }]`
 instead.
 
-## [0.1.0-alpha.8] — 2026-06-20
+## [0.1.0-alpha.8] – 2026-06-20
 
 ### Fixed
 
 - Reset page scroll to origin before each full-page capture, so `position: sticky` and `fixed` elements no longer render shifted by `scrollY`
 
-## [0.1.0-alpha.7] — 2026-06-20
+## [0.1.0-alpha.7] – 2026-06-20
 
 ### Added
 
@@ -211,7 +224,7 @@ instead.
 - Drop redundant "Failures" section at the bottom of the HTML report
 - Stop linking to Playwright trace in the HTML report
 
-## [0.1.0-alpha.6] — 2026-06-11
+## [0.1.0-alpha.6] – 2026-06-11
 
 ### Added
 
@@ -225,7 +238,7 @@ instead.
 - Edit `tuffgal run` output to group changed, failed at end w/ report link
 - Skip npm release if no version bump
 
-## [0.1.0-alpha.5] — 2026-06-11
+## [0.1.0-alpha.5] – 2026-06-11
 
 ### Added
 
@@ -235,7 +248,7 @@ instead.
 Use `'domcontentloaded'` for dev-mode pages with long-tail external fetches
 that prevent `networkidle` from settling.
 
-## [0.1.0-alpha.4] — 2026-06-06
+## [0.1.0-alpha.4] – 2026-06-06
 
 ### Added
 
@@ -255,7 +268,7 @@ that prevent `networkidle` from settling.
 - **Breaking:** Dropped the `ci` block from `TuffgalConfig` and the public API
 - Removed stale `bin/**` and `schema/**` paths
 
-## [0.1.0-alpha.3] — 2026-06-06
+## [0.1.0-alpha.3] – 2026-06-06
 
 Grants clipboard permissions in browser contexts.
 
@@ -263,14 +276,14 @@ Without `permissions: ['clipboard-read', 'clipboard-write']` Playwright
 default-denies clipboard API access, which breaks any story using the Web
 Clipboard API.
 
-## [0.1.0-alpha.2] — 2026-06-04
+## [0.1.0-alpha.2] – 2026-06-04
 
 `npm run build` now copies `src/reporter/assets/{report.css,report.js}`
 into `dist/reporter/assets/`. Earlier alpha builds shipped without the
 reporter's static assets, so the generated HTML report rendered without
 styling or interactivity.
 
-## [0.1.0-alpha.1] — 2026-06-04
+## [0.1.0-alpha.1] – 2026-06-04
 
 ### Changed
 
@@ -281,12 +294,13 @@ styling or interactivity.
 
 - Corrected `bin` extension and publish flags for the alpha channel
 
-## [0.1.0-alpha.0] — 2026-06-04
+## [0.1.0-alpha.0] – 2026-06-04
 
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.3...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.4...HEAD
+[0.2.0-alpha.4]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.4
 [0.2.0-alpha.3]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.3
 [0.2.0-alpha.2]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.2
 [0.2.0-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.1

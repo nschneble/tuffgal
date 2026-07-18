@@ -5,7 +5,7 @@ import type { ResolvedConfig } from '../config.ts';
 
 /**
  * Bump when the capture pipeline changes behaviour in a way that shifts pixels
- * for the same input UI — a new default screenshot option, a change to how the
+ * for the same input UI: a new default screenshot option, a change to how the
  * clock is frozen, a mask-application tweak, etc. A committed baseline set was
  * rendered under one `CAPTURE_SCHEMA`; a run under a higher value is a pixel-
  * affecting mismatch (see {@link PIXEL_AFFECTING_KEYS}) that prompts re-approve.
@@ -33,7 +33,7 @@ export interface ManifestBreakpoint {
  * to detect when the current capture environment has drifted from the one the
  * committed baselines were rendered under.
  *
- * `tuffgalVersion` and `playwrightVersion` are informational only — they are
+ * `tuffgalVersion` and `playwrightVersion` are informational only. They are
  * recorded for debugging but never contribute to a mismatch (a tuffgal patch
  * release or a Playwright bump that does not move the bundled browser leaves
  * pixels untouched). Every other field is pixel-affecting; see
@@ -62,7 +62,7 @@ export interface EnvironmentManifest {
  * shape, not the pixels); `tuffgalVersion`/`playwrightVersion` are excluded as
  * informational. `browser` is excluded because a browser-*name* change is
  * already implied by `browserVersion` (which carries the vendor+version string)
- * and the runner only launches chromium today — comparing the name would add a
+ * and the runner only launches chromium today. Comparing the name would add a
  * redundant key with no independent signal.
  */
 export const PIXEL_AFFECTING_KEYS = [
@@ -80,17 +80,17 @@ export type PixelAffectingKey = (typeof PIXEL_AFFECTING_KEYS)[number];
 /**
  * Result of reading `<baselines>/manifest.json`. Three outcomes the caller must
  * distinguish, because they gate differently:
- *   - `ok` — a well-formed manifest was read; compare it against the run.
- *   - `missing` — no file on disk. The bootstrap case: the first `approve
+ *   - `ok`: a well-formed manifest was read; compare it against the run.
+ *   - `missing`: no file on disk. The bootstrap case: the first `approve
  *     --from` has not written a manifest yet, so `run --ci` treats it as "no
- *     expectation to violate" — `environment.expected: null`, no mismatch, no
+ *     expectation to violate": `environment.expected: null`, no mismatch, no
  *     exit 3. Never gate a project that has simply not been approved once.
- *   - `malformed` — a file exists but is not valid JSON or fails shape checks.
+ *   - `malformed`: a file exists but is not valid JSON or fails shape checks.
  *     A committed manifest that cannot be parsed is a real problem the run
  *     should surface, but crashing the whole comparison is too blunt. Treated
  *     as a mismatch-with-note: `expected: null`, `mismatch: true`, and
  *     `mismatchKeys: ['manifest']` so the report/comment can say "the committed
- *     manifest is unreadable — re-approve to rewrite it" without aborting.
+ *     manifest is unreadable. Re-approve to rewrite it" without aborting.
  */
 export type ManifestReadResult =
   | { status: 'ok'; manifest: EnvironmentManifest }
@@ -107,7 +107,7 @@ export const MANIFEST_FILENAME = 'manifest.json';
  * Reads and shape-checks `<baselinesDir>/manifest.json`. Tolerant by design
  * (see {@link ManifestReadResult}): a missing file is the bootstrap case, a
  * malformed one is surfaced as a note rather than a crash. Shape validation is
- * intentionally shallow — enough to trust the field reads in {@link
+ * intentionally shallow, enough to trust the field reads in {@link
  * compareEnvironment}, not a full structural mirror.
  */
 export async function readManifest(
@@ -141,7 +141,7 @@ export async function readManifest(
  *
  * Exported so `approve --from` can run the same shape check against a candidate
  * artifact's `environment.actual` before promoting it into the committed
- * manifest — a well-formed-but-wrong-shaped environment block must fail closed,
+ * manifest. A well-formed-but-wrong-shaped environment block must fail closed,
  * not slip into `manifest.json` and silently defeat the drift gate.
  */
 export function validateManifestShape(value: unknown): string | undefined {
@@ -202,13 +202,13 @@ export interface EnvironmentComparison {
  * Compares a committed manifest read result against the environment captured
  * this run, returning which pixel-affecting keys diverged.
  *
- *   - `missing` — bootstrap: nothing to violate. `{ mismatch: false }`.
- *   - `malformed` — unreadable committed manifest: mismatch-with-note,
+ *   - `missing`: bootstrap: nothing to violate. `{ mismatch: false }`.
+ *   - `malformed`: unreadable committed manifest: mismatch-with-note,
  *     `mismatchKeys: ['manifest']` (see {@link MALFORMED_MANIFEST_KEY}).
- *   - `ok` — diff each {@link PIXEL_AFFECTING_KEYS}. `breakpoints` compares deep
+ *   - `ok`: diff each {@link PIXEL_AFFECTING_KEYS}. `breakpoints` compares deep
  *     and order-sensitively: the manifest records an ordered list, and a
  *     reorder (even at identical dimensions) is treated as a change worth a
- *     re-approve prompt rather than silently equal — order-sensitivity is the
+ *     re-approve prompt rather than silently equal. Order-sensitivity is the
  *     conservative pixel-safety choice. Informational keys
  *     (`tuffgalVersion`/`playwrightVersion`) are never compared.
  */
@@ -240,7 +240,7 @@ export function compareEnvironment(
 
 /**
  * Deep, order-sensitive equality of two breakpoint lists: same length, and each
- * position matches on `name`/`width`/`height`. Order-sensitive on purpose — see
+ * position matches on `name`/`width`/`height`. Order-sensitive on purpose. See
  * {@link compareEnvironment}.
  */
 function breakpointsEqual(
@@ -263,7 +263,7 @@ const requirePackage = createRequire(import.meta.url);
 
 /**
  * Reads tuffgal's own version from its `package.json`. Resolved relative to this
- * module so it works from both `src/` (dev/test) and the built `dist/` tree —
+ * module so it works from both `src/` (dev/test) and the built `dist/` tree.
  * `../../package.json` is the package root in both layouts. Informational only.
  */
 function readTuffgalVersion(): string {
@@ -288,7 +288,7 @@ export interface CapturedBrowser {
 }
 
 /**
- * Builds the environment manifest describing THIS run — the "actual" side of
+ * Builds the environment manifest describing THIS run, the "actual" side of
  * the comparison and the block a later `approve --from` promotes into the
  * committed manifest. Everything except the live browser version is derived
  * from the resolved config and the host, so the caller only supplies the
@@ -297,7 +297,7 @@ export interface CapturedBrowser {
  * `deviceScaleFactor` is hardcoded `1`: the runner never sets `deviceScaleFactor`
  * on `browser.newContext` (see `runStory.ts`), so Playwright's default of `1`
  * applies. If a future wave makes the scale factor configurable, thread it here
- * and this constant must track it — the manifest's whole job is to notice a DSF
+ * and this constant must track it. The manifest's whole job is to notice a DSF
  * change, so a stale hardcode here would silently defeat that.
  */
 export function captureEnvironment(

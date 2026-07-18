@@ -16,7 +16,7 @@ function totals(over: Partial<RunResult['totals']>): RunResult['totals'] {
   };
 }
 
-describe('deriveExitCode — no mismatch', () => {
+describe('deriveExitCode: no mismatch', () => {
   it('returns 0 for a clean CI run', () => {
     assert.equal(deriveExitCode('ci', totals({ passed: 3 }), false), 0);
   });
@@ -69,7 +69,7 @@ describe('deriveExitCode — no mismatch', () => {
     assert.equal(deriveExitCode('ci', totals({ failed: 1 }), false), 1);
   });
 
-  it('never emits 2 in local mode — changes are advisory', () => {
+  it('never emits 2 in local mode: changes are advisory', () => {
     assert.equal(
       deriveExitCode('local', totals({ changed: 2, new: 1 }), false),
       0,
@@ -88,7 +88,7 @@ describe('deriveExitCode — no mismatch', () => {
   });
 });
 
-describe('deriveExitCode — environment mismatch (3)', () => {
+describe('deriveExitCode: environment mismatch (3)', () => {
   it('returns 3 for a CI mismatch on an otherwise-clean run', () => {
     assert.equal(deriveExitCode('ci', totals({ passed: 3 }), true), 3);
   });
@@ -105,7 +105,7 @@ describe('deriveExitCode — environment mismatch (3)', () => {
     );
   });
 
-  it('never emits 3 in local mode — local never reads the manifest', () => {
+  it('never emits 3 in local mode: local never reads the manifest', () => {
     assert.equal(deriveExitCode('local', totals({ passed: 2 }), true), 0);
     assert.equal(
       deriveExitCode('local', totals({ changed: 2, new: 1 }), true),

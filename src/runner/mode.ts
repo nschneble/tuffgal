@@ -26,8 +26,8 @@ export interface RunModeInputs {
 /**
  * Strings a CI system might export to explicitly opt OUT of CI behaviour. Most
  * CI providers (GitHub Actions, Travis, CircleCI, GitLab, …) set `CI=true`, but
- * the de-facto convention — as codified by the widely-used `ci-info`/`is-ci`
- * packages — is that any non-empty `CI` value counts as "in CI" unless it is one
+ * the de-facto convention (as codified by the widely-used `ci-info`/`is-ci`
+ * packages) is that any non-empty `CI` value counts as "in CI" unless it is one
  * of these explicit negations. We mirror that so a developer who exports
  * `CI=false` locally still gets local mode.
  */
@@ -39,7 +39,7 @@ const FALSY_CI = new Set(['', '0', 'false']);
  *   - `--ci` and `--local` are mutually exclusive; passing both throws.
  *   - An explicit flag always wins over the environment.
  *   - With no flag, default to `ci` when `CI` is truthy (non-empty and not an
- *     explicit negation — see {@link FALSY_CI}), else `local`.
+ *     explicit negation, see {@link FALSY_CI}), else `local`.
  */
 export function resolveRunMode(inputs: RunModeInputs): RunMode {
   if (inputs.ci && inputs.local) {
@@ -57,7 +57,7 @@ export function resolveRunMode(inputs: RunModeInputs): RunMode {
 /**
  * The baseline root a run compares against for the given mode: the committed
  * `paths.baselines` set in CI mode, the per-machine gitignored `paths.localCache`
- * in local mode. This is the single source of the mode→root mapping — both the
+ * in local mode. This is the single source of the mode→root mapping, both the
  * per-action comparison in `runAction` and the screen-coverage metric in `run`
  * select their root through here, so the two can never drift. Encodes the PRD
  * invariant that a local run never reads `paths.baselines`.

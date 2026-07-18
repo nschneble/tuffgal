@@ -27,7 +27,7 @@ export const LEGACY_BREAKPOINT = 'legacy';
  * Non-action files that may sit at the baselines root and must never be treated
  * as orphan candidates. `manifest.json` (the environment manifest, wave 6) is
  * the known one; it is a file, not an action directory, so the readdir walk
- * already skips it by virtue of only descending into directories — this set is a
+ * already skips it by virtue of only descending into directories. This set is a
  * belt-and-suspenders guard for any future flat file a sibling wave drops here.
  */
 const NON_ACTION_ENTRIES = new Set(['manifest.json']);
@@ -54,10 +54,10 @@ export function shouldScanForOrphans(
 /**
  * The distinct set of action names that ran at least one result this run. An
  * action directory under `paths.baselines` whose name is absent from this set
- * had no story compare against it — it is a candidate orphan. Derived from the
+ * had no story compare against it. It is a candidate orphan. Derived from the
  * flat `stories[].actions[]` walk so `skipped` entries (an earlier step failed)
  * still count the action as executed: the baseline was reachable this run, the
- * story simply broke before reaching it, which is a failure to surface — not a
+ * story simply broke before reaching it, which is a failure to surface, not a
  * baseline to retire.
  */
 export function executedActionNames(
@@ -74,7 +74,7 @@ export function executedActionNames(
 
 /**
  * Scans `baselinesDir` for orphaned committed baselines: action directories no
- * story executed this run. Detection only — the returned entries carry the
+ * story executed this run. Detection only. The returned entries carry the
  * absolute paths a later `approve --prune` deletes; this function never touches
  * the filesystem beyond reading directory listings.
  *
@@ -107,7 +107,7 @@ export async function scanOrphanedBaselines(
       isDir: dirent.isDirectory(),
     }));
   } catch {
-    // No baselines directory yet (a never-approved project) — nothing to orphan.
+    // No baselines directory yet (a never-approved project), nothing to orphan.
     return [];
   }
 

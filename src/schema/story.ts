@@ -5,7 +5,7 @@ import { BREAKPOINTS } from '../config.ts';
  * The set of valid per-story breakpoint names, derived from the single
  * {@link BREAKPOINTS} registry so the schema cannot drift from the modes the
  * runner actually knows how to render. `Object.keys` loses the literal-union
- * type, so we assert it back to a non-empty tuple of {@link BreakpointName}s —
+ * type, so we assert it back to a non-empty tuple of {@link BreakpointName}s.
  * `z.enum` needs a literal tuple to produce a typed enum, and the registry is
  * a non-empty `const` object so the cast is sound.
  */
@@ -18,7 +18,7 @@ const breakpointNames = Object.keys(BREAKPOINTS) as [
  * One per-story breakpoint selection, identical to the config-level
  * {@link BreakpointSelector}: a bare registry name (render at that mode's
  * built-in dimensions) or `{ name, width?, height? }` to override them. An
- * omitted `width`/`height` inherits the REGISTRY default — a story's list
+ * omitted `width`/`height` inherits the REGISTRY default. A story's list
  * stands alone and never references the project's per-mode overrides.
  */
 const breakpointSelectorSchema = z.union([
@@ -45,7 +45,7 @@ export type StoryStep = z.infer<typeof storyStepSchema>;
  * state lives at `.auth/<label>.json` and is loaded as the initial state
  * for every consumer.
  *
- * `storageState: "logged-in"` is retained as syntactic sugar — equivalent
+ * `storageState: "logged-in"` is retained as syntactic sugar, equivalent
  * to `needs: ["logged-in"]`. New stories should prefer the explicit form.
  */
 export const storySchema = z.object({
@@ -57,7 +57,7 @@ export const storySchema = z.object({
    * Named fixtures (declared on the consumer's `tuffgal.config.ts` under
    * `database.fixtures`) applied to the test database BEFORE the story's
    * browser context launches. Useful for stories that need preloaded
-   * state — e.g. a "mark all as read" flow needs links to exist first.
+   * state, e.g. a "mark all as read" flow needs links to exist first.
    * Fixtures apply sequentially in declaration order. Note that the test
    * DB is shared across parallel stories, so two stories applying
    * conflicting fixtures should be serialised via `needs`/`produces`
@@ -76,7 +76,7 @@ export const storySchema = z.object({
    * `config.breakpoints` for this story only (not intersected with them). Each
    * entry is a bare registry name (`mobile` | `tablet` | `laptop` | `desktop`)
    * or `{ name, width?, height? }`. Use it for stories whose modes differ from
-   * the project default — e.g. a project that defaults to `desktop`+`laptop`
+   * the project default, e.g. a project that defaults to `desktop`+`laptop`
    * while a mobile-only nav drawer runs just `mobile`, or a dense dashboard
    * that needs a wider desktop. A story may name a mode the project does not;
    * the list stands alone, resolved against the registry. Must be non-empty

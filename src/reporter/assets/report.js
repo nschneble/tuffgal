@@ -18,7 +18,7 @@
   //
   // Both writers use `textContent` (not `innerHTML`). If the new message
   // equals the current `textContent`, some screen readers will not re-announce
-  // — this is a documented platform limitation, not worked around here. A
+  //; this is a documented platform limitation, not worked around here. A
   // future caller that needs forced re-announcement would add a separate
   // `forceWrite()`; out of scope for this helper.
   //
@@ -115,7 +115,7 @@
         });
       });
 
-      // Selection lives in the DOM, so a collapse only HIDES it — a prior
+      // Selection lives in the DOM, so a collapse only HIDES it; a prior
       // Baseline/Diff pick would otherwise still be checked on the next expand.
       // Reset on COLLAPSE, not expand: the `toggle` event fires AFTER the state
       // change, so resetting on open flashes a visible baseline→actual jump.
@@ -138,7 +138,7 @@
 
   // Interactive screenshot viewer (rendered when the report is built with
   // interactiveMode). Each action shows ONE shared <img>. A native radio group
-  // (always-visible chips) is the committed-state source of truth — keyboard,
+  // (always-visible chips) is the committed-state source of truth; keyboard,
   // touch, and AT operate it exactly like the radio-tab viewer, and the chips
   // are the only path to Diff. On top of that, the mouse gesture is a STATELESS
   // blink-compare layered on the same <img>:
@@ -150,14 +150,14 @@
   // There is deliberately NO hover behavior: hover swapped the image the moment
   // the pointer wandered in, so the resting state under the cursor was the OLD
   // screenshot. Rest = committed; press = intentional compare. Diff is off the
-  // gesture too (secondary forensic view — its chip covers it).
+  // gesture too (secondary forensic view; its chip covers it).
   // The preview rewrites img.src plus the sight-only (aria-hidden) caption, so
   // the "Showing: {variant}" line always names the DISPLAYED image. It never
   // changes the checked radio, the img alt, any ARIA attribute, or any live
-  // region — so pressing announces nothing by construction. The caption and the
+  // region; so pressing announces nothing by construction. The caption and the
   // checked radio are two different truths on purpose: the caption tracks what
   // is displayed (preview included), the checked radio tracks the committed
-  // state AT operates on; during a press they diverge briefly — both remain
+  // state AT operates on; during a press they diverge briefly; both remain
   // accurate. Do NOT "fix" that by moving radio.checked during preview: checked
   // is the single accessible source of committed state, and press-flapping it
   // would announce to AT and leave revert() nothing stable to revert to.
@@ -193,12 +193,12 @@
         if (src !== null) sources[variant] = src;
       });
 
-      // `committed` mirrors the checked radio — the ONLY state the keyboard /
+      // `committed` mirrors the checked radio; the ONLY state the keyboard /
       // touch / AT path mutates. Mouse preview reverts here on release, leave,
       // and dragstart.
       var committed = null;
 
-      // Caption always names the DISPLAYED variant — committed or previewed.
+      // Caption always names the DISPLAYED variant; committed or previewed.
       // The equality check is a cheap idempotence guard: writes are skipped
       // when the label is already showing (e.g. revert after a no-op press).
       function setCaption(variant) {
@@ -251,7 +251,7 @@
       stage.addEventListener('mouseleave', revert);
       // A press that turns into a native image drag can swallow the mouseup
       // (the pointer never "leaves" the stage), which would leave the preview
-      // stuck. Native drag itself stays enabled — save-image is a platform
+      // stuck. Native drag itself stays enabled; save-image is a platform
       // feature, not ours to suppress.
       stage.addEventListener('dragstart', revert);
     }
@@ -269,7 +269,7 @@
   //   `pass`): a story is status-eligible iff its own rollup `data-status`
   //   (emitted on the .story element) matches the active status, or the status
   //   filter is "all". Within an eligible story, non-matching actions are then
-  //   PRUNED (hidden) so e.g. the `changed` view shows only the changed rows —
+  //   PRUNED (hidden) so e.g. the `changed` view shows only the changed rows ;
   //   and expand-all opens only those rows' screenshots. `skipped` actions are
   //   exempt from pruning: `skipped` exists on actions but not in the story
   //   rollup vocabulary, so pruning it could empty a story the pill counts (a
@@ -289,7 +289,7 @@
   //
   // The two axes are ANDed: a story shows iff it is status-eligible (story
   // rollup) AND breakpoint-eligible (has a matching container). apply() is a
-  // single top-down pass — story → [data-breakpoint] container — that reads BOTH
+  // single top-down pass; story → [data-breakpoint] container; that reads BOTH
   // active tokens, so re-running it after either axis changes yields the current
   // intersection (no stale hides carried between axes). The breakpoint pills
   // render only for multi-breakpoint runs, so on a single-breakpoint run this
@@ -326,7 +326,7 @@
 
     // Cached for the zero-match disable + focus-rescue logic in apply(). The
     // scope word is now static markup ("screenshots" visible, " all screenshots"
-    // sr-only), so the buttons are never relabelled per filter — the filter's own
+    // sr-only), so the buttons are never relabelled per filter; the filter's own
     // live-region announcement already covers the context change.
     var expandButton = document.querySelector('[data-bulk-toggle="expand"]');
     var collapseButton = document.querySelector(
@@ -359,18 +359,18 @@
     //      reveal starts from a clean slate.
     //   3. STATUS pruning is action-level. Inside each breakpoint-eligible
     //      container, an action is hidden when statusFilter is active and the
-    //      action's own data-status differs — EXCEPT `skipped` actions, which
+    //      action's own data-status differs; EXCEPT `skipped` actions, which
     //      are never pruned. `skipped` is not a story-rollup status, so pruning
     //      it could empty a story the pill counts (a dependency-blocked story
     //      is rollup `failed` with only `skipped` actions); skipped rows are
     //      context for the failure, not mismatches.
-    //   4. A container pruned to zero visible actions is hidden — a captioned
+    //   4. A container pruned to zero visible actions is hidden; a captioned
     //      empty list is a dead end. The story shows iff at least one container
     //      survives with a visible action.
     // Deliberate gate asymmetry under combined filters: the ROLLUP gates the
     // story, the exact match prunes actions. Under "changed at mobile", a story
     // whose rollup is `failed` stays hidden even if its mobile container holds
-    // a `changed` action — that matches the pill's per-story rollup semantics.
+    // a `changed` action; that matches the pill's per-story rollup semantics.
     //
     // Recompute invariant: apply() re-runs this for EVERY story on every filter
     // change, unconditionally recomputing action.hidden in every breakpoint-
@@ -462,7 +462,7 @@
         trigger.focus();
       }
       // Disable both bulk-toggle buttons when the intersection matches zero
-      // stories — there is nothing to expand/collapse. Runs on EVERY apply()
+      // stories; there is nothing to expand/collapse. Runs on EVERY apply()
       // call, so a filter change that re-reveals stories re-enables them.
       if (expandButton) expandButton.disabled = hasNone;
       if (collapseButton) collapseButton.disabled = hasNone;
@@ -524,7 +524,7 @@
         var token = button.getAttribute('data-filter');
         var isActive = button.getAttribute('aria-pressed') === 'true';
         // Re-clicking the active, non-"all" filter reverts that axis to "all".
-        // Focus stays on the clicked button — it is in the summary row and never
+        // Focus stays on the clicked button; it is in the summary row and never
         // hidden by its own action.
         if (isActive && token !== 'all') {
           setPressed(statusButtons, statusAllButton);
@@ -561,9 +561,9 @@
   // Bulk-toggle (expand all / collapse all) for the screenshot <details> panels.
   // Acts on the moment: only visible rows (.story:not([hidden])) are affected,
   // so the filter scope wins. Each <details> retains its own open state per
-  // native HTML semantics — newly-revealed stories after a later filter change
+  // native HTML semantics; newly-revealed stories after a later filter change
   // stay closed by default (their default state). A future maintainer might be
-  // tempted to "fix" this by tracking a global expanded mode; don't — the lack
+  // tempted to "fix" this by tracking a global expanded mode; don't; the lack
   // of persistence is the agreed accessibility-lead decision (act-on-the-moment).
   //
   // We use `details.open = true/false` rather than `details.click()` so the
@@ -587,7 +587,7 @@
     function apply(mode) {
       var shouldOpen = mode === 'expand';
       // Collapse-all focus rescue: if focus sits inside a disclosure that is
-      // about to collapse, move it to that disclosure's <summary> first — the
+      // about to collapse, move it to that disclosure's <summary> first; the
       // summary stays visible after collapse, so focus is never dropped into a
       // hidden subtree. Expand-all reveals content, so it needs no rescue.
       if (!shouldOpen) {
@@ -607,7 +607,7 @@
         // axis prunes non-matching actions ([hidden] on the .action) and the
         // breakpoint axis hides whole containers, so an action is "visible"
         // iff neither it nor its container is hidden. Excluding both keeps a
-        // pruned row's panels closed — otherwise they would open here and
+        // pruned row's panels closed; otherwise they would open here and
         // later appear pre-expanded when a filter change reveals them,
         // breaking the default-closed contract.
         var panels = Array.prototype.slice.call(
@@ -683,14 +683,14 @@
   // Deep-link support for the CI comment. A URL like `…/index.html#story-3`
   // (built by tuffgal-action from the same `results.json` story ordinal that
   // template.ts renders as `id="story-<index>"`) lands the reader ON that story
-  // with its screenshots already expanded — no scrolling or clicking through a
+  // with its screenshots already expanded; no scrolling or clicking through a
   // 34-row report to find the one that changed.
   //
   // On a matching hash we:
   //   1. Expand every VISIBLE screenshot disclosure in that story, reusing the
   //      bulk-toggle's own visibility predicate so a filtered-out row is not
   //      force-opened (default-closed contract). Setting `details.open` directly
-  //      — not `.click()` — mirrors the bulk-toggle and avoids a toggle cascade.
+  //     ; not `.click()`; mirrors the bulk-toggle and avoids a toggle cascade.
   //   2. Move focus to the story `<li>` (tabindex="-1") so assistive tech
   //      announces the story prose rather than dropping the reader mid-list.
   //      `preventScroll` keeps focus from yanking the viewport before our own

@@ -1,11 +1,6 @@
 import { access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  chromium,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from 'playwright';
+import { type Browser, type BrowserContext, type Page } from 'playwright';
 import {
   resolveSelectorList,
   type ResolvedBreakpoint,
@@ -27,10 +22,18 @@ export interface RunStoryOptions {
   story: Story;
   file: string;
   needs: string[];
+  /**
+   * The needs used to resolve on-disk auth state, distinct from the
+   * scheduler-facing `needs` which a breakpoint pass strips to its in-pass
+   * subset (see {@link adaptNeedsForPass}). Retains the story's ORIGINAL needs
+   * so a consumer whose producer rendered in a different pass still loads that
+   * producer's persisted auth. Otherwise the consumer renders logged-out.
+   * Omitted by direct callers/tests, where it falls back to `needs`.
+   */
+  authNeeds?: string[];
   produces: string[];
   actions: Map<string, Action>;
   config: ResolvedConfig;
-  headed: boolean;
   coverage?: CoverageCollector;
   /**
    * Render only this breakpoint. The run driver passes one breakpoint per
@@ -51,42 +54,41 @@ export interface RunStoryOptions {
 const TRACE_SUBDIR = 'traces';
 
 /**
- * Drives one story end-to-end on a freshly launched browser. Wraps the
- * context in Playwright tracing so a failed action leaves behind a
- * full-fidelity `trace.zip` for post-mortem in the Playwright trace viewer.
- * If the story declares `produces` labels, the post-run storage state is
- * persisted under `<authState>/<label>.json` so consumer stories can attach
- * to it without replaying the producer's actions.
- */
-export async function runStory(options: RunStoryOptions): Promise<StoryResult> {
-  const startedAt = new Date();
-  // Fixtures are applied per breakpoint inside `runStoryWithBrowser`, not once
-  // here — see the reseed comment in the breakpoint loop.
-  const browser = await chromium.launch({ headless: !options.headed });
-  try {
-    return await runStoryWithBrowser(browser, options, startedAt);
-  } finally {
-    await browser.close();
-  }
-}
-
-/**
- * Drives every selected breakpoint of one story against an already-launched
- * browser. Split out from `runStory` (which owns browser lifecycle + fixtures)
- * so tests can exercise the per-breakpoint loop — context isolation, the
- * failed-action-does-not-abort-others guarantee, trace-zip uniqueness, `produces`
- * persistence, and the throw-closes-context invariant — against fake
- * Browser/BrowserContext/Page objects without launching a real Chromium.
+ * Drives every selected breakpoint of one story against the run's shared,
+ * already-launched browser. The run driver (`runAll`) launches ONE browser for
+ * the whole run and closes it once at the end, so this function never owns
+ * browser lifecycle. It only opens a fresh `browser.newContext()` per
+ * breakpoint. That per-breakpoint context is the isolation boundary: cookies,
+ * storage, and cache live on the context, not the browser, so stories sharing a
+ * browser never leak state into one another. Wraps each context in Playwright
+ * tracing so a failed action leaves behind a full-fidelity `trace.zip` for
+ * post-mortem in the Playwright trace viewer. If the story declares `produces`
+ * labels, the post-run storage state is persisted under
+ * `<authState>/<label>.json` so consumer stories can attach to it without
+ * replaying the producer's actions.
+ *
+ * Taking the browser as a parameter also lets tests exercise the per-breakpoint
+ * loop (context isolation, the failed-action-does-not-abort-others guarantee,
+ * trace-zip uniqueness, `produces` persistence, and the throw-closes-context
+ * invariant) against fake Browser/BrowserContext/Page objects without
+ * launching a real Chromium.
  */
 export async function runStoryWithBrowser(
   browser: Browser,
   options: RunStoryOptions,
   startedAt: Date,
 ): Promise<StoryResult> {
-  const { story, file, needs, produces, config, coverage } = options;
+  const { story, file, needs, authNeeds, produces, config, coverage } = options;
   // Resolve the storage state once: it is viewport-independent, so every
-  // breakpoint context loads the same `needs` auth payload.
-  const storageStatePath = await resolveStorageStateForNeeds(config, needs);
+  // breakpoint context loads the same auth payload. Uses `authNeeds` (the
+  // story's ORIGINAL needs) rather than the scheduler-facing `needs`, which a
+  // breakpoint pass strips to its in-pass subset. A consumer whose producer
+  // rendered in a different pass must still load that producer's off-disk auth.
+  // Falls back to `needs` for direct callers/tests that omit `authNeeds`.
+  const storageStatePath = await resolveStorageStateForNeeds(
+    config,
+    authNeeds ?? needs,
+  );
   // The run driver hands us a single breakpoint per call so each breakpoint is
   // its own reset/seed pass (the database-isolation guarantee). Direct
   // callers/tests that omit it fall back to the story's full run set, which
@@ -100,7 +102,7 @@ export async function runStoryWithBrowser(
   // failed if any breakpoint had a failed/skipped action, else changed if any
   // breakpoint drifted or introduced a new baseline, else pass.
   let storyStatus: StoryStatus = 'pass';
-  // `produces` writes the post-run storage state exactly once — from the first
+  // `produces` writes the post-run storage state exactly once, from the first
   // breakpoint whose action sequence did not fail. Persisting per breakpoint
   // would redundantly rewrite (and risk clobbering) the same `<label>.json`
   // with state that is identical for auth purposes; one good run is enough.
@@ -113,15 +115,15 @@ export async function runStoryWithBrowser(
 
   for (const breakpoint of runSet) {
     // Apply the story's own fixtures before the breakpoint context launches.
-    // The deeper cross-breakpoint isolation — a destructive story (change
+    // The deeper cross-breakpoint isolation, a destructive story (change
     // password, empty read history) mutating globally-seeded rows it does not
-    // own a fixture for — is handled one level up: the run driver executes each
+    // own a fixture for, is handled one level up: the run driver executes each
     // breakpoint as a separate pass behind a full `database.reset()`, so this
     // call only owns the story-local seed. Fixtures stay idempotent (each
     // deletes its own rows before re-inserting), so a non-mutating story pays
     // just a cheap re-apply. When this loop runs multiple breakpoints itself
     // (a direct caller that passed no single `breakpoint`), the fixture re-apply
-    // is the only reset between them — that path does not get the per-pass DB
+    // is the only reset between them. That path does not get the per-pass DB
     // reset, so destructive multi-breakpoint stories must run through the driver.
     for (const fixture of story.fixtures ?? []) {
       await applyFixture(config, fixture);
@@ -135,13 +137,13 @@ export async function runStoryWithBrowser(
     });
     // The whole per-breakpoint lifecycle runs under try/finally so the context
     // is ALWAYS closed, even when something inside throws. Throw policy: an
-    // *action* failing is a normal visual-regression outcome — it returns a
+    // *action* failing is a normal visual-regression outcome. It returns a
     // `failed` ActionResult, the loop records it, and the remaining breakpoints
     // still run (the documented "one breakpoint failing does not abort the
     // others" guarantee). A *thrown* exception here is different: it means the
     // harness itself faulted (tracing/coverage threw, the page crashed, an
     // unexpected error escaped `runActionsForBreakpoint`). That is not a diff to
-    // report — it is an infra fault, so we let it propagate and abort the whole
+    // report. It is an infra fault, so we let it propagate and abort the whole
     // story. The `finally` guarantees we still close this context first, so a
     // throw can never leak the in-flight BrowserContext (the bug this guards).
     try {
@@ -180,8 +182,8 @@ export async function runStoryWithBrowser(
         firstTracePath = tracePath;
       }
       // Persist once, from the first breakpoint that ran clean. A failure in
-      // this breakpoint does not abort the loop — the remaining breakpoints
-      // still run so the report shows every mode — but it cannot supply the
+      // this breakpoint does not abort the loop (the remaining breakpoints
+      // still run so the report shows every mode) but it cannot supply the
       // auth state.
       if (
         !producedPersisted &&
@@ -212,13 +214,13 @@ export async function runStoryWithBrowser(
 /**
  * Picks the breakpoint(s) this story runs at:
  *
- *   - `story.breakpoints` set — run exactly those, REPLACING the project's
+ *   - `story.breakpoints` set: run exactly those, REPLACING the project's
  *     `config.breakpoints` (not intersected). The story's list stands alone:
  *     it may name a mode the project does not, each selector resolved against
  *     the registry, order preserved, duplicate names dropped (first wins). The
  *     schema guarantees a non-empty list when the field is present.
  *
- *   - omitted — run the project's `config.breakpoints`, in order (the default).
+ *   - omitted: run the project's `config.breakpoints`, in order (the default).
  */
 export function resolveRunSet(
   story: Story,
@@ -259,7 +261,7 @@ interface BreakpointRun {
  * Runs every action of the story once, in order, against a single breakpoint's
  * page. Preserves the existing within-breakpoint fail-fast: once an action
  * fails (or names an unknown action), the remaining actions of THIS breakpoint
- * are skipped — we never screenshot state that follows a broken step. The
+ * are skipped. We never screenshot state that follows a broken step. The
  * returned status is scoped to this breakpoint; the caller merges it into the
  * story-wide status across all breakpoints.
  */
@@ -369,7 +371,7 @@ async function resolveStorageStateForNeeds(
     } catch {
       // Producer ran but did not emit a storage state file. That is fine
       // when the label only carries an ordering constraint, not an auth
-      // payload — fall through to the next label.
+      // payload. Fall through to the next label.
     }
   }
   return undefined;

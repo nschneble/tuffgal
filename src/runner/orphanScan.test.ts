@@ -189,7 +189,7 @@ describe('scanOrphanedBaselines', () => {
     assert.deepEqual(orphans, []);
   });
 
-  it('detects without deleting — the orphaned files stay on disk', async () => {
+  it('detects without deleting: the orphaned files stay on disk', async () => {
     const dir = await tempBaselinesDir();
     await touch(join(dir, 'visit-gone', 'desktop.png'));
     await touch(join(dir, 'visit-gone', 'desktop.a11y.yaml'));

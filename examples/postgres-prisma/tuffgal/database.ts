@@ -33,7 +33,8 @@ export const TEST_USER = {
  * login flow against fresh rows.
  *
  * Wired to `database.reset` in `tuffgal.config.ts`. Tuffgal calls this once
- * before scheduling the first story.
+ * per breakpoint pass, so a single-breakpoint run resets once and an
+ * N-breakpoint run resets N times before each pass renders.
  */
 export async function resetTestDatabase(): Promise<void> {
   guardAgainstWrongDatabase(TEST_DATABASE_URL);
