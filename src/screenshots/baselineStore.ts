@@ -6,7 +6,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { PNG } from 'pngjs';
 
@@ -338,16 +338,4 @@ export async function copyRecompressedPng(
 ): Promise<void> {
   await mkdir(dirname(destinationPath), { recursive: true });
   await copyFile(actualPath, destinationPath);
-}
-
-/**
- * Turns an absolute screenshot path into a path that is relative to the
- * generated report directory so the HTML report can reference it with a
- * portable `src` attribute.
- */
-export function pathRelativeToReport(
-  reportDir: string,
-  absolute: string,
-): string {
-  return relative(reportDir, absolute);
 }

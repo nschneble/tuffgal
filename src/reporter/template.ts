@@ -417,11 +417,13 @@ function renderStoryActions(
   >();
   story.actions.forEach((action, actionIndex) => {
     const key = action.breakpoint ?? '';
-    if (!buckets.has(key)) {
-      buckets.set(key, []);
+    let bucket = buckets.get(key);
+    if (bucket === undefined) {
+      bucket = [];
+      buckets.set(key, bucket);
       order.push(key);
     }
-    buckets.get(key)!.push({ action, id: `s${storyIndex}-a${actionIndex}` });
+    bucket.push({ action, id: `s${storyIndex}-a${actionIndex}` });
   });
 
   // One mode (or untagged) → flat list, no caption. Captions only earn their

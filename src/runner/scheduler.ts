@@ -1,6 +1,6 @@
 import { normalisedNeeds } from '../schema/story.ts';
 import type { StoryFile } from '../schema/load.ts';
-import type { StoryResult, StoryStatus } from '../schema/result.ts';
+import type { StoryResult } from '../schema/result.ts';
 
 export interface ScheduledStory extends StoryFile {
   needs: string[];
@@ -215,7 +215,7 @@ function skipDependents(
       context.results.set(item.file, {
         story: item.story.story,
         file: item.file,
-        status: 'failed' as StoryStatus,
+        status: 'failed',
         startedAt: new Date().toISOString(),
         finishedAt: new Date().toISOString(),
         durationMs: 0,

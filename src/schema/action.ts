@@ -113,7 +113,13 @@ export const stepSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('scroll'),
     direction: z.enum(['up', 'down']),
-    amount: z.number().int().positive().optional(),
+    /**
+     * Wheel distance in pixels. Defaults to 600 — roughly a viewport's worth
+     * of scroll — so a story can request "scroll down" without picking a number.
+     * The default is applied here (declaratively, like the other step defaults)
+     * so the handler receives a concrete value.
+     */
+    amount: z.number().int().positive().default(600),
   }),
   z.object({
     kind: z.literal('intercept'),

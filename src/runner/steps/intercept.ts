@@ -1,4 +1,7 @@
 import type { Page } from 'playwright';
+import type { Step } from '../../schema/action.ts';
+
+type InterceptStep = Extract<Step, { kind: 'intercept' }>;
 
 /**
  * Installs a network intercept on the page. `pattern` is a Playwright URL
@@ -10,8 +13,8 @@ import type { Page } from 'playwright';
 export async function runIntercept(
   page: Page,
   pattern: string,
-  respond: { status: number; body?: unknown },
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  respond: InterceptStep['respond'],
+  method?: InterceptStep['method'],
 ): Promise<void> {
   await page.route(pattern, async (route) => {
     if (method && route.request().method() !== method) {

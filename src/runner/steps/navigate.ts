@@ -22,6 +22,11 @@ export async function runNavigate(
       `navigate path "${path}" resolved off-origin to ${url.origin} (expected ${baseOrigin}); refusing to navigate off the configured baseUrl`,
     );
   }
+  // Intentional split from the schema-declared defaults: `waitUntil`'s 'load'
+  // default stays in the handler (not `.default('load')` in the schema) because
+  // runNavigate is a standalone defense boundary — the origin guard above means
+  // it is called directly (see navigate.test.ts), so it must supply its own
+  // default rather than assume a schema-parsed value.
   await page.goto(url.toString(), {
     timeout: config.navigationTimeoutMs,
     waitUntil: waitUntil ?? 'load',
