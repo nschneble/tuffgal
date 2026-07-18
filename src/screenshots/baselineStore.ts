@@ -242,10 +242,13 @@ export async function writeText(path: string, content: string): Promise<void> {
  *     case) is swallowed and the original buffer is returned, so a recompress
  *     miss degrades to "write the bytes we were given" rather than a torn file.
  *
- * This is the single lossless-recompress seam for every PNG the tool writes:
- * `writePng` routes through it, so baseline, candidate, cache, actual, and diff
- * writes all inherit it without per-callsite wiring. Deterministic — pngjs's
- * encoder is a pure function of the pixel data and the fixed options above.
+ * This is the lossless-recompress seam for the tool's DURABLE PNG writes:
+ * {@link writeDurablePng} routes through it, so baseline, candidate, cache, and
+ * promoted-baseline writes inherit it without per-callsite wiring. Transient
+ * report artifacts (`actual`, `diff`) deliberately skip it via
+ * {@link writeTransientPng} — the max-effort encode is wasted on a file that is
+ * overwritten or deleted next run. Deterministic — pngjs's encoder is a pure
+ * function of the pixel data and the fixed options above.
  *
  * Deliberately NOT palette-quantised and never lossy: colour type and bit depth
  * are preserved by the RGBA round-trip.
@@ -263,9 +266,52 @@ export function recompressPng(png: Buffer): Buffer {
   return recompressed.length < png.length ? recompressed : png;
 }
 
-export async function writePng(path: string, png: Buffer): Promise<void> {
+/**
+ * Shared write core: ensure the parent directory exists, then write the bytes
+ * verbatim. The durable/transient split lives one level up — this only handles
+ * the mkdir + write both share.
+ */
+async function writePngBytes(path: string, bytes: Buffer): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, recompressPng(png));
+  await writeFile(path, bytes);
+}
+
+/**
+ * Writes a DURABLE PNG — a baseline, a candidate, or a promoted baseline — that
+ * outlives the run and is re-read on every later comparison. These earn the
+ * max-effort lossless recompress (see {@link recompressPng}): the level-9
+ * deflate + adaptive per-scanline filtering is paid once at write, and every
+ * subsequent read of the smaller file benefits.
+ *
+ * Transient report artifacts (the run's `actual`, the `diff` overlay) are
+ * overwritten or deleted next run and must NOT pay this cost — they route
+ * through {@link writeTransientPng}, which skips recompress entirely.
+ */
+export async function writeDurablePng(
+  path: string,
+  png: Buffer,
+): Promise<void> {
+  await writePngBytes(path, recompressPng(png));
+}
+
+/**
+ * Writes a TRANSIENT PNG — the run's `actual` capture or the `diff` overlay —
+ * verbatim, with NO recompress pass. These artifacts live only for the current
+ * report: an `actual` is overwritten on the next run and a `diff` is deleted the
+ * moment a comparison passes, so shrinking them with the expensive level-9
+ * encode is wasted work. The `diff` overlay in particular arrives already
+ * deflate-encoded by {@link renderDiffOverlay}'s `PNG.sync.write`, so a
+ * recompress round-trip would only decode and re-encode it back to
+ * near-identical bytes.
+ *
+ * Durable artifacts (baselines, candidates, promoted baselines) DO earn the
+ * recompress and use {@link writeDurablePng}.
+ */
+export async function writeTransientPng(
+  path: string,
+  png: Buffer,
+): Promise<void> {
+  await writePngBytes(path, png);
 }
 
 export async function deleteIfExists(path: string): Promise<void> {
@@ -278,12 +324,13 @@ export async function deleteIfExists(path: string): Promise<void> {
 
 /**
  * Copies an already-written PNG (the run's `actual`, or a `candidate`) to a new
- * destination verbatim. No recompress here on purpose: the source was produced
- * by `writePng`, which already ran `recompressPng`, so the bytes on disk are the
- * recompressed ones. Copying them forward keeps the destination losslessly
- * recompressed for free. The only non-test caller is `approve` refreshing the
- * per-machine cache; `approve --from` does NOT use this — it reads each source
- * once during validation and writes the retained buffer through {@link writePng}.
+ * destination verbatim. No recompress here on purpose: the source is a durable
+ * baseline produced by {@link writeDurablePng}, which already ran
+ * `recompressPng`, so the bytes on disk are the recompressed ones. Copying them
+ * forward keeps the destination losslessly recompressed for free. The only
+ * non-test caller is `approve` refreshing the per-machine cache; `approve --from`
+ * does NOT use this — it reads each source once during validation and writes the
+ * retained buffer through {@link writeDurablePng}.
  */
 export async function copyRecompressedPng(
   actualPath: string,

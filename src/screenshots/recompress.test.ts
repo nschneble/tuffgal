@@ -7,7 +7,12 @@ import { describe, it } from 'node:test';
 import { PNG } from 'pngjs';
 
 import { scoreDiff } from './diff.ts';
-import { readBaseline, recompressPng, writePng } from './baselineStore.ts';
+import {
+  readBaseline,
+  recompressPng,
+  writeDurablePng,
+  writeTransientPng,
+} from './baselineStore.ts';
 
 /**
  * Builds a real encoded PNG whose pixels are a deterministic gradient/noise mix.
@@ -104,18 +109,21 @@ describe('recompressPng — size', () => {
   });
 });
 
-describe('writePng — recompress integration', () => {
-  it('writes a valid PNG the baseline read + diff path can consume', async () => {
+describe('writeDurablePng — recompress integration', () => {
+  it('recompresses a durable write and stays readable by the diff path', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'tuffgal-recompress-'));
     try {
       const source = noisyPng(48, 48, { deflateLevel: 0, filterType: 0 });
       const path = join(dir, 'action', 'desktop.png');
-      await writePng(path, source);
+      await writeDurablePng(path, source);
 
       const onDisk = await readFile(path);
-      // writePng routed the bytes through recompressPng, so the file is the
-      // recompressed (no-larger) form, not the bloated source.
-      assert.ok(onDisk.length <= source.length);
+      // writeDurablePng routed the bytes through recompressPng, so the file is
+      // the recompressed (strictly smaller here) form, not the bloated source.
+      assert.ok(
+        onDisk.length < source.length,
+        `durable write should shrink the level-0 fixture (${onDisk.length}B vs ${source.length}B)`,
+      );
 
       // The written baseline must round-trip through the exact read helper and
       // diff core the runner uses — same file, zero pixel diff, perfect SSIM.
@@ -126,9 +134,66 @@ describe('writePng — recompress integration', () => {
       );
       assert.deepEqual(pixelsOf(readBack), pixelsOf(source));
 
-      const outcome = scoreDiff(readBack, source, 0.1);
-      assert.equal(outcome.diffPixels, 0);
-      assert.ok(outcome.ssimScore >= 0.9999);
+      const { score } = scoreDiff(readBack, source, 0.1);
+      assert.equal(score.diffPixels, 0);
+      assert.ok(score.ssimScore >= 0.9999);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('writeTransientPng — skips recompress', () => {
+  it('writes the given bytes verbatim, without the recompress pass', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tuffgal-transient-'));
+    try {
+      // A deliberately bloated (level-0, no-filter) source: a durable write
+      // would shrink it, so if the transient file matches the source byte-for-
+      // byte we have proven no recompress ran.
+      const source = noisyPng(48, 48, { deflateLevel: 0, filterType: 0 });
+      const path = join(dir, 'story', 'action.desktop.actual.png');
+      await writeTransientPng(path, source);
+
+      const onDisk = await readFile(path);
+      assert.equal(
+        onDisk.length,
+        source.length,
+        'transient write must not shrink the source — no recompress',
+      );
+      assert.deepEqual(
+        onDisk,
+        source,
+        'transient write must land the source bytes verbatim',
+      );
+
+      // Still a valid, diff-consumable PNG despite skipping recompress.
+      const readBack = await readBaseline(path);
+      assert.ok(readBack !== undefined);
+      assert.deepEqual(pixelsOf(readBack), pixelsOf(source));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('durable and transient writes of the same bloated source differ in size', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tuffgal-both-'));
+    try {
+      const source = noisyPng(64, 64, { deflateLevel: 0, filterType: 0 });
+      const durablePath = join(dir, 'durable.png');
+      const transientPath = join(dir, 'transient.png');
+      await writeDurablePng(durablePath, source);
+      await writeTransientPng(transientPath, source);
+
+      const durable = await readFile(durablePath);
+      const transient = await readFile(transientPath);
+      // Same pixels, different bytes: the durable write paid the recompress and
+      // shrank; the transient one kept the bloated source as-is.
+      assert.ok(
+        durable.length < transient.length,
+        `durable (${durable.length}B) must be smaller than transient (${transient.length}B)`,
+      );
+      assert.deepEqual(transient, source);
+      assert.deepEqual(pixelsOf(durable), pixelsOf(transient));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

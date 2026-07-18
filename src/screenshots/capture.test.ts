@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { Page } from 'playwright';
-import { capturePage } from './capture.ts';
+import { capturePage, FullPageTooLargeError } from './capture.ts';
 
 /**
  * A minimal stand-in for the bits of `Page` that `capturePage` touches. It
@@ -82,5 +82,94 @@ describe('capturePage', () => {
     await capturePage(page, [], 'fullPage');
 
     assert.equal(options[0]?.fullPage, true);
+  });
+});
+
+/**
+ * A fake page whose scroll-reset evaluate returns fixed layout dimensions —
+ * exactly what the real page-context measurement hands back — so the full-page
+ * area guard can be exercised without a browser.
+ */
+function fakePageWithDimensions(dimensions: {
+  width: number;
+  height: number;
+}): { page: Page; calls: string[] } {
+  const calls: string[] = [];
+  const page = {
+    async evaluate(): Promise<unknown> {
+      calls.push('evaluate');
+      return dimensions;
+    },
+    async screenshot(): Promise<Buffer> {
+      calls.push('screenshot');
+      return Buffer.from('png');
+    },
+  } as unknown as Page;
+  return { page, calls };
+}
+
+describe('capturePage — full-page area guard', () => {
+  it('throws FullPageTooLargeError before shooting when the page exceeds the cap', async () => {
+    const { page, calls } = fakePageWithDimensions({
+      width: 1280,
+      height: 40_000,
+    });
+
+    await assert.rejects(
+      capturePage(page, [], 'fullPage', {
+        maxPixels: 30_000_000,
+        label: 'story "tall.json" action "scroll" (desktop)',
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof FullPageTooLargeError);
+        assert.equal(error.width, 1280);
+        assert.equal(error.height, 40_000);
+        assert.equal(error.maxPixels, 30_000_000);
+        // Actionable message: names the capture, the dimensions, and a remedy.
+        assert.match(error.message, /tall\.json/);
+        assert.match(error.message, /1280x40000/);
+        assert.match(error.message, /maxFullPagePixels/);
+        return true;
+      },
+    );
+
+    // The shutter must NOT fire once the guard trips — that is the whole point,
+    // to avoid compositing the oversized image at all.
+    assert.ok(
+      !calls.includes('screenshot'),
+      'screenshot must not be taken when the guard rejects',
+    );
+  });
+
+  it('captures normally when the full page is under the cap', async () => {
+    const { page, calls } = fakePageWithDimensions({
+      width: 1280,
+      height: 4000,
+    });
+
+    const buffer = await capturePage(page, [], 'fullPage', {
+      maxPixels: 30_000_000,
+      label: 'story "long.json" action "scroll" (desktop)',
+    });
+
+    assert.ok(Buffer.isBuffer(buffer));
+    assert.deepEqual(calls, ['evaluate', 'screenshot']);
+  });
+
+  it('never measures or guards a viewport capture', async () => {
+    const { page, calls } = fakePageWithDimensions({
+      width: 99_999,
+      height: 99_999,
+    });
+
+    // A cap far below the page's dimensions — but viewport mode is already
+    // bounded by the breakpoint, so the guard must not even measure.
+    const buffer = await capturePage(page, [], 'viewport', {
+      maxPixels: 1,
+      label: 'story "wide.json" action "open" (desktop)',
+    });
+
+    assert.ok(Buffer.isBuffer(buffer));
+    assert.deepEqual(calls, ['screenshot']);
   });
 });

@@ -5,7 +5,7 @@ import type { ResolvedConfig } from '../config.ts';
 import {
   ACTION_NAME_PATTERN,
   BREAKPOINT_SEGMENT_PATTERN,
-  writePng,
+  writeDurablePng,
   writeText,
 } from '../screenshots/baselineStore.ts';
 import {
@@ -106,9 +106,9 @@ export class ApproveFromError extends Error {
  * the committed baseline is provably the payload that passed validation (no
  * decode-swap / symlink-swap window between the check and the write).
  *
- * PNGs are written through {@link writePng} (decode→recompress→encode), so the
- * promoted baseline is losslessly recompressed and provably decodable in one
- * step — never a raw `copyFile` of unvalidated artifact bytes.
+ * PNGs are written through {@link writeDurablePng} (decode→recompress→encode),
+ * so the promoted baseline is losslessly recompressed and provably decodable in
+ * one step — never a raw `copyFile` of unvalidated artifact bytes.
  */
 export async function approveFrom(
   config: ResolvedConfig,
@@ -133,7 +133,7 @@ export async function approveFrom(
   // that were validated (no decode-swap / symlink-swap window).
   for (const write of plan) {
     if (write.kind === 'png') {
-      await writePng(write.destination, write.bytes);
+      await writeDurablePng(write.destination, write.bytes);
     } else {
       await writeText(write.destination, write.bytes.toString('utf8'));
     }
@@ -355,8 +355,8 @@ async function planActionDir(
  * Decodes every planned PNG's RETAINED bytes (validation phase) so a corrupt or
  * non-PNG payload aborts the whole approve with zero writes. Decoding the bytes
  * already held on the plan (not a fresh read) is what makes the decode-check and
- * the eventual write see the same payload. `writePng`'s own recompress step
- * SWALLOWS a decode failure (it falls back to writing the given bytes), which is
+ * the eventual write see the same payload. `writeDurablePng`'s own recompress
+ * step SWALLOWS a decode failure (it falls back to writing the given bytes), which is
  * the right behaviour for a trusted capture but wrong for an untrusted artifact
  * — a corrupt candidate PNG must fail closed, not land verbatim as a baseline.
  */

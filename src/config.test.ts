@@ -80,6 +80,11 @@ describe('assertValidConfig', () => {
     assert.throws(() => assertValidConfig(config, SOURCE), /workers/);
   });
 
+  it('rejects a non-positive maxFullPagePixels', () => {
+    const config = { ...validConfig(), maxFullPagePixels: 0 };
+    assert.throws(() => assertValidConfig(config, SOURCE), /maxFullPagePixels/);
+  });
+
   it('accepts a valid breakpoints selection', () => {
     const config = { ...validConfig(), breakpoints: ['mobile', 'desktop'] };
     assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
@@ -192,6 +197,16 @@ describe('loadConfig breakpoint resolution', () => {
   it('resolves an explicit captureMode', async () => {
     const resolved = await load("captureMode: 'fullPage',");
     assert.equal(resolved.captureMode, 'fullPage');
+  });
+
+  it('defaults maxFullPagePixels to 30_000_000 when nothing is set', async () => {
+    const resolved = await load('');
+    assert.equal(resolved.maxFullPagePixels, 30_000_000);
+  });
+
+  it('resolves an explicit maxFullPagePixels', async () => {
+    const resolved = await load('maxFullPagePixels: 12_000_000,');
+    assert.equal(resolved.maxFullPagePixels, 12_000_000);
   });
 
   it('defaults interactiveMode to false when nothing is set', async () => {

@@ -166,6 +166,18 @@ export interface TuffgalConfig {
    * {@link CaptureMode}.
    */
   captureMode?: CaptureMode;
+  /**
+   * Safety cap on a `fullPage` capture's total area, in pixels (width ×
+   * height). A `fullPage` shot composites the whole scrollable document, so an
+   * infinite-scroll or runaway-tall page decodes to an enormous RGBA array
+   * (4 bytes/pixel) and can exhaust memory across workers. When a page's
+   * measured layout area exceeds this cap, the run fails with a clear,
+   * actionable error naming the story/action instead of risking an OOM. Only
+   * `fullPage` captures are bounded — `viewport` shots are already capped by the
+   * breakpoint dimensions. Defaults to 30_000_000 (e.g. 1280×~23_400), well
+   * above realistic long pages but below runaway heights.
+   */
+  maxFullPagePixels?: number;
   /** Default Playwright locator + action timeout. Defaults to 10_000. */
   defaultTimeoutMs?: number;
   /** Default navigation timeout. Defaults to 15_000. */
@@ -218,6 +230,8 @@ export interface ResolvedConfig {
   breakpoints: [ResolvedBreakpoint, ...ResolvedBreakpoint[]];
   /** Resolved screenshot scope; defaults to `viewport`. */
   captureMode: CaptureMode;
+  /** Resolved full-page area cap in pixels; defaults to 30_000_000. */
+  maxFullPagePixels: number;
   defaultTimeoutMs: number;
   navigationTimeoutMs: number;
   frozenTime: string;
@@ -231,6 +245,7 @@ export interface ResolvedConfig {
 
 const DEFAULTS = {
   captureMode: 'viewport',
+  maxFullPagePixels: 30_000_000,
   defaultTimeoutMs: 10_000,
   navigationTimeoutMs: 15_000,
   frozenTime: '2026-01-15T12:00:00.000Z',
@@ -321,6 +336,7 @@ export function assertValidConfig(input: unknown, source: string): void {
     'defaultTimeoutMs',
     'navigationTimeoutMs',
     'workers',
+    'maxFullPagePixels',
   ] as const) {
     const value = config[key];
     if (value !== undefined && (typeof value !== 'number' || value <= 0)) {
@@ -411,6 +427,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     storageStatePins: input.storageStatePins ?? [],
     breakpoints,
     captureMode: input.captureMode ?? DEFAULTS.captureMode,
+    maxFullPagePixels: input.maxFullPagePixels ?? DEFAULTS.maxFullPagePixels,
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:
       input.navigationTimeoutMs ?? DEFAULTS.navigationTimeoutMs,

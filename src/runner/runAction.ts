@@ -15,8 +15,9 @@ import {
   readBaseline,
   readJsonBaseline,
   withBaselineLock,
-  writePng,
+  writeDurablePng,
   writeText,
+  writeTransientPng,
 } from '../screenshots/baselineStore.ts';
 import { sleep } from '../util.ts';
 import { comparisonRootFor, type RunMode } from './mode.ts';
@@ -342,8 +343,13 @@ async function captureAndCompare(
     breakpoint,
   });
   const masks = resolveMasks(page, action.mask, interpolationParameters);
-  const actualPng = await capturePage(page, masks, config.captureMode);
-  await writePng(paths.actual, actualPng);
+  const actualPng = await capturePage(page, masks, config.captureMode, {
+    maxPixels: config.maxFullPagePixels,
+    label: `story "${storyFile}" action "${action.action}" (${breakpoint})`,
+  });
+  // The run's `actual` is a transient report artifact — overwritten next run,
+  // never re-read as a comparison target — so it skips the max-effort recompress.
+  await writeTransientPng(paths.actual, actualPng);
   const a11yJson = await captureA11yTree(page);
   await writeText(paths.a11yActual, a11yJson);
 
@@ -390,7 +396,9 @@ async function captureAndCompare(
         return { png: legacy, source: 'legacy' };
       }
       if (mode === 'local') {
-        await writePng(paths.baseline, actualPng);
+        // A local-cache baseline is durable — re-read on every later run — so
+        // it earns the lossless recompress.
+        await writeDurablePng(paths.baseline, actualPng);
         await writeText(paths.a11yBaseline, a11yJson);
       }
       return undefined;
@@ -427,7 +435,14 @@ async function captureAndCompare(
     // Score first — SSIM plus the reported pixel metrics — without encoding
     // the overlay. The red-highlight diff image is expensive to encode and is
     // discarded on a pass, so it is rendered only on the changed branch below.
-    const score = scoreDiff(baselinePng, actualPng, pixelThreshold);
+    // One decode of the pair serves both the score and (on the changed branch
+    // below) the overlay render — `decoded` is threaded into renderDiffOverlay
+    // so the failing path reads the image pair once, not twice.
+    const { score, decoded } = scoreDiff(
+      baselinePng,
+      actualPng,
+      pixelThreshold,
+    );
     const passesSsim = score.ssimScore >= ssimThreshold;
     if (passesSsim) {
       await deleteIfExists(paths.diff);
@@ -460,10 +475,13 @@ async function captureAndCompare(
       });
     }
     // Changed → the human needs the red-highlight overlay. This is the only
-    // branch that pays the pixelmatch-fill + PNG encode cost.
-    await writePng(
+    // branch that pays the pixelmatch-fill + PNG encode cost; it reuses the
+    // decode from scoreDiff above. The overlay is a transient report artifact
+    // (deleted the moment a later run passes), so it skips the recompress pass —
+    // it is already deflate-encoded by renderDiffOverlay.
+    await writeTransientPng(
       paths.diff,
-      renderDiffOverlay(baselinePng, actualPng, pixelThreshold),
+      renderDiffOverlay(decoded, pixelThreshold),
     );
     // A `changed` action in CI mode proposes a new baseline — emit it to the
     // candidate tree so approval is a plain tree copy. Local mode does not
@@ -516,9 +534,9 @@ async function captureAndCompare(
  * Emits the proposed-new-baseline render (PNG + a11y companion) to the
  * report-rooted candidate tree (`<report>/candidates/<action>/<breakpoint>.*`).
  * The layout mirrors `paths.baselines` exactly, so approving a candidate set is
- * a plain tree copy. Routed through the same `writePng`/`writeText` seams as
- * every other write, so candidates inherit the lossless recompress pass for
- * free.
+ * a plain tree copy. A candidate is a proposed durable baseline, so it is
+ * routed through the durable `writeDurablePng`/`writeText` seams and inherits
+ * the lossless recompress pass — the promoted baseline is dense from the start.
  *
  * The candidate tree is a CI-only artifact: local mode self-diffs against the
  * per-machine cache and has no human-approval step, so it never proposes
@@ -533,7 +551,7 @@ async function writeCandidate(
   a11yJson: string,
 ): Promise<void> {
   if (mode !== 'ci') return;
-  await writePng(paths.candidate, actualPng);
+  await writeDurablePng(paths.candidate, actualPng);
   await writeText(paths.a11yCandidate, a11yJson);
 }
 

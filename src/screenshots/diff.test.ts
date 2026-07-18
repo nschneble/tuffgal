@@ -35,14 +35,14 @@ const BLACK: [number, number, number, number] = [0, 0, 0, 255];
 describe('scoreDiff — zero-diff boundary', () => {
   it('reports no differing pixels and a perfect SSIM for identical images', () => {
     const png = solidPng(16, 16, WHITE);
-    const outcome = scoreDiff(png, png, 0.1);
+    const { score } = scoreDiff(png, png, 0.1);
 
-    assert.equal(outcome.diffPixels, 0);
-    assert.equal(outcome.diffRatio, 0);
-    assert.equal(outcome.totalPixels, 256);
+    assert.equal(score.diffPixels, 0);
+    assert.equal(score.diffRatio, 0);
+    assert.equal(score.totalPixels, 256);
     assert.ok(
-      outcome.ssimScore >= 0.9999,
-      `expected ssim ~1, got ${outcome.ssimScore}`,
+      score.ssimScore >= 0.9999,
+      `expected ssim ~1, got ${score.ssimScore}`,
     );
   });
 });
@@ -51,13 +51,13 @@ describe('scoreDiff — full-diff boundary', () => {
   it('reports every pixel differing and a low SSIM for opposite images', () => {
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 16, BLACK);
-    const outcome = scoreDiff(baseline, actual, 0.1);
+    const { score } = scoreDiff(baseline, actual, 0.1);
 
-    assert.equal(outcome.diffPixels, 256);
-    assert.equal(outcome.diffRatio, 1);
+    assert.equal(score.diffPixels, 256);
+    assert.equal(score.diffRatio, 1);
     assert.ok(
-      outcome.ssimScore < 0.5,
-      `expected low ssim for opposite images, got ${outcome.ssimScore}`,
+      score.ssimScore < 0.5,
+      `expected low ssim for opposite images, got ${score.ssimScore}`,
     );
   });
 });
@@ -110,27 +110,30 @@ describe('renderDiffOverlay — changed branch', () => {
   it('encodes a decodable overlay that marks the differing pixels', () => {
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 16, BLACK);
-    const overlay = renderDiffOverlay(baseline, actual, 0.1);
+    // The changed branch renders from scoreDiff's decoded pair, not raw buffers.
+    const { decoded } = scoreDiff(baseline, actual, 0.1);
+    const overlay = renderDiffOverlay(decoded, 0.1);
 
     // The overlay is a real, decodable PNG of the same dimensions.
-    const decoded = PNG.sync.read(overlay);
-    assert.equal(decoded.width, 16);
-    assert.equal(decoded.height, 16);
+    const rendered = PNG.sync.read(overlay);
+    assert.equal(rendered.width, 16);
+    assert.equal(rendered.height, 16);
 
     // Every pixel changed, so pixelmatch paints the whole overlay its diff
     // colour (default red). Sample the first pixel to prove the fill ran.
-    assert.equal(decoded.data[0], 255, 'red channel of a differing pixel');
-    assert.equal(decoded.data[1], 0, 'green channel of a differing pixel');
-    assert.equal(decoded.data[2], 0, 'blue channel of a differing pixel');
+    assert.equal(rendered.data[0], 255, 'red channel of a differing pixel');
+    assert.equal(rendered.data[1], 0, 'green channel of a differing pixel');
+    assert.equal(rendered.data[2], 0, 'blue channel of a differing pixel');
   });
 
   it('deflate-encodes exactly once per overlay', () => {
+    const baseline = solidPng(16, 16, WHITE);
+    const actual = solidPng(16, 16, BLACK);
+    const { decoded } = scoreDiff(baseline, actual, 0.1);
     const write = mock.method(PNG.sync, 'write');
     try {
-      const baseline = solidPng(16, 16, WHITE);
-      const actual = solidPng(16, 16, BLACK);
       const before = write.mock.callCount();
-      renderDiffOverlay(baseline, actual, 0.1);
+      renderDiffOverlay(decoded, 0.1);
 
       assert.equal(write.mock.callCount() - before, 1);
     } finally {
@@ -139,14 +142,25 @@ describe('renderDiffOverlay — changed branch', () => {
   });
 });
 
-describe('renderDiffOverlay — dimension mismatch', () => {
-  it('throws ScreenshotSizeMismatchError before encoding anything', () => {
+describe('scoreDiff + renderDiffOverlay — shared decode', () => {
+  it('decodes the image pair exactly once across the changed path', () => {
     const baseline = solidPng(16, 16, WHITE);
-    const actual = solidPng(16, 20, WHITE);
+    const actual = solidPng(16, 16, BLACK);
+    // Spy on the decoder AFTER the fixtures are built, so only the diff path's
+    // own reads are counted. mock.method calls through to the real decode by
+    // default, so the pipeline still works.
+    const read = mock.method(PNG.sync, 'read');
+    try {
+      const before = read.mock.callCount();
+      const { decoded } = scoreDiff(baseline, actual, 0.1);
+      renderDiffOverlay(decoded, 0.1);
 
-    assert.throws(
-      () => renderDiffOverlay(baseline, actual, 0.1),
-      ScreenshotSizeMismatchError,
-    );
+      // Exactly one pair (baseline + actual) is decoded: scoreDiff reads both,
+      // renderDiffOverlay reuses them. Before this split the changed path
+      // decoded twice — four reads. Guard the win at two.
+      assert.equal(read.mock.callCount() - before, 2);
+    } finally {
+      read.mock.restore();
+    }
   });
 });
