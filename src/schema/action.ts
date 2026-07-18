@@ -44,6 +44,25 @@ export const hintSchema = z.object({
 
 export type Hint = z.infer<typeof hintSchema>;
 
+/**
+ * True when `path` contains an ASCII control character (C0 range U+0000–U+001F
+ * or DEL U+007F). The WHATWG URL parser strips tab (U+0009), newline (U+000A),
+ * and carriage return (U+000D) from a URL BEFORE resolving it, so any of those
+ * placed after the leading slash — e.g. `/<TAB>//host` — would slip past the
+ * two-char slash-rooted regex and still resolve to a protocol-relative `//host`.
+ * Rejecting the whole control range (not just the stripped trio) is the
+ * conservative guard: no legitimate root-relative path carries a raw control
+ * character. Expressed as a code-point scan rather than a control-character
+ * regex literal so the source stays free of embedded control bytes.
+ */
+function containsControlChar(path: string): boolean {
+  for (const char of path) {
+    const code = char.charCodeAt(0);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
 export const stepSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('navigate'),
@@ -52,14 +71,23 @@ export const stepSchema = z.discriminatedUnion('kind', [
      * slash-rooted `/path`: protocol-relative (`//host`), backslash (`/\host`,
      * which browsers normalise to `//host`), and absolute-URL forms are
      * rejected so a story can never drive the browser off the target origin.
-     * The runner re-asserts the resolved origin as defense in depth.
+     * Control characters are rejected too, because the WHATWG URL parser strips
+     * ASCII tab (U+0009), newline (U+000A), and carriage return (U+000D) BEFORE
+     * it resolves the path: a tab (or newline/CR) after the leading slash — e.g.
+     * `/<TAB>//host` — would otherwise slip past the two-char slash-rooted check
+     * and resolve to a protocol-relative `//host`. The runner re-asserts the
+     * resolved origin as defense in depth.
      */
     path: z
       .string()
       .regex(
         /^\/(?![/\\])/,
-        'navigate path must be a slash-rooted "/path" — protocol-relative ("//host"), backslash ("/\\host"), and absolute-URL forms are rejected',
-      ),
+        'navigate path must be a slash-rooted "/path"; protocol-relative ("//host"), backslash ("/\\host"), and absolute-URL forms are rejected',
+      )
+      .refine((value) => !containsControlChar(value), {
+        message:
+          'navigate path must not contain control characters; the URL parser strips tab, newline, and carriage return before resolving, so a control char could smuggle a protocol-relative "//host" past the slash-rooted check',
+      }),
     /**
      * Override Playwright's `page.goto` ready signal. Defaults to `'load'`.
      * `'networkidle'` remains available as an explicit opt-in but is a poor
@@ -163,9 +191,11 @@ export const actionSchema = z.object({
     })
     .optional(),
   /**
-   * Bounded retry budget for individual steps. Wraps each step's dispatch so
-   * a transient LocatorNotFoundError (UI not yet hydrated) does not fail the
-   * action immediately. Steps that succeed on the first try cost no retry.
+   * Bounded retry budget for individual steps. Wraps each step's dispatch so a
+   * transient fault does not fail the action immediately: a LocatorNotFoundError
+   * (target not yet hydrated) or any bounded Playwright TimeoutError — a
+   * navigation that missed its ready signal, or a step-level click/input/waitFor
+   * whose own timeout elapsed. Steps that succeed on the first try cost no retry.
    */
   retry: z
     .object({

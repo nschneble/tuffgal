@@ -72,6 +72,21 @@ async function makeConfig(): Promise<ResolvedConfig> {
   } as unknown as ResolvedConfig;
 }
 
+/**
+ * A base config augmented with the `baseUrl` + `navigationTimeoutMs` a
+ * `navigate` step needs (`runNavigate` resolves the path against `baseUrl`, and
+ * `page.goto` reads the timeout). Shared by every test that drives a navigate
+ * step so the augmentation lives in one place instead of being re-inlined.
+ */
+async function navConfig(): Promise<ResolvedConfig> {
+  const config = await makeConfig();
+  Object.assign(config as object, {
+    baseUrl: 'http://localhost',
+    navigationTimeoutMs: 1000,
+  });
+  return config;
+}
+
 afterEach(() => {
   tempDirs = [];
 });
@@ -371,13 +386,9 @@ describe('runAction — ${breakpoint} interpolation', () => {
   }
 
   it('resolves ${breakpoint} to the current mode name', async () => {
-    const config = await makeConfig();
     // runNavigate resolves the path against baseUrl, so the test config needs
-    // one for `new URL()` to succeed.
-    Object.assign(config as object, {
-      baseUrl: 'http://localhost',
-      navigationTimeoutMs: 1000,
-    });
+    // one for `new URL()` to succeed — navConfig supplies it.
+    const config = await navConfig();
     const urls: string[] = [];
     await runAction({
       page: gotoRecordingPage(urls),
@@ -391,11 +402,7 @@ describe('runAction — ${breakpoint} interpolation', () => {
   });
 
   it('lets a story parameter named breakpoint override the injected value', async () => {
-    const config = await makeConfig();
-    Object.assign(config as object, {
-      baseUrl: 'http://localhost',
-      navigationTimeoutMs: 1000,
-    });
+    const config = await navConfig();
     const urls: string[] = [];
     await runAction({
       page: gotoRecordingPage(urls),
@@ -451,15 +458,6 @@ describe('runAction — navigation timeout is retryable, infra faults are not', 
       // backoffMs 0 keeps the retry loop from actually sleeping between tries.
       retry: { attempts, backoffMs: 0 },
     } as unknown as Action;
-  }
-
-  async function navConfig(): Promise<ResolvedConfig> {
-    const config = await makeConfig();
-    Object.assign(config as object, {
-      baseUrl: 'http://localhost',
-      navigationTimeoutMs: 1000,
-    });
-    return config;
   }
 
   it('retries a navigation timeout and succeeds on the second attempt', async () => {

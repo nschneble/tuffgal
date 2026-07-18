@@ -50,6 +50,29 @@ describe('runNavigate — origin escape guard (runtime defense in depth)', () =>
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.url, 'http://localhost:3000/a/b?q=1');
   });
+
+  // The schema also rejects these, but the runtime guard must stand on its own
+  // as defense in depth: the WHATWG URL parser strips tab/newline/carriage
+  // return BEFORE resolving, so each control char after the leading slash
+  // resolves to a protocol-relative `//evil.com` off the configured baseUrl.
+  // (`\t`, `\n`, `\r` are escape sequences — no raw control bytes in source.)
+  const controlCharVectors: Array<[string, string]> = [
+    ['tab', '/\t//evil.com'],
+    ['newline', '/\n//evil.com'],
+    ['carriage return', '/\r//evil.com'],
+    ['tab before a backslash host', '/\t\\evil.com'],
+  ];
+
+  for (const [label, path] of controlCharVectors) {
+    it(`throws on a ${label}-smuggled protocol-relative host and never navigates`, async () => {
+      const calls: GotoCall[] = [];
+      await assert.rejects(
+        runNavigate(recordingPage(calls), path, config()),
+        /resolved off-origin to http:\/\/evil\.com/,
+      );
+      assert.equal(calls.length, 0);
+    });
+  }
 });
 
 describe('runNavigate — waitUntil default flip', () => {

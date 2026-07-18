@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -275,6 +275,28 @@ function fakeBrowser(contexts: BrowserContext[]): Browser {
   } as unknown as Browser;
 }
 
+/**
+ * Fake `Browser` that hands out a single pre-built context and CAPTURES the
+ * `storageState` argument every `newContext` call receives. That captured value
+ * is what proves which on-disk auth file `runStoryWithBrowser` resolved and
+ * loaded — the whole point of the authNeeds-vs-needs wiring test.
+ */
+function capturingBrowser(context: BrowserContext): {
+  browser: Browser;
+  storageStates: Array<string | undefined>;
+} {
+  const storageStates: Array<string | undefined> = [];
+  const browser = {
+    async newContext(options: {
+      storageState?: string;
+    }): Promise<BrowserContext> {
+      storageStates.push(options.storageState);
+      return context;
+    },
+  } as unknown as Browser;
+  return { browser, storageStates };
+}
+
 function waitAction(name: string): Action {
   return {
     action: name,
@@ -448,6 +470,67 @@ describe('runStoryWithBrowser — per-breakpoint loop', () => {
     assert.equal(first.record.closeCount, 1);
     // The story aborted: the second breakpoint never opened a context.
     assert.equal(second.record.closeCount, 0);
+  });
+});
+
+describe('runStoryWithBrowser — auth state resolves from authNeeds, not needs', () => {
+  it('loads the auth file resolved from authNeeds even when the scheduler-facing needs is stripped empty', async () => {
+    const config = await makeConfig();
+    // Persist an auth payload for the `auth` label on disk.
+    // resolveStorageStateForNeeds only returns a path that EXISTS, so this file
+    // is what a correctly-wired run must resolve and hand to newContext.
+    await mkdir(config.paths.authState, { recursive: true });
+    const authFile = join(config.paths.authState, 'auth.json');
+    await writeFile(authFile, '{}');
+
+    const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
+    const { browser, storageStates } = capturingBrowser(only.context);
+
+    await runStoryWithBrowser(
+      browser,
+      makeOptions(config, {
+        // A breakpoint pass strips the scheduler-facing needs to its in-pass
+        // subset — here, empty…
+        needs: [],
+        // …but the story's ORIGINAL needs still name `auth`. The wiring must
+        // resolve storage state from authNeeds; regress it to `needs` and the
+        // consumer renders logged-out (the exact bug this test guards).
+        authNeeds: ['auth'],
+        breakpoint: { name: 'desktop', width: 1280, height: 800 },
+      }),
+      new Date(),
+    );
+
+    // The context was created with the auth file resolved from authNeeds. Had
+    // the code read the stripped `needs`, this would be undefined (no label to
+    // resolve), so the exact path is what proves authNeeds is the source.
+    assert.equal(storageStates.length, 1);
+    assert.equal(storageStates[0], authFile);
+  });
+
+  it('falls back to needs when authNeeds is omitted (direct-caller path)', async () => {
+    // The `authNeeds ?? needs` fallback: a direct caller/test that never sets
+    // authNeeds must still load the auth file named by `needs`. Locks the other
+    // half of the wiring so a future edit cannot drop the fallback.
+    const config = await makeConfig();
+    await mkdir(config.paths.authState, { recursive: true });
+    const authFile = join(config.paths.authState, 'auth.json');
+    await writeFile(authFile, '{}');
+
+    const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
+    const { browser, storageStates } = capturingBrowser(only.context);
+
+    await runStoryWithBrowser(
+      browser,
+      makeOptions(config, {
+        needs: ['auth'],
+        // authNeeds intentionally omitted.
+        breakpoint: { name: 'desktop', width: 1280, height: 800 },
+      }),
+      new Date(),
+    );
+
+    assert.equal(storageStates[0], authFile);
   });
 });
 

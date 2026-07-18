@@ -92,15 +92,16 @@ export async function runStoryWithBrowser(
   options: RunStoryOptions,
   startedAt: Date,
 ): Promise<StoryResult> {
-  const { story, file, needs, produces, config, coverage } = options;
+  const { story, file, needs, authNeeds, produces, config, coverage } = options;
   // Resolve the storage state once: it is viewport-independent, so every
   // breakpoint context loads the same auth payload. Uses `authNeeds` (the
   // story's ORIGINAL needs) rather than the scheduler-facing `needs`, which a
   // breakpoint pass strips to its in-pass subset — a consumer whose producer
   // rendered in a different pass must still load that producer's off-disk auth.
+  // Falls back to `needs` for direct callers/tests that omit `authNeeds`.
   const storageStatePath = await resolveStorageStateForNeeds(
     config,
-    options.authNeeds ?? needs,
+    authNeeds ?? needs,
   );
   // The run driver hands us a single breakpoint per call so each breakpoint is
   // its own reset/seed pass (the database-isolation guarantee). Direct

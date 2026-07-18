@@ -178,11 +178,14 @@ async function dispatchWithRetry(
  * Only transient faults are retried; real infrastructure errors rethrow
  * immediately so a genuine fault is not masked by burning the retry budget:
  *   - `LocatorNotFoundError` — the UI has not hydrated the target element yet.
- *   - a Playwright navigation `TimeoutError` — `page.goto` did not reach its
- *     ready signal in time (a slow first paint, a lagging dev server), which a
- *     re-drive routinely clears. Classified by `name` so it holds whether the
- *     timeout arrives as Playwright's `errors.TimeoutError` or is reconstructed
- *     across an async boundary.
+ *   - any bounded Playwright `TimeoutError` — every step whose dispatch is
+ *     bounded by a Playwright timeout qualifies, not just navigation: a
+ *     `page.goto` that did not reach its ready signal, AND the step-level
+ *     click/input/waitFor timeouts (a slow first paint, a lagging dev server, a
+ *     control still rendering), each of which a re-drive routinely clears.
+ *     Classified by `name` so it holds for any Playwright timeout whether it
+ *     arrives as `errors.TimeoutError` or is reconstructed across an async
+ *     boundary.
  * Anything else (connection refused, protocol error, an origin-escape throw)
  * is a NON-retryable fault and rethrows on the first occurrence.
  */

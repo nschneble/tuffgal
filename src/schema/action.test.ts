@@ -28,6 +28,27 @@ describe('navigate path guard — rejects origin-escaping forms', () => {
   }
 });
 
+describe('navigate path guard — rejects control chars the URL parser strips', () => {
+  // The WHATWG URL parser removes ASCII tab (U+0009), newline (U+000A), and
+  // carriage return (U+000D) BEFORE resolving a URL, so each of these — a
+  // control char right after the leading slash — resolves to a protocol-relative
+  // `//evil.com` despite passing the two-char slash-rooted regex. The schema
+  // must reject them at parse time. (`\t`, `\n`, `\r` here are the escape
+  // sequences, so the source itself carries no raw control bytes.)
+  const rejected: Array<[string, string]> = [
+    ['tab before protocol-relative host', '/\t//evil.com'],
+    ['newline before protocol-relative host', '/\n//evil.com'],
+    ['carriage return before protocol-relative host', '/\r//evil.com'],
+    ['tab before backslash host', '/\t\\evil.com'],
+  ];
+
+  for (const [label, path] of rejected) {
+    it(`rejects ${label}`, () => {
+      assert.equal(parseNavigate(path).success, false);
+    });
+  }
+});
+
 describe('navigate path guard — accepts single-slash-rooted paths', () => {
   const accepted: Array<[string, string]> = [
     ['bare root', '/'],
