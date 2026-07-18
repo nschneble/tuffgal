@@ -7,6 +7,16 @@ function parseNavigate(path: string): ReturnType<typeof stepSchema.safeParse> {
   return stepSchema.safeParse({ kind: 'navigate', path });
 }
 
+function parseScroll(
+  overrides: Record<string, unknown> = {},
+): ReturnType<typeof stepSchema.safeParse> {
+  return stepSchema.safeParse({
+    kind: 'scroll',
+    direction: 'down',
+    ...overrides,
+  });
+}
+
 /**
  * A minimal valid action wrapped around `overrides`, so a single-constraint
  * boundary assert (retry, diff, name) reads as one line without re-inlining the
@@ -195,5 +205,30 @@ describe('navigate waitUntil — enum opt-in unchanged by the default flip', () 
 
   it('accepts navigate with waitUntil omitted (runner supplies the load default)', () => {
     assert.equal(parseNavigate('/').success, true);
+  });
+});
+
+describe('scroll amount — schema default is load-bearing', () => {
+  // Wave 12 moved the 600px default from the handler into the schema and retyped
+  // `runScroll`'s param to a required `number`, so this `.default(600)` is the
+  // only thing standing between an omitted `amount` and a `page.mouse.wheel(0,
+  // NaN)`. Pin both directions: omitted resolves to 600, explicit survives.
+  it('applies the 600px default when amount is omitted', () => {
+    const result = parseScroll();
+    assert.ok(result.success);
+    assert.equal(result.data.kind, 'scroll');
+    assert.equal(
+      result.data.kind === 'scroll' ? result.data.amount : undefined,
+      600,
+    );
+  });
+
+  it('preserves an explicit amount instead of overwriting it with the default', () => {
+    const result = parseScroll({ amount: 250 });
+    assert.ok(result.success);
+    assert.equal(
+      result.data.kind === 'scroll' ? result.data.amount : undefined,
+      250,
+    );
   });
 });
