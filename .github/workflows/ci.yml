@@ -67,3 +67,21 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
+
+  # Real-browser DOM coverage for the report.js filter/empty-state/live-region
+  # logic (test/dom/), which the pure-unit `test` job can't reach. Kept separate
+  # so that job stays browser-free and fast; this one asserts DOM state and text,
+  # not pixels, so it's deterministic and safe to gate on. Single Node version is
+  # enough — it exercises browser behavior, not the Node runtime matrix.
+  test-dom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:dom
