@@ -35,9 +35,11 @@ export interface DevServerBridge {
   /** Working directory, relative to the config file's location. */
   cwd?: string;
   /**
-   * URLs to poll before considering the dev server stack ready. Each entry
-   * is probed via TCP `connect` (not HTTP) so self-signed certificates and
-   * 404 responses do not block readiness.
+   * URLs to poll before considering the dev server stack ready. Each entry is
+   * probed with an HTTP `GET`; any non-5xx response (2xx/3xx/4xx) marks it
+   * ready, so a 404 does not block but a still-compiling server that 5xxs keeps
+   * the poll going. This proves the server is serving routes rather than merely
+   * having bound its socket. Use an http URL — self-signed HTTPS is rejected.
    */
   healthCheck: Array<{ url: string; timeoutMs?: number }>;
   /** Signal sent on shutdown. Defaults to `SIGTERM`. */

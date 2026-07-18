@@ -52,3 +52,38 @@ export function probeTcp(
     socket.setTimeout(timeoutMs);
   });
 }
+
+/**
+ * Resolves `true` if an HTTP `GET` to `url` returns any non-5xx status within
+ * `timeoutMs`, `false` on a 5xx status, connection refusal, TLS/DNS failure, or
+ * timeout. Unlike {@link probeTcp}, this proves the server is actually *serving*
+ * routes — a dev server (Vite/Next/webpack) binds its socket well before the
+ * bundle finishes compiling, so a bare TCP accept can succeed while requests
+ * still 503 or hang. Any received response (2xx/3xx/4xx) means it is up.
+ *
+ * Redirects are not followed (`redirect: 'manual'`): a 3xx already proves the
+ * server is serving, and chasing `Location` risks an external host or a slow
+ * login page. Note this does *not* accept self-signed HTTPS certs (fetch
+ * rejects them) — an http health-check URL is expected.
+ */
+export async function probeHttp(
+  url: string,
+  timeoutMs: number,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      redirect: 'manual',
+      signal: controller.signal,
+    });
+    // Drain the body so the socket doesn't linger in undici's connection pool.
+    await response.body?.cancel();
+    return response.status < 500;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
