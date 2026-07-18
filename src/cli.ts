@@ -154,6 +154,12 @@ export function parseArguments(argv: string[]): ParsedArguments {
         '--max-respawns',
         arg.slice('--max-respawns='.length),
       );
+    } else if (arg.startsWith('-')) {
+      // Terminal guard: any dash-prefixed token that matched none of the known
+      // flags above is a typo (e.g. `--hedded`). Bare positionals were already
+      // captured by the `!arg.startsWith('-')` branch, so only unknown options
+      // reach here. Fail loudly rather than silently running with the default.
+      throw new Error(`unknown option "${arg}"`);
     }
   }
   return parsed;

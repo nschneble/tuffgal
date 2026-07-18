@@ -71,6 +71,20 @@ describe('parseArguments — approve filters', () => {
   });
 });
 
+describe('parseArguments — unknown flag rejection', () => {
+  it('throws on an unrecognized dash-prefixed option', () => {
+    assert.throws(
+      () => parseArguments(['run', '--nope']),
+      /unknown option "--nope"/,
+    );
+  });
+
+  it('still parses a known flag on the happy path', () => {
+    const args = parseArguments(['run', '--ci']);
+    assert.equal(args.ci, true);
+  });
+});
+
 describe('parseArguments — run mode flags', () => {
   it('captures --ci', () => {
     const args = parseArguments(['run', '--ci']);
