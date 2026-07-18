@@ -269,6 +269,7 @@ function runScheduledStory(
     story: item.story,
     file: item.file,
     needs: item.needs,
+    authNeeds: item.authNeeds,
     produces: item.produces,
     actions,
     config,

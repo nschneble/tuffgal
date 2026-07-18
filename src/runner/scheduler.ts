@@ -5,6 +5,17 @@ import type { StoryResult, StoryStatus } from '../schema/result.ts';
 export interface ScheduledStory extends StoryFile {
   needs: string[];
   produces: string[];
+  /**
+   * The story's ORIGINAL needs, retained for AUTH resolution across a
+   * breakpoint pass even when `needs` (the scheduler-facing set) is stripped to
+   * the in-pass subset by {@link adaptNeedsForPass}. `resolveStorageStateForNeeds`
+   * reads this so a consumer whose producer rendered in a DIFFERENT pass still
+   * loads that producer's on-disk auth state — otherwise the consumer would
+   * render logged-out. Absent on stories that never went through
+   * `adaptNeedsForPass` (direct callers/tests), where `needs` is already the
+   * full set; the auth path falls back to `needs` then.
+   */
+  authNeeds?: string[];
 }
 
 export interface ScheduleSummary {

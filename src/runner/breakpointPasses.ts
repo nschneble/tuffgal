@@ -55,12 +55,19 @@ export function resolveBreakpointPasses(
 }
 
 /**
- * Re-keys a pass's stories so the scheduler only waits on prerequisites that
- * actually run in THIS pass. A `needs` label whose producer renders at a
- * different breakpoint than this pass would otherwise never clear and deadlock
- * the drain; that producer instead persisted its auth state to disk in its own
- * (earlier) pass, so the dependency is already satisfied off-disk. `produces` is
- * left intact so failure cascades still propagate within the pass.
+ * Splits a pass's stories into the two need-sets the run consumes separately,
+ * because the SCHEDULER and the AUTH loader have opposite requirements:
+ *
+ *   - `needs` (SCHEDULER-facing) is stripped to only labels whose producer also
+ *     runs THIS pass. A need whose producer renders at a different breakpoint
+ *     would otherwise never clear and deadlock the drain.
+ *   - `authNeeds` (AUTH-facing) retains the story's ORIGINAL full needs, so
+ *     `resolveStorageStateForNeeds` still loads the auth state a
+ *     differently-breakpointed producer persisted to disk in its own pass. That
+ *     off-disk state is what actually satisfies the dependency; stripping this
+ *     set too would silently render the consumer LOGGED-OUT.
+ *
+ * `produces` is left intact so failure cascades still propagate within the pass.
  */
 export function adaptNeedsForPass(
   participating: ScheduledStory[],
@@ -72,6 +79,7 @@ export function adaptNeedsForPass(
   return participating.map((item) => ({
     ...item,
     needs: item.needs.filter((label) => producesInPass.has(label)),
+    authNeeds: item.needs,
   }));
 }
 
