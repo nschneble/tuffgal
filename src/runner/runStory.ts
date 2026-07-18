@@ -1,11 +1,6 @@
 import { access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  chromium,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from 'playwright';
+import { type Browser, type BrowserContext, type Page } from 'playwright';
 import {
   resolveSelectorList,
   type ResolvedBreakpoint,
@@ -60,32 +55,24 @@ export interface RunStoryOptions {
 const TRACE_SUBDIR = 'traces';
 
 /**
- * Drives one story end-to-end on a freshly launched browser. Wraps the
- * context in Playwright tracing so a failed action leaves behind a
- * full-fidelity `trace.zip` for post-mortem in the Playwright trace viewer.
- * If the story declares `produces` labels, the post-run storage state is
- * persisted under `<authState>/<label>.json` so consumer stories can attach
- * to it without replaying the producer's actions.
- */
-export async function runStory(options: RunStoryOptions): Promise<StoryResult> {
-  const startedAt = new Date();
-  // Fixtures are applied per breakpoint inside `runStoryWithBrowser`, not once
-  // here — see the reseed comment in the breakpoint loop.
-  const browser = await chromium.launch({ headless: !options.headed });
-  try {
-    return await runStoryWithBrowser(browser, options, startedAt);
-  } finally {
-    await browser.close();
-  }
-}
-
-/**
- * Drives every selected breakpoint of one story against an already-launched
- * browser. Split out from `runStory` (which owns browser lifecycle + fixtures)
- * so tests can exercise the per-breakpoint loop — context isolation, the
- * failed-action-does-not-abort-others guarantee, trace-zip uniqueness, `produces`
- * persistence, and the throw-closes-context invariant — against fake
- * Browser/BrowserContext/Page objects without launching a real Chromium.
+ * Drives every selected breakpoint of one story against the run's shared,
+ * already-launched browser. The run driver (`runAll`) launches ONE browser for
+ * the whole run and closes it once at the end, so this function never owns
+ * browser lifecycle — it only opens a fresh `browser.newContext()` per
+ * breakpoint. That per-breakpoint context is the isolation boundary: cookies,
+ * storage, and cache live on the context, not the browser, so stories sharing a
+ * browser never leak state into one another. Wraps each context in Playwright
+ * tracing so a failed action leaves behind a full-fidelity `trace.zip` for
+ * post-mortem in the Playwright trace viewer. If the story declares `produces`
+ * labels, the post-run storage state is persisted under
+ * `<authState>/<label>.json` so consumer stories can attach to it without
+ * replaying the producer's actions.
+ *
+ * Taking the browser as a parameter also lets tests exercise the per-breakpoint
+ * loop — context isolation, the failed-action-does-not-abort-others guarantee,
+ * trace-zip uniqueness, `produces` persistence, and the throw-closes-context
+ * invariant — against fake Browser/BrowserContext/Page objects without
+ * launching a real Chromium.
  */
 export async function runStoryWithBrowser(
   browser: Browser,

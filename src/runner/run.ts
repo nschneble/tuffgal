@@ -2,7 +2,7 @@ import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { chromium } from 'playwright';
+import { chromium, type Browser } from 'playwright';
 import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
 import type { Action } from '../schema/action.ts';
 import type {
@@ -21,7 +21,7 @@ import {
   type ManagedDevServers,
 } from './bridges/devServers.ts';
 import { CoverageCollector } from './coverage.ts';
-import { mergeStoryStatus, runStory } from './runStory.ts';
+import { mergeStoryStatus, runStoryWithBrowser } from './runStory.ts';
 import {
   buildSchedule,
   drainSchedule,
@@ -78,26 +78,52 @@ const HEARTBEAT_FILE = '.heartbeat';
  * Loads every action and story from the configured paths, resets the
  * consumer-supplied test database, schedules stories according to their
  * needs/produces DAG, and drives execution across a fixed worker pool.
- * Returns the aggregate `RunResult` so the CLI can set the process exit
- * code.
+ * Returns the aggregate `RunResult` so the CLI can set the process exit code.
+ *
+ * Owns the run's shared lifecycle: it launches ONE browser (injectable via
+ * `launchBrowser` for tests) that every story reuses — each opening its own
+ * isolated context per breakpoint — and registers a SIGINT/SIGTERM handler that
+ * closes that browser and stops any `--manage-servers` dev-servers before
+ * exiting non-zero, so an interrupted run (Ctrl-C, CI cancel) orphans neither.
+ * Both the normal finally path and the signal handler tear down through the
+ * same idempotent {@link createRunTeardown}, so nothing double-closes.
  */
 export async function runAll(
   config: ResolvedConfig,
   options: RunCliOptions,
+  launchBrowser: () => Promise<Browser> = () =>
+    chromium.launch({ headless: !options.headed }),
 ): Promise<RunResult> {
   const startedAt = new Date();
   const mode: RunMode = options.mode ?? 'local';
-  let managedServers: ManagedDevServers | undefined;
-  if (options.manageServers) {
-    managedServers = await startManagedDevServers(config);
-  }
-  // Heartbeat is opportunistic. A sibling supervisor process can poll this
-  // file to know whether the dev servers are still in active use.
-  await touchHeartbeat(config);
-  const coverage = options.coverage
-    ? new CoverageCollector(config.paths.report)
-    : undefined;
+  // Single owner for the run's teardownable handles: the shared browser and any
+  // managed dev-servers. Torn down exactly once — on the normal finally path OR
+  // on a SIGINT/SIGTERM, whichever fires first — so neither an interrupted run's
+  // in-flight Chromium nor its detached dev-server groups orphan.
+  const handles: RunHandles = {};
+  const teardown = createRunTeardown(handles);
+  const onSignal = createSignalTeardownHandler(teardown);
   try {
+    // Register signal teardown INSIDE the try so the finally always removes the
+    // listeners again (no listener leak across repeated in-process runs) and a
+    // fault during setup still unwinds through the same teardown.
+    process.once('SIGINT', onSignal);
+    process.once('SIGTERM', onSignal);
+    if (options.manageServers) {
+      handles.managedServers = await startManagedDevServers(config);
+    }
+    // Launch ONE browser for the whole run. Every story still opens its own
+    // isolated `browser.newContext()` per breakpoint (see runStoryWithBrowser),
+    // so the shared browser preserves per-story isolation while paying a single
+    // cold Chromium launch instead of one per (story × breakpoint) pass.
+    const browser = await launchBrowser();
+    handles.browser = browser;
+    // Heartbeat is opportunistic. A sibling supervisor process can poll this
+    // file to know whether the dev servers are still in active use.
+    await touchHeartbeat(config);
+    const coverage = options.coverage
+      ? new CoverageCollector(config.paths.report)
+      : undefined;
     const actions = await loadActions(config.paths.actions);
     const allStories = await loadStories(config.paths.stories);
     const scheduled = buildSchedule(allStories);
@@ -155,6 +181,7 @@ export async function runAll(
             coverage,
             breakpoint,
             mode,
+            browser,
           ),
         () => {},
         (_item, result) =>
@@ -217,7 +244,14 @@ export async function runAll(
     // mode — whether it drifted from the committed baselines' manifest. Local
     // mode never reads `paths.baselines`, so `expected` stays null and mismatch
     // is always false (see resolveEnvironmentReport).
-    const environment = await resolveEnvironmentReport(config, mode);
+    const environment = await resolveEnvironmentReport(
+      config,
+      mode,
+      async () => ({
+        name: 'chromium',
+        version: browser.version(),
+      }),
+    );
     const runResult: RunResult = {
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
@@ -250,10 +284,56 @@ export async function runAll(
     }
     return runResult;
   } finally {
-    if (managedServers) {
-      await managedServers.stop();
-    }
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
+    await teardown();
   }
+}
+
+/** The run's teardownable handles: the shared browser and any managed servers. */
+interface RunHandles {
+  browser?: Pick<Browser, 'close'>;
+  managedServers?: ManagedDevServers;
+}
+
+/**
+ * Builds the run's single teardown: closes the shared browser and stops any
+ * managed dev-servers, exactly once. The `done` latch makes it idempotent so
+ * the normal finally path and a racing signal handler cannot double-close —
+ * whichever calls first tears down, the other is a no-op. Reads the handles off
+ * the shared object at CALL time (not capture time), so a signal that arrives
+ * mid-setup still tears down whatever has been launched so far. `allSettled`
+ * closes both independently: a browser that throws on close must not prevent
+ * the dev-servers from being stopped.
+ */
+export function createRunTeardown(handles: RunHandles): () => Promise<void> {
+  let done = false;
+  return async () => {
+    if (done) return;
+    done = true;
+    await Promise.allSettled([
+      handles.browser?.close(),
+      handles.managedServers?.stop(),
+    ]);
+  };
+}
+
+/**
+ * Wraps a {@link createRunTeardown} teardown in a SIGINT/SIGTERM handler: tear
+ * the run's handles down, then exit non-zero (an interrupted run is a failure,
+ * not a clean pass). `exit` is injected — defaulting to `process.exit` — so a
+ * test can drive the handler directly, asserting it closes the browser, stops
+ * the servers, and requests a non-zero exit, without raising a real signal in
+ * the test runner. Idempotent by construction: it delegates to the shared
+ * teardown, so a second signal cannot double-close.
+ */
+export function createSignalTeardownHandler(
+  teardown: () => Promise<void>,
+  exit: (code: number) => void = (code) => process.exit(code),
+): () => void {
+  return () => {
+    void teardown().finally(() => exit(1));
+  };
 }
 
 function runScheduledStory(
@@ -264,20 +344,29 @@ function runScheduledStory(
   coverage: CoverageCollector | undefined,
   breakpoint: ResolvedBreakpoint,
   mode: RunMode,
+  browser: Browser,
 ): Promise<StoryResult> {
-  return runStory({
-    story: item.story,
-    file: item.file,
-    needs: item.needs,
-    authNeeds: item.authNeeds,
-    produces: item.produces,
-    actions,
-    config,
-    headed,
-    coverage,
-    breakpoint,
-    mode,
-  });
+  // Drive the story against the run's SHARED browser rather than launching a
+  // per-story Chromium. `startedAt` is stamped here, as this story's work
+  // begins, so its reported duration excludes time it waited in the queue.
+  const startedAt = new Date();
+  return runStoryWithBrowser(
+    browser,
+    {
+      story: item.story,
+      file: item.file,
+      needs: item.needs,
+      authNeeds: item.authNeeds,
+      produces: item.produces,
+      actions,
+      config,
+      headed,
+      coverage,
+      breakpoint,
+      mode,
+    },
+    startedAt,
+  );
 }
 
 function matchesFilter(item: ScheduledStory, filter: string): boolean {
@@ -349,23 +438,6 @@ export function coverageComparisonRoot(
 }
 
 /**
- * Reads the launched Chromium's `browser.version()` so the run's environment
- * manifest records the exact browser build the baselines were rendered against —
- * the single pixel-affecting fact that only a live browser can report. Launched
- * throwaway (not the per-story browsers, which spin up and tear down inside the
- * schedule) because the version is invariant across stories, so one probe covers
- * the whole run. Kept narrow: launch, read, close.
- */
-async function captureBrowserIdentity(): Promise<CapturedBrowser> {
-  const browser = await chromium.launch({ headless: true });
-  try {
-    return { name: 'chromium', version: browser.version() };
-  } finally {
-    await browser.close();
-  }
-}
-
-/**
  * The browser identity stamped into a LOCAL run's environment block. Local mode
  * skips the live probe (see {@link resolveEnvironmentReport}), so `version` is an
  * empty sentinel: it is shape-valid for the manifest, never compared (local
@@ -380,11 +452,11 @@ const LOCAL_BROWSER_IDENTITY = { name: 'chromium', version: '' } as const;
  * under (`actual`), and — in CI mode — the committed `<baselines>/manifest.json`
  * (`expected`) plus whether their pixel-affecting keys diverge.
  *
- * The live browser-version probe ({@link captureBrowserIdentity}) runs in CI
- * mode ONLY. Local mode never reads `paths.baselines`, so `expected` is always
- * `null` and `browserVersion` is never compared against anything — launching a
- * throwaway chromium just to stamp a value nothing reads is pure cost, so local
- * mode fills the browser identity with an empty sentinel and skips the probe.
+ * The live browser-version probe runs in CI mode ONLY. Local mode never reads
+ * `paths.baselines`, so `expected` is always `null` and `browserVersion` is
+ * never compared against anything — reading a browser version just to stamp a
+ * value nothing reads is pure cost, so local mode fills the browser identity
+ * with an empty sentinel and skips the probe entirely.
  *
  * In CI mode a missing manifest is the bootstrap case (no expectation yet, no
  * mismatch); a malformed one surfaces as a mismatch note (see
@@ -392,14 +464,15 @@ const LOCAL_BROWSER_IDENTITY = { name: 'chromium', version: '' } as const;
  * it read cleanly, so a malformed file reports `null` here while still driving a
  * mismatch.
  *
- * `probe` is the live browser-identity reader, injected (defaulting to the real
- * {@link captureBrowserIdentity}) so a test can assert it is invoked in CI mode
- * and NEVER invoked in local mode without launching a real chromium.
+ * `probe` is the live browser-identity reader. `runAll` passes one that reads
+ * the run's SHARED browser handle (`browser.version()`), so no throwaway
+ * Chromium is launched just to stamp the version; a test injects its own probe
+ * to assert it is invoked in CI mode and NEVER invoked in local mode.
  */
 export async function resolveEnvironmentReport(
   config: ResolvedConfig,
   mode: RunMode,
-  probe: () => Promise<CapturedBrowser> = captureBrowserIdentity,
+  probe: () => Promise<CapturedBrowser>,
 ): Promise<EnvironmentReport> {
   if (mode !== 'ci') {
     // Local mode never gates on `browserVersion` (expected is always null), so

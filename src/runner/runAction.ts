@@ -40,8 +40,8 @@ export interface RunActionOptions {
   storyFile: string;
   config: ResolvedConfig;
   /**
-   * Named breakpoint this action is rendering at. `runStory` threads the
-   * current breakpoint context's name down so the resulting paths (and the
+   * Named breakpoint this action is rendering at. `runStoryWithBrowser` threads
+   * the current breakpoint context's name down so the resulting paths (and the
    * `ActionResult.breakpoint` tag) key per-mode captures apart.
    */
   breakpoint: string;

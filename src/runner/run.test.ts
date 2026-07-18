@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { PNG } from 'pngjs';
+import type { Browser, BrowserContext, Page } from 'playwright';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { CapturedBrowser } from './manifest.ts';
@@ -11,10 +13,13 @@ import { pathExists } from '../util.ts';
 import {
   copyResultsIntoCandidates,
   coverageComparisonRoot,
+  createRunTeardown,
+  createSignalTeardownHandler,
   drivingBreakpoints,
   formatResultLine,
   formatSummaryBullet,
   resolveEnvironmentReport,
+  runAll,
   summarise,
 } from './run.ts';
 
@@ -311,5 +316,236 @@ describe('resolveEnvironmentReport — browser probe gating', () => {
 
     assert.equal(probed, 1, 'probe must run once in CI mode');
     assert.equal(report.actual.browserVersion, '131.0.0.0');
+  });
+});
+
+/**
+ * A 2x2 solid-colour PNG — `runAction` diffs real PNG bytes via pngjs, so the
+ * fake page's screenshot must be a genuine image, not a stub buffer.
+ */
+function solidPng(r: number, g: number, b: number): Buffer {
+  const png = new PNG({ width: 2, height: 2 });
+  for (let i = 0; i < png.data.length; i += 4) {
+    png.data[i] = r;
+    png.data[i + 1] = g;
+    png.data[i + 2] = b;
+    png.data[i + 3] = 255;
+  }
+  return PNG.sync.write(png);
+}
+
+/** The slice of `Page` one screenshot action of a story touches. */
+function fakePage(screenshot: Buffer): Page {
+  return {
+    clock: { async install(): Promise<void> {} },
+    async waitForTimeout(): Promise<void> {},
+    async evaluate(): Promise<void> {},
+    async screenshot(): Promise<Buffer> {
+      return screenshot;
+    },
+    locator() {
+      return {
+        async ariaSnapshot(): Promise<string> {
+          return '- document';
+        },
+      };
+    },
+  } as unknown as Page;
+}
+
+/** A `BrowserContext` over a single fake page — the per-story isolation unit. */
+function fakeContext(page: Page): BrowserContext {
+  return {
+    setDefaultTimeout(): void {},
+    tracing: {
+      async start(): Promise<void> {},
+      async stop(): Promise<void> {},
+    },
+    async newPage(): Promise<Page> {
+      return page;
+    },
+    async storageState(): Promise<unknown> {
+      return {};
+    },
+    async close(): Promise<void> {},
+  } as unknown as BrowserContext;
+}
+
+describe('runAll — shared browser lifecycle', () => {
+  it('launches ONE browser, reuses it across stories, and closes it once', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tuffgal-runall-'));
+    const actionsDir = join(root, 'actions');
+    const storiesDir = join(root, 'stories');
+    await mkdir(actionsDir, { recursive: true });
+    await mkdir(storiesDir, { recursive: true });
+    await writeFile(
+      join(actionsDir, 'open.json'),
+      JSON.stringify({ action: 'open', steps: [{ kind: 'wait', ms: 0 }] }),
+    );
+    // Two independent stories (no needs/produces) so both are ready at once —
+    // the shared browser must serve both without a second launch.
+    await writeFile(
+      join(storiesDir, 'home.json'),
+      JSON.stringify({ story: 'home', actions: [{ action: 'open' }] }),
+    );
+    await writeFile(
+      join(storiesDir, 'about.json'),
+      JSON.stringify({ story: 'about', actions: [{ action: 'open' }] }),
+    );
+
+    const config = {
+      baseUrl: 'http://localhost:3000',
+      defaultTimeoutMs: 1000,
+      frozenTime: '2026-01-15T12:00:00.000Z',
+      captureMode: 'viewport',
+      interactiveMode: false,
+      breakpoints: [{ name: 'desktop', width: 1280, height: 800 }],
+      paths: {
+        actions: actionsDir,
+        stories: storiesDir,
+        baselines: join(root, 'baselines'),
+        localCache: join(root, 'cache'),
+        report: join(root, 'report'),
+        authState: join(root, 'auth'),
+      },
+    } as unknown as ResolvedConfig;
+
+    let launches = 0;
+    let contextsCreated = 0;
+    let closes = 0;
+    const distinctContexts = new Set<BrowserContext>();
+    const browser = {
+      async newContext(): Promise<BrowserContext> {
+        contextsCreated += 1;
+        const context = fakeContext(fakePage(solidPng(9, 9, 9)));
+        distinctContexts.add(context);
+        return context;
+      },
+      version(): string {
+        return '131.0.0.0';
+      },
+      async close(): Promise<void> {
+        closes += 1;
+      },
+    } as unknown as Browser;
+    const launchBrowser = async (): Promise<Browser> => {
+      launches += 1;
+      return browser;
+    };
+
+    const result = await runAll(
+      config,
+      { headed: false, mode: 'local' },
+      launchBrowser,
+    );
+
+    // ONE launch for the whole run — not one per (story × breakpoint) pass.
+    assert.equal(launches, 1, 'browser must launch exactly once');
+    // The single browser was reused: one context per story (2 stories ×
+    // 1 breakpoint), each a DISTINCT context so per-story isolation survives a
+    // shared browser.
+    assert.equal(contextsCreated, 2, 'one fresh context per story');
+    assert.equal(distinctContexts.size, 2, 'contexts must not be shared');
+    // Closed exactly once, on the normal finally path — no leak, no double-close.
+    assert.equal(closes, 1, 'browser closed once on completion');
+    assert.equal(result.totals.stories, 2);
+  });
+});
+
+describe('createRunTeardown', () => {
+  it('closes the shared browser and stops managed servers, exactly once', async () => {
+    let closes = 0;
+    let stops = 0;
+    const teardown = createRunTeardown({
+      browser: {
+        async close(): Promise<void> {
+          closes += 1;
+        },
+      },
+      managedServers: {
+        async stop(): Promise<void> {
+          stops += 1;
+        },
+      },
+    });
+
+    await teardown();
+    assert.equal(closes, 1);
+    assert.equal(stops, 1);
+
+    // Idempotent: the normal finally path calling teardown after a signal
+    // already did must NOT double-close.
+    await teardown();
+    assert.equal(closes, 1);
+    assert.equal(stops, 1);
+  });
+
+  it('tears down the browser even when no managed servers were started', async () => {
+    let closes = 0;
+    const teardown = createRunTeardown({
+      browser: {
+        async close(): Promise<void> {
+          closes += 1;
+        },
+      },
+    });
+
+    // Must not throw on the absent managedServers.
+    await teardown();
+    assert.equal(closes, 1);
+  });
+});
+
+describe('createSignalTeardownHandler', () => {
+  it('a simulated signal closes the browser, stops servers, and exits non-zero', async () => {
+    let closes = 0;
+    let stops = 0;
+    const exitCodes: number[] = [];
+    const teardown = createRunTeardown({
+      browser: {
+        async close(): Promise<void> {
+          closes += 1;
+        },
+      },
+      managedServers: {
+        async stop(): Promise<void> {
+          stops += 1;
+        },
+      },
+    });
+    const handler = createSignalTeardownHandler(teardown, (code) =>
+      exitCodes.push(code),
+    );
+
+    // Drive the handler directly — no real signal raised in the test runner.
+    handler();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(closes, 1);
+    assert.equal(stops, 1);
+    assert.deepEqual(exitCodes, [1], 'interrupted run must exit non-zero');
+  });
+
+  it('a second signal does not double-close (idempotent teardown)', async () => {
+    let closes = 0;
+    const exitCodes: number[] = [];
+    const teardown = createRunTeardown({
+      browser: {
+        async close(): Promise<void> {
+          closes += 1;
+        },
+      },
+    });
+    const handler = createSignalTeardownHandler(teardown, (code) =>
+      exitCodes.push(code),
+    );
+
+    handler();
+    handler();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // Two signals, one close — the shared latch swallows the redundant teardown.
+    assert.equal(closes, 1);
+    assert.deepEqual(exitCodes, [1, 1]);
   });
 });
