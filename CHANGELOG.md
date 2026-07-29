@@ -8,6 +8,12 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.2.0-alpha.5] – 2026-07-28
+
+### Fixed
+
+- A11y drift false positives from serialization-only changes
+
 ## [0.2.0-alpha.4] – 2026-07-18
 
 ### Changed
@@ -299,7 +305,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.4...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.5...HEAD
+[0.2.0-alpha.5]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.5
 [0.2.0-alpha.4]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.4
 [0.2.0-alpha.3]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.3
 [0.2.0-alpha.2]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.2

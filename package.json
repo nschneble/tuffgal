@@ -1,6 +1,6 @@
 {
   "name": "tuffgal",
-  "version": "0.2.0-alpha.4",
+  "version": "0.2.0-alpha.5",
   "description": "JSON-driven visual regression for web apps.",
   "license": "MIT",
   "author": "Nick Schneble",
@@ -59,6 +59,7 @@
     "playwright": "^1.49.0",
     "pngjs": "^7.0.0",
     "ssim.js": "^3.5.0",
+    "yaml": "^2.9.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
@@ -72,5 +73,10 @@
     "tsx": "^4.22.4",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.49.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.2": true,
+    "fsevents@2.3.3": true
   }
 }
