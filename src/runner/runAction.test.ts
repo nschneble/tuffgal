@@ -925,6 +925,100 @@ describe('runAction: local mode a11y-only drift stays advisory', () => {
   });
 });
 
+describe('runAction: a11y drift compares parsed trees, not raw text', () => {
+  it('does NOT flag drift when the baseline differs only in YAML quote style', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    // Committed baseline wraps the aria scalar in YAML single-quotes; the live
+    // capture leaves it as a plain scalar. Same accessibility tree, different
+    // serialized text: YAML.parse normalises both to `['button "Save"']`, so
+    // the pre-fix string comparison would have (wrongly) flagged this as drift.
+    await writeFile(
+      join(baselineDir, 'desktop.a11y.yaml'),
+      `- 'button "Save"'`,
+    );
+
+    const result = await runAction({
+      page: fakePage(png, '- button "Save"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    // A formatting-only difference must behave exactly like an identical
+    // baseline: pixels pass, no a11y drift, so CI stays `pass` (no status flip)
+    // and proposes no candidate.
+    assert.equal(result.status, 'pass');
+    assert.equal(result.a11yChanged, undefined);
+    assert.equal(
+      await pathExists(
+        join(config.paths.report, 'candidates', 'open', 'desktop.png'),
+      ),
+      false,
+    );
+  });
+
+  it('does NOT flag drift when the baseline differs only in indentation and trailing whitespace', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    // Committed baseline nests the child four spaces deep with a trailing blank
+    // line; the live capture nests two spaces deep with no trailing newline.
+    // Both parse to `[{ listbox: ['option "A"'] }]`.
+    await writeFile(
+      join(baselineDir, 'desktop.a11y.yaml'),
+      '- listbox:\n    - option "A"\n\n',
+    );
+
+    const result = await runAction({
+      page: fakePage(png, '- listbox:\n  - option "A"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.status, 'pass');
+    assert.equal(result.a11yChanged, undefined);
+  });
+
+  it('STILL flags drift on a genuine tree change (changed accessible name)', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    // A real semantic change (the button's accessible name) must survive the
+    // parse-then-deep-equal comparison and still read as drift, so the fix does
+    // not blunt genuine a11y regressions.
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- button "Old"');
+
+    const result = await runAction({
+      page: fakePage(png, '- button "New"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    // Pixels match but the tree genuinely moved → CI flips to `changed`.
+    assert.equal(result.status, 'changed');
+    assert.equal(result.a11yChanged, true);
+  });
+});
+
 describe('runAction: CI mode size-mismatch drift', () => {
   it('treats a dimension change as changed, writes a candidate, and never rewrites the baseline', async () => {
     const config = await makeConfig();

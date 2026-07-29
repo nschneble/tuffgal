@@ -1,4 +1,6 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { Locator, Page } from 'playwright';
+import { parse as parseYaml } from 'yaml';
 import type { Action, Hint, Step } from '../schema/action.ts';
 import type { ActionResult, ActionStatus } from '../schema/result.ts';
 import type { ResolvedConfig } from '../config.ts';
@@ -427,7 +429,8 @@ async function captureAndCompare(
   const a11yBaselinePathForRead =
     found.source === 'legacy' ? paths.legacyA11yBaseline : paths.a11yBaseline;
   const baselineA11y = await readJsonBaseline(a11yBaselinePathForRead);
-  const a11yChanged = baselineA11y !== undefined && baselineA11y !== a11yJson;
+  const a11yChanged =
+    baselineA11y !== undefined && a11yTreeChanged(baselineA11y, a11yJson);
 
   try {
     const pixelThreshold = action.diff?.pixelThreshold ?? 0.1;
@@ -569,13 +572,37 @@ function resolveMasks(
 }
 
 /**
- * Snapshots the page's accessibility tree as a YAML-shaped string. Two
- * runs of the same page produce byte-identical output so a simple string
- * comparison detects semantic changes (button label, role, structure)
- * without flagging visual-only drift.
+ * Snapshots the page's accessibility tree as a YAML-shaped string, exactly as
+ * Playwright's `ariaSnapshot()` emits it (an ordered YAML list where array order
+ * encodes DOM/reading order). Drift is detected by parsing this against the
+ * committed baseline and deep-equal comparing the trees, NOT by string equality,
+ * so pure serialization noise (indentation, quote style, mapping-key order,
+ * trailing whitespace) in a re-run or hand-edited baseline is not mistaken for a
+ * semantic change. See {@link a11yTreeChanged}.
  */
 async function captureA11yTree(page: Page): Promise<string> {
   return page.locator('body').ariaSnapshot();
+}
+
+/**
+ * True when two aria snapshots describe DIFFERENT accessibility trees. Both
+ * sides are parsed with the `yaml` package and deep-equal compared, so only a
+ * genuine tree change reads as drift: a different role, accessible name/label,
+ * added or removed node, or a reordering of siblings (list order is significant
+ * and preserved by the parse, so a real reading-order change still counts). What
+ * it deliberately ignores is serialization noise that `YAML.parse` normalizes
+ * away, indentation, quote style, mapping-key order, trailing whitespace, none
+ * of which changes the tree.
+ *
+ * A byte-identical fast path short-circuits the common unchanged case (two runs
+ * of the same page). Parse errors are NOT swallowed: `actual` is produced by our
+ * own {@link captureA11yTree}, so a parse failure there is a real capture bug,
+ * and a malformed committed baseline is worth surfacing loudly rather than
+ * silently reading as "unchanged". Either throws.
+ */
+function a11yTreeChanged(baseline: string, actual: string): boolean {
+  if (baseline === actual) return false;
+  return !isDeepStrictEqual(parseYaml(baseline), parseYaml(actual));
 }
 
 function baseResultFor(

@@ -59,6 +59,7 @@
     "playwright": "^1.49.0",
     "pngjs": "^7.0.0",
     "ssim.js": "^3.5.0",
+    "yaml": "^2.9.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
