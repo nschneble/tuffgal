@@ -39,21 +39,11 @@ const result: RunResult = JSON.parse(
   "finishedAt": "2026-06-26T12:00:35.490Z", // ISO 8601, run end
   "durationMs": 35490, // wall-clock for the whole run
   "mode": "ci", // "ci" | "local": the comparison contract this run executed under
-  "totals": {
-    /* see below */
-  },
-  "environment": {
-    /* capture-environment provenance + drift, see below */
-  },
-  "customCoverage": {
-    /* see below */
-  },
-  "deleted": [
-    /* DeletedBaseline[], orphaned committed baselines, see below */
-  ],
-  "stories": [
-    /* StoryResult[], see below */
-  ],
+  "totals": {/* see below */},
+  "environment": {/* capture-environment provenance + drift, see below */},
+  "customCoverage": {/* see below */},
+  "deleted": [/* DeletedBaseline[], orphaned committed baselines, see below */],
+  "stories": [/* StoryResult[], see below */],
 }
 ```
 

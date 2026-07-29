@@ -102,8 +102,7 @@ export type ResolvedBreakpoint = {
  * working unchanged.
  */
 export type BreakpointSelector =
-  | BreakpointName
-  | { name: BreakpointName; width?: number; height?: number };
+  BreakpointName | { name: BreakpointName; width?: number; height?: number };
 
 /**
  * Static paths Tuffgal reads + writes. All relative to the config file's
