@@ -46,13 +46,13 @@ const ALIAS_SUMMARY = [...KEY_ALIASES]
  * `a"`. A lazy capture stops at the token's own quote and yields `a`,
  * which is a real key and not the one that was rejected.
  *
- * This wording is the whole of the coupling to Playwright, and nothing
- * in the suite can detect it changing: `npm test` mocks the keyboard, so
- * every fixture restates the wording rather than observing it. A future
- * Playwright release that rewords the failure leaves the suite green
- * while this stops matching in production, and authors get the bare
- * upstream error with no step value and no alias list. Re-check the
- * wording against a real browser when upgrading Playwright.
+ * This wording is the whole of the coupling to Playwright, and `npm test`
+ * cannot detect it changing: that suite mocks the keyboard, so every
+ * fixture restates the wording rather than observing it, and a reworded
+ * release leaves it green while this stops matching in production. What
+ * notices is `test/dom/type-keys.dom.test.ts`, which presses a real key
+ * and fails when the relabelling stops. Run `npm run test:dom` when
+ * upgrading Playwright.
  */
 const PLAYWRIGHT_UNKNOWN_KEY = /Unknown key: "(.*)"/;
 
