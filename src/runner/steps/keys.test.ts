@@ -41,12 +41,11 @@ describe('normaliseKey: alias resolution', () => {
 });
 
 describe('normaliseKey: passthrough', () => {
-  // Playwright's own names must survive untouched, including the ones the
-  // aliases resolve to, so an author who already writes them sees no
-  // change.
+  // Playwright's own names must survive untouched, so an author who
+  // already writes them sees no change. The first row is every name an
+  // alias resolves to, so a reversed entry in the table cannot pass.
   const untouched = [
-    'Escape',
-    'Control+K',
+    'Control+Meta+Alt+Escape',
     // The deliberate escape hatch for a per-platform modifier.
     'ControlOrMeta+K',
     // `^` is a pressable key, deliberately not aliased to a modifier.
@@ -69,8 +68,9 @@ describe('normaliseKey: passthrough', () => {
 describe('normaliseKey: literal punctuation keys', () => {
   // `+` is a pressable key. Playwright splits a combo only on a `+` that
   // follows something, and this mirrors that exactly, so a `+` in the key
-  // position survives and the text after it is not a token of its own: the
-  // last two cases are what a plain `value.split('+')` gets wrong.
+  // position survives and the text after it is not a token of its own.
+  // "+Esc" and "Ctrl++Esc" are what a plain `value.split('+')` gets
+  // wrong: neither `Esc` is an alias, because neither is a token.
   const literals: Array<[string, string]> = [
     ['+', '+'],
     ['++', '++'],
@@ -89,21 +89,29 @@ describe('normaliseKey: literal punctuation keys', () => {
 });
 
 describe('explainKeyPressFailure', () => {
-  it("re-labels Playwright's unknown-key failure", () => {
-    const cause = new Error('Unknown key: "esc"');
+  // Playwright's real failure, prefixed with the call the way the client
+  // sends it: `keyboard.press: Unknown key: "esc"`.
+  function unknownKey(token: string): Error {
+    return new Error(`keyboard.press: Unknown key: "${token}"`);
+  }
+
+  it("relabels Playwright's unknown-key failure", () => {
+    const cause = unknownKey('esc');
     const error = explainKeyPressFailure('esc', cause);
     assert.ok(error instanceof UnknownKeyError);
     assert.equal(error.cause, cause);
+    // A single-key step is its own value, so the message says it once.
+    assert.match(error.message, /^Unknown key "esc"\. /);
   });
 
   it('names the rejected token, the step, the value, and every alias', () => {
-    const error = explainKeyPressFailure(
-      'Cmd+esc',
-      new Error('Unknown key: "esc"'),
-    );
+    const error = explainKeyPressFailure('Cmd+esc', unknownKey('esc'));
     assert.ok(error instanceof UnknownKeyError);
     const message = error.message;
-    assert.match(message, /^Unknown key "esc" in type step value "Cmd\+esc"/);
+    assert.match(
+      message,
+      /^Unknown key "esc" in the `type` step value "Cmd\+esc"/,
+    );
     for (const alias of [
       'Ctrl→Control',
       'Cmd→Meta',
@@ -119,9 +127,14 @@ describe('explainKeyPressFailure', () => {
     }
   });
 
-  it('leaves any other failure untouched', () => {
-    const cause = new Error('keyboard.press: Timeout 5000ms exceeded.');
-    assert.equal(explainKeyPressFailure('Escape', cause), cause);
+  // A trailing `+` splits to an empty token, and Playwright rejects it by
+  // that name. The capture is empty for a rejected token holding a quote
+  // too, since the quote closes the capture early.
+  it('drops the name when the rejected token has none to give', () => {
+    const error = explainKeyPressFailure('Control+', unknownKey(''));
+    assert.ok(error instanceof UnknownKeyError);
+    const message = error.message;
+    assert.match(message, /^Unknown key in the `type` step value "Control\+"/);
   });
 
   // The match is on Playwright's exact wording, so one of its future

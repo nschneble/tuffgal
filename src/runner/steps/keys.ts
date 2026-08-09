@@ -2,15 +2,18 @@
  * Key-name handling for the `type` step. Playwright's key names stay the
  * source of truth; this layer only rewrites a fixed set of glyphs and
  * abbreviations story authors reach for by habit ("Cmd+K", "⌘+K", "Esc")
- * into the names Playwright understands, and re-labels its unknown-key
+ * into the names Playwright understands, and relabels its unknown-key
  * failure. Everything else passes through untouched, so keys Playwright
  * gains on upgrade need no change here.
  */
 
 /**
- * Author-facing spellings mapped 1:1 onto Playwright key names. A Map, not
- * an object literal, so a step value like "constructor" cannot read an
- * inherited property and resolve to something that is not a key.
+ * Author-facing spellings mapped 1:1 onto Playwright key names. Every
+ * value must be a real Playwright key, or the token Playwright rejects
+ * could be one this layer wrote rather than one the author can find in
+ * their own step value. A Map, not an object literal, so a step value
+ * like "constructor" cannot read an inherited property and resolve to
+ * something that is not a key.
  */
 const KEY_ALIASES = new Map<string, string>([
   ['Ctrl', 'Control'],
@@ -26,11 +29,14 @@ const ALIAS_SUMMARY = [...KEY_ALIASES]
   .join(', ');
 
 /**
- * Playwright's own wording, from `Keyboard.press` in playwright-core:
- * `Unknown key: "${keyString}"`. The quote and colon are part of the match
- * so an unrelated future error that merely mentions an unknown key is not
- * relabelled with an alias list, and the capture hands back the one token
- * Playwright rejected.
+ * Playwright's own wording, from `_keyDescriptionForString` in
+ * playwright-core, which `press` reaches through `down`:
+ * `Unknown key: "${keyString}"`. Unanchored on purpose: the client
+ * prefixes the call, so what arrives is `keyboard.press: Unknown key:
+ * "esc"`. The quote and colon are part of the match so an unrelated
+ * future error that merely mentions an unknown key is not relabelled with
+ * an alias list, and the capture hands back the token Playwright
+ * rejected.
  */
 const PLAYWRIGHT_UNKNOWN_KEY = /Unknown key: "([^"]*)"/;
 
@@ -66,11 +72,21 @@ export function normaliseKey(value: string): string {
     .join('+');
 }
 
+/**
+ * The rewritten failure. Playwright quotes the token it rejected, so a
+ * trailing `+` in the value leaves that token empty and a token holding a
+ * quote of its own truncates the capture; the key is named only when one
+ * survived, and the value is always there to read. The value clause is
+ * dropped when it would only repeat the key, which is the whole of a
+ * single-key step.
+ */
 export class UnknownKeyError extends Error {
   override readonly cause?: unknown;
   constructor(key: string, value: string, cause?: unknown) {
+    const named = key ? ` "${key}"` : '';
+    const where = key === value ? '' : ` in the \`type\` step value "${value}"`;
     super(
-      `Unknown key "${key}" in type step value "${value}". Key names are Playwright's and case-sensitive, so "Escape" resolves and "esc" does not.\nAliases: ${ALIAS_SUMMARY}`,
+      `Unknown key${named}${where}. Key names are Playwright's and case-sensitive, so "Esc" resolves and "esc" does not.\nAliases: ${ALIAS_SUMMARY}`,
     );
     this.name = 'UnknownKeyError';
     this.cause = cause;
@@ -78,12 +94,10 @@ export class UnknownKeyError extends Error {
 }
 
 /**
- * Playwright reports an unrecognized name as `Unknown key: "esc"`, which
- * says nothing about where it came from or what tuffgal accepts. Only that
- * failure is rewritten; timeouts, closed pages, and everything else pass
- * through so their own diagnostics survive. Every alias resolves to a name
- * Playwright knows, so the token it rejected is never one this layer
- * rewrote and always appears in the author's value verbatim.
+ * Playwright's bare unknown-key failure says nothing about where the key
+ * came from or what tuffgal accepts. Only that failure is rewritten;
+ * timeouts, closed pages, and everything else pass through so their own
+ * diagnostics survive.
  */
 export function explainKeyPressFailure(value: string, cause: unknown): unknown {
   const rejected =

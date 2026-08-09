@@ -16,7 +16,7 @@ function recordingPage(keys: string[]): Page {
   } as unknown as Page;
 }
 
-/** A page whose keyboard always fails, standing in for Playwright. */
+/** A page whose keyboard throws, standing in for a Playwright failure. */
 function failingPage(error: unknown): Page {
   return {
     keyboard: {
@@ -27,8 +27,8 @@ function failingPage(error: unknown): Page {
   } as unknown as Page;
 }
 
-// keys.ts owns which spellings resolve to what; these cover only what the
-// seam itself decides.
+// keys.ts owns which spellings resolve to what; these cover only what
+// `runType` itself decides.
 describe('runType', () => {
   it('presses the resolved key, not the authored one', async () => {
     const keys: string[] = [];
@@ -38,10 +38,13 @@ describe('runType', () => {
 
   it('reports the value as authored, not as resolved', async () => {
     await assert.rejects(
-      runType(failingPage(new Error('Unknown key: "esc"')), 'Cmd+esc'),
+      runType(
+        failingPage(new Error('keyboard.press: Unknown key: "esc"')),
+        'Cmd+esc',
+      ),
       (error: unknown) => {
         assert.ok(error instanceof UnknownKeyError);
-        assert.match(error.message, /type step value "Cmd\+esc"/);
+        assert.match(error.message, /`type` step value "Cmd\+esc"/);
         assert.doesNotMatch(error.message, /Meta\+esc/);
         return true;
       },
