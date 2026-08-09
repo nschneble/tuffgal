@@ -115,7 +115,7 @@ Precedence is `1` > `3` > `2` > `0`. Local mode only ever exits `1` or `0`.
 
 ## What's explicitly out of scope (v1)
 
-- AI fuzzy locator matching (deferred to v1.1, BYOLLM)
+- AI fuzzy locator matching
 - Hosted SaaS / cloud runs
 - Native mobile (Playwright cannot drive it)
 - WebDriver / Puppeteer substrate
@@ -153,16 +153,15 @@ MIT. See [LICENSE](LICENSE).
 
 ## Roadmap
 
-| Milestone                  | Status   |
-| -------------------------- | -------- |
-| Repo bootstrap             | ✅       |
-| Core extraction            | ✅       |
-| Bridges                    | ✅       |
-| Linklater migration        | ✅       |
-| GitHub Action              | ✅       |
-| `v0.1.0-alpha` npm publish | ✅       |
-| `v1.0.0` public launch     | ⏳       |
-| `v1.1.0` AI fuzzy matching | Deferred |
+| Milestone                  | Status |
+| -------------------------- | ------ |
+| Repo bootstrap             | ✅     |
+| Core extraction            | ✅     |
+| Bridges                    | ✅     |
+| Linklater migration        | ✅     |
+| GitHub Action              | ✅     |
+| `v0.1.0-alpha` npm publish | ✅     |
+| `v1.0.0` public launch     | ⏳     |
 
 ## Acknowledgements
 
