@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { unknownKeyFailure } from '../../../test/fixtures/playwrightFailures.ts';
 import {
   explainKeyPressFailure,
   normaliseKey,
@@ -89,23 +90,34 @@ describe('normaliseKey: literal punctuation keys', () => {
 });
 
 describe('explainKeyPressFailure', () => {
-  // Playwright's real failure, prefixed with the call the way the client
-  // sends it: `keyboard.press: Unknown key: "esc"`.
-  function unknownKey(token: string): Error {
-    return new Error(`keyboard.press: Unknown key: "${token}"`);
-  }
-
   it("relabels Playwright's unknown-key failure", () => {
-    const cause = unknownKey('esc');
+    const cause = unknownKeyFailure('esc');
     const error = explainKeyPressFailure('esc', cause);
     assert.ok(error instanceof UnknownKeyError);
     assert.equal(error.cause, cause);
+    // Failures are classified by `name` after they cross the async
+    // boundary — `isRetryable` in runAction reads it, not the class — so
+    // the identity has to ride on the instance.
+    assert.equal(error.name, 'UnknownKeyError');
     // A single-key step is its own value, so the message says it once.
     assert.match(error.message, /^Unknown key "esc"\. /);
   });
 
+  // The case-sensitivity rule is the actionable half of the message: it
+  // is what turns "esc" into "Esc" without a trip to Playwright's docs.
+  it('spells out that key names are case-sensitive', () => {
+    const error = explainKeyPressFailure('esc', unknownKeyFailure('esc'));
+    assert.ok(error instanceof UnknownKeyError);
+    assert.ok(
+      error.message.includes(
+        `Key names are Playwright's and case-sensitive, so "Esc" resolves and "esc" does not.`,
+      ),
+      'expected the message to spell out the case-sensitivity rule',
+    );
+  });
+
   it('names the rejected token, the step, the value, and every alias', () => {
-    const error = explainKeyPressFailure('Cmd+esc', unknownKey('esc'));
+    const error = explainKeyPressFailure('Cmd+esc', unknownKeyFailure('esc'));
     assert.ok(error instanceof UnknownKeyError);
     const message = error.message;
     assert.match(
@@ -128,14 +140,45 @@ describe('explainKeyPressFailure', () => {
   });
 
   // A trailing `+` splits to an empty token, and Playwright rejects it by
-  // that name. The capture is empty for a rejected token holding a quote
-  // too, since the quote closes the capture early.
+  // that name — there is nothing to quote, so the message says the value
+  // and stops.
   it('drops the name when the rejected token has none to give', () => {
-    const error = explainKeyPressFailure('Control+', unknownKey(''));
+    const error = explainKeyPressFailure('Control+', unknownKeyFailure(''));
     assert.ok(error instanceof UnknownKeyError);
     const message = error.message;
     assert.match(message, /^Unknown key in the `type` step value "Control\+"/);
   });
+
+  // A step value that interpolates to the empty string presses an empty
+  // key, so there is no name to give and the value repeats it. The step
+  // is still what the author has to go and look at.
+  it('names the step when the value itself is empty', () => {
+    const error = explainKeyPressFailure('', unknownKeyFailure(''));
+    assert.ok(error instanceof UnknownKeyError);
+    assert.match(error.message, /^Unknown key in the `type` step value ""\./);
+  });
+
+  // A rejected token can carry a quote of its own at either end, and
+  // Playwright quotes it as-is. The name has to be the whole token: half
+  // of "a"" is `a`, a key that works, so naming it sends the author
+  // after the wrong thing.
+  const quoted: Array<[string, string]> = [
+    ['Ctrl+a"', 'a"'],
+    ['Ctrl+"x', '"x'],
+  ];
+
+  for (const [value, token] of quoted) {
+    it(`names the whole rejected token of "${value}"`, () => {
+      const error = explainKeyPressFailure(value, unknownKeyFailure(token));
+      assert.ok(error instanceof UnknownKeyError);
+      assert.ok(
+        error.message.startsWith(
+          `Unknown key "${token}" in the \`type\` step value "${value}".`,
+        ),
+        `expected the message to open by naming ${token}, got: ${error.message}`,
+      );
+    });
+  }
 
   // The match is on Playwright's exact wording, so one of its future
   // errors that merely mentions an unknown key keeps its own diagnostics.

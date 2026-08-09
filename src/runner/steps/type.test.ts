@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Page } from 'playwright';
 
+import { unknownKeyFailure } from '../../../test/fixtures/playwrightFailures.ts';
 import { UnknownKeyError } from './keys.ts';
 import { runType } from './type.ts';
 
@@ -38,10 +39,7 @@ describe('runType', () => {
 
   it('reports the value as authored, not as resolved', async () => {
     await assert.rejects(
-      runType(
-        failingPage(new Error('keyboard.press: Unknown key: "esc"')),
-        'Cmd+esc',
-      ),
+      runType(failingPage(unknownKeyFailure('esc')), 'Cmd+esc'),
       (error: unknown) => {
         assert.ok(error instanceof UnknownKeyError);
         assert.match(error.message, /`type` step value "Cmd\+esc"/);

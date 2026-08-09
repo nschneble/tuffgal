@@ -37,8 +37,23 @@ const ALIAS_SUMMARY = [...KEY_ALIASES]
  * future error that merely mentions an unknown key is not relabelled with
  * an alias list, and the capture hands back the token Playwright
  * rejected.
+ *
+ * The capture is greedy so a rejected token holding a quote of its own
+ * comes back whole. Playwright puts the failure on one line and ends it
+ * at the closing quote, and the client's prefix carries no quote, so the
+ * last quote on the line is the closing one: `Unknown key: "a""` yields
+ * `a"`. A lazy capture stops at the token's own quote and yields `a`,
+ * which is a real key and not the one that was rejected.
+ *
+ * This wording is the whole of the coupling to Playwright, and nothing
+ * in the suite can detect it changing: `npm test` mocks the keyboard, so
+ * every fixture restates the wording rather than observing it. A future
+ * Playwright release that rewords the failure leaves the suite green
+ * while this stops matching in production, and authors get the bare
+ * upstream error with no step value and no alias list. Re-check the
+ * wording against a real browser when upgrading Playwright.
  */
-const PLAYWRIGHT_UNKNOWN_KEY = /Unknown key: "([^"]*)"/;
+const PLAYWRIGHT_UNKNOWN_KEY = /Unknown key: "(.*)"/;
 
 /**
  * Playwright's own `+` split, mirrored from `Keyboard.press` in
@@ -74,17 +89,20 @@ export function normaliseKey(value: string): string {
 
 /**
  * The rewritten failure. Playwright quotes the token it rejected, so a
- * trailing `+` in the value leaves that token empty and a token holding a
- * quote of its own truncates the capture; the key is named only when one
- * survived, and the value is always there to read. The value clause is
- * dropped when it would only repeat the key, which is the whole of a
- * single-key step.
+ * trailing `+` in the value leaves that token empty; the key is named
+ * only when there is a name to give, and the value is always there to
+ * read. The value clause is dropped only when it would repeat a named
+ * key, which is the whole of a single-key step — an empty key equals an
+ * empty value without repeating anything, and the step is still what the
+ * author has to go and look at.
  */
 export class UnknownKeyError extends Error {
   override readonly cause?: unknown;
   constructor(key: string, value: string, cause?: unknown) {
-    const named = key ? ` "${key}"` : '';
-    const where = key === value ? '' : ` in the \`type\` step value "${value}"`;
+    const hasKey = key !== '';
+    const named = hasKey ? ` "${key}"` : '';
+    const where =
+      hasKey && key === value ? '' : ` in the \`type\` step value "${value}"`;
     super(
       `Unknown key${named}${where}. Key names are Playwright's and case-sensitive, so "Esc" resolves and "esc" does not.\nAliases: ${ALIAS_SUMMARY}`,
     );
