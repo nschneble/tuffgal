@@ -16,6 +16,7 @@ describe('normaliseKey: alias resolution', () => {
     ['Opt', 'Alt'],
     ['⌥', 'Alt'],
     ['Esc', 'Escape'],
+    ['Return', 'Enter'],
   ];
 
   for (const [alias, key] of aliases) {
@@ -32,6 +33,7 @@ describe('normaliseKey: alias resolution', () => {
     ['Opt+Shift+Esc', 'Alt+Shift+Escape'],
     // Alias in both the modifier and the key position.
     ['Cmd+Esc', 'Meta+Escape'],
+    ['Ctrl+Return', 'Control+Enter'],
   ];
 
   for (const [value, expected] of combos) {
@@ -46,7 +48,7 @@ describe('normaliseKey: passthrough', () => {
   // already writes them sees no change. The first row is every name an
   // alias resolves to, so a reversed entry in the table cannot pass.
   const untouched = [
-    'Control+Meta+Alt+Escape',
+    'Control+Meta+Alt+Escape+Enter',
     // The deliberate escape hatch for a per-platform modifier.
     'ControlOrMeta+K',
     // `^` is a pressable key, deliberately not aliased to a modifier.
@@ -131,6 +133,7 @@ describe('explainKeyPressFailure', () => {
       'Opt→Alt',
       '⌥→Alt',
       'Esc→Escape',
+      'Return→Enter',
     ]) {
       assert.ok(
         message.includes(alias),

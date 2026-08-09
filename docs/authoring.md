@@ -194,6 +194,7 @@ abbreviations authors reach for by habit:
 | `Cmd`, `⌘` | `Meta`         |
 | `Opt`, `⌥` | `Alt`          |
 | `Esc`      | `Escape`       |
+| `Return`   | `Enter`        |
 
 Aliases resolve on every token of a combo (`⌘+K`, `Opt+Shift+Esc`) and are
 exact-case: `Esc` resolves, `esc` does not. Every other name goes to

@@ -9,8 +9,8 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 ### Added
 
 - Key glyph and abbreviation aliases for the `type` step: `Ctrl`,
-  `Cmd`/`⌘`, `Opt`/`⌥`, and `Esc` resolve to their Playwright key names,
-  on their own and inside a combo
+  `Cmd`/`⌘`, `Opt`/`⌥`, `Esc`, and `Return` resolve to their Playwright
+  key names, on their own and inside a combo
 
 ### Changed
 

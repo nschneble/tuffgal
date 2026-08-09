@@ -22,6 +22,7 @@ const KEY_ALIASES = new Map<string, string>([
   ['Opt', 'Alt'],
   ['⌥', 'Alt'],
   ['Esc', 'Escape'],
+  ['Return', 'Enter'],
 ]);
 
 const ALIAS_SUMMARY = [...KEY_ALIASES]
