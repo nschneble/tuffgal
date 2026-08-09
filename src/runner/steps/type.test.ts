@@ -5,7 +5,7 @@ import type { Page } from 'playwright';
 import { UnknownKeyError } from './keys.ts';
 import { runType } from './type.ts';
 
-/** Records every `keyboard.press` call so the test can assert the key sent. */
+/** Records `keyboard.press` calls so a test can assert the key sent. */
 function recordingPage(keys: string[]): Page {
   return {
     keyboard: {
@@ -16,7 +16,7 @@ function recordingPage(keys: string[]): Page {
   } as unknown as Page;
 }
 
-/** A page whose keyboard always fails, standing in for Playwright's throw. */
+/** A page whose keyboard always fails, standing in for Playwright. */
 function failingPage(error: unknown): Page {
   return {
     keyboard: {
@@ -27,35 +27,22 @@ function failingPage(error: unknown): Page {
   } as unknown as Page;
 }
 
-describe('runType: aliases reach the keyboard', () => {
-  const cases: Array<[string, string]> = [
-    ['Esc', 'Escape'],
-    ['Cmd+K', 'Meta+K'],
-    ['⌥+Tab', 'Alt+Tab'],
-    // Untouched keys and literal punctuation arrive exactly as authored.
-    ['Control+K', 'Control+K'],
-    ['ControlOrMeta+K', 'ControlOrMeta+K'],
-    ['+', '+'],
-    ['^', '^'],
-  ];
+// keys.ts owns which spellings resolve to what; these cover only what the
+// seam itself decides.
+describe('runType', () => {
+  it('presses the resolved key, not the authored one', async () => {
+    const keys: string[] = [];
+    await runType(recordingPage(keys), 'Cmd+K');
+    assert.deepEqual(keys, ['Meta+K']);
+  });
 
-  for (const [value, pressed] of cases) {
-    it(`presses "${pressed}" for the step value "${value}"`, async () => {
-      const keys: string[] = [];
-      await runType(recordingPage(keys), value);
-      assert.deepEqual(keys, [pressed]);
-    });
-  }
-});
-
-describe('runType: unknown keys', () => {
-  it('re-labels an unknown key with the step name and aliases', async () => {
+  it('reports the value as authored, not as resolved', async () => {
     await assert.rejects(
-      runType(failingPage(new Error('Unknown key: "esc"')), 'esc'),
+      runType(failingPage(new Error('Unknown key: "esc"')), 'Cmd+esc'),
       (error: unknown) => {
         assert.ok(error instanceof UnknownKeyError);
-        assert.match(error.message, /`type` step value "esc"/);
-        assert.match(error.message, /Esc→Escape/);
+        assert.match(error.message, /type step value "Cmd\+esc"/);
+        assert.doesNotMatch(error.message, /Meta\+esc/);
         return true;
       },
     );

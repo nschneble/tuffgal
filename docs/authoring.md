@@ -197,15 +197,18 @@ abbreviations authors reach for by habit:
 
 Aliases resolve anywhere in a combo (`⌘+K`, `Opt+Shift+Esc`) and are
 exact-case: `Esc` resolves, `esc` does not. Every other name goes to
-Playwright untouched, so `^` and `+` stay literal keypresses. An unrecognized
-key fails the action with an error naming the step and the aliases above.
+Playwright untouched, so `+` stays a pressable key rather than a separator,
+and `^` stays a literal caret rather than a modifier. An unrecognized key
+fails the action with an error naming the key Playwright rejected, the
+step value it came from, and the aliases above.
 
 `Cmd` always resolves to `Meta`, never to whichever modifier the host OS
-prefers. Baselines are captured on CI Linux, so a modifier that means
-something different per platform is the environment drift the
-[manifest](reporting.md#environment-environmentreport) and exit code `3`
-exist to catch. When a story genuinely wants the platform's own modifier,
-Playwright's `ControlOrMeta` passes straight through and does that.
+prefers. A modifier that means `Control` on the machine that captured a
+baseline and `Meta` on the machine comparing against it is environment
+drift, and the [manifest](reporting.md#environment-environmentreport) and
+exit code `3` exist to catch exactly that. When a story wants the
+platform's own modifier, Playwright's `ControlOrMeta` passes straight
+through and does it.
 
 ```json
 { "kind": "type", "value": "Escape" }

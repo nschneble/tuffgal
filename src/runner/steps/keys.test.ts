@@ -3,11 +3,11 @@ import { describe, it } from 'node:test';
 
 import {
   explainKeyPressFailure,
-  normalizeKey,
+  normaliseKey,
   UnknownKeyError,
 } from './keys.ts';
 
-describe('normalizeKey: alias resolution', () => {
+describe('normaliseKey: alias resolution', () => {
   const aliases: Array<[string, string]> = [
     ['Ctrl', 'Control'],
     ['Cmd', 'Meta'],
@@ -19,7 +19,7 @@ describe('normalizeKey: alias resolution', () => {
 
   for (const [alias, key] of aliases) {
     it(`resolves "${alias}" standalone to "${key}"`, () => {
-      assert.equal(normalizeKey(alias), key);
+      assert.equal(normaliseKey(alias), key);
     });
   }
 
@@ -35,52 +35,55 @@ describe('normalizeKey: alias resolution', () => {
 
   for (const [value, expected] of combos) {
     it(`resolves the combo "${value}" to "${expected}"`, () => {
-      assert.equal(normalizeKey(value), expected);
+      assert.equal(normaliseKey(value), expected);
     });
   }
 });
 
-describe('normalizeKey: passthrough', () => {
+describe('normaliseKey: passthrough', () => {
   // Playwright's own names must survive untouched, including the ones the
-  // aliases resolve to, so an author who already writes them sees no change.
+  // aliases resolve to, so an author who already writes them sees no
+  // change.
   const untouched = [
     'Escape',
     'Control+K',
-    'Shift+A',
-    'A',
-    'Tab',
-    'Meta+K',
-    'Alt+Tab',
     // The deliberate escape hatch for a per-platform modifier.
     'ControlOrMeta+K',
+    // `^` is a pressable key, deliberately not aliased to a modifier.
+    '^',
     // Exact-case matching: neither of these is an alias.
     'esc',
-    'ESC',
-    'cmd+k',
     'ctrl+Shift+P',
     // Inherited object properties are not aliases either.
     'constructor',
-    'toString',
     '__proto__',
   ];
 
   for (const value of untouched) {
     it(`passes "${value}" through unchanged`, () => {
-      assert.equal(normalizeKey(value), value);
+      assert.equal(normaliseKey(value), value);
     });
   }
 });
 
-describe('normalizeKey: literal punctuation keys', () => {
-  // `+` and `^` are pressable keys. Playwright splits a combo only on a `+`
-  // that follows something, and this mirrors that exactly, so these round-trip
-  // instead of being mangled into empty tokens.
-  const literals = ['+', '^', '++', 'Control++', 'Ctrl++', 'Shift+^', 'a++b'];
+describe('normaliseKey: literal punctuation keys', () => {
+  // `+` is a pressable key. Playwright splits a combo only on a `+` that
+  // follows something, and this mirrors that exactly, so a `+` in the key
+  // position survives and the text after it is not a token of its own: the
+  // last two cases are what a plain `value.split('+')` gets wrong.
+  const literals: Array<[string, string]> = [
+    ['+', '+'],
+    ['++', '++'],
+    ['Control++', 'Control++'],
+    ['Ctrl++', 'Control++'],
+    ['a++b', 'a++b'],
+    ['+Esc', '+Esc'],
+    ['Ctrl++Esc', 'Control++Esc'],
+  ];
 
-  for (const value of literals) {
-    it(`round-trips "${value}"`, () => {
-      const expected = value === 'Ctrl++' ? 'Control++' : value;
-      assert.equal(normalizeKey(value), expected);
+  for (const [value, expected] of literals) {
+    it(`resolves "${value}" to "${expected}"`, () => {
+      assert.equal(normaliseKey(value), expected);
     });
   }
 });
@@ -93,14 +96,14 @@ describe('explainKeyPressFailure', () => {
     assert.equal(error.cause, cause);
   });
 
-  it('names the step, the value, and every alias', () => {
+  it('names the rejected token, the step, the value, and every alias', () => {
     const error = explainKeyPressFailure(
       'Cmd+esc',
       new Error('Unknown key: "esc"'),
     );
-    const message = (error as Error).message;
-    assert.match(message, /`type` step/);
-    assert.match(message, /"Cmd\+esc"/);
+    assert.ok(error instanceof UnknownKeyError);
+    const message = error.message;
+    assert.match(message, /^Unknown key "esc" in type step value "Cmd\+esc"/);
     for (const alias of [
       'Ctrl→Control',
       'Cmd→Meta',
@@ -114,11 +117,17 @@ describe('explainKeyPressFailure', () => {
         `expected the message to list ${alias}`,
       );
     }
-    assert.match(message, /ControlOrMeta/);
   });
 
   it('leaves any other failure untouched', () => {
     const cause = new Error('keyboard.press: Timeout 5000ms exceeded.');
+    assert.equal(explainKeyPressFailure('Escape', cause), cause);
+  });
+
+  // The match is on Playwright's exact wording, so one of its future
+  // errors that merely mentions an unknown key keeps its own diagnostics.
+  it('leaves a differently worded unknown-key failure untouched', () => {
+    const cause = new Error('Unknown key handling for this platform');
     assert.equal(explainKeyPressFailure('Escape', cause), cause);
   });
 

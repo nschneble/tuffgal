@@ -21,9 +21,18 @@ const KEY_ALIASES = new Map<string, string>([
   ['Esc', 'Escape'],
 ]);
 
-const ALIAS_LIST = [...KEY_ALIASES]
+const ALIAS_SUMMARY = [...KEY_ALIASES]
   .map(([alias, key]) => `${alias}→${key}`)
   .join(', ');
+
+/**
+ * Playwright's own wording, from `Keyboard.press` in playwright-core:
+ * `Unknown key: "${keyString}"`. The quote and colon are part of the match
+ * so an unrelated future error that merely mentions an unknown key is not
+ * relabelled with an alias list, and the capture hands back the one token
+ * Playwright rejected.
+ */
+const PLAYWRIGHT_UNKNOWN_KEY = /Unknown key: "([^"]*)"/;
 
 /**
  * Playwright's own `+` split, mirrored from `Keyboard.press` in
@@ -51,7 +60,7 @@ function splitCombo(value: string): string[] {
  * is exact-case, like Playwright's own key names: "Esc" resolves, "esc"
  * does not and fails at press time.
  */
-export function normalizeKey(value: string): string {
+export function normaliseKey(value: string): string {
   return splitCombo(value)
     .map((token) => KEY_ALIASES.get(token) ?? token)
     .join('+');
@@ -59,9 +68,9 @@ export function normalizeKey(value: string): string {
 
 export class UnknownKeyError extends Error {
   override readonly cause?: unknown;
-  constructor(value: string, cause?: unknown) {
+  constructor(key: string, value: string, cause?: unknown) {
     super(
-      `Unknown key in \`type\` step value "${value}". Key names are Playwright's and case-sensitive; ControlOrMeta is the cross-platform modifier.\nAliases: ${ALIAS_LIST}`,
+      `Unknown key "${key}" in type step value "${value}". Key names are Playwright's and case-sensitive, so "Escape" resolves and "esc" does not.\nAliases: ${ALIAS_SUMMARY}`,
     );
     this.name = 'UnknownKeyError';
     this.cause = cause;
@@ -72,10 +81,16 @@ export class UnknownKeyError extends Error {
  * Playwright reports an unrecognized name as `Unknown key: "esc"`, which
  * says nothing about where it came from or what tuffgal accepts. Only that
  * failure is rewritten; timeouts, closed pages, and everything else pass
- * through so their own diagnostics survive.
+ * through so their own diagnostics survive. Every alias resolves to a name
+ * Playwright knows, so the token it rejected is never one this layer
+ * rewrote and always appears in the author's value verbatim.
  */
 export function explainKeyPressFailure(value: string, cause: unknown): unknown {
-  const unknownKey =
-    cause instanceof Error && cause.message.includes('Unknown key');
-  return unknownKey ? new UnknownKeyError(value, cause) : cause;
+  const rejected =
+    cause instanceof Error
+      ? PLAYWRIGHT_UNKNOWN_KEY.exec(cause.message)?.[1]
+      : undefined;
+  return rejected === undefined
+    ? cause
+    : new UnknownKeyError(rejected, value, cause);
 }

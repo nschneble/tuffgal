@@ -8,11 +8,15 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Added
 
-- Key glyph and abbreviation aliases for the `type` step: `Ctrl`, `Cmd`,
-  `⌘`, `Opt`, `⌥`, and `Esc` resolve to their Playwright key names,
-  standalone and anywhere in a combo
-- An unrecognized `type` key now fails with an error naming the step and
-  the aliases it accepts, in place of Playwright's bare `Unknown key`
+- Key glyph and abbreviation aliases for the `type` step: `Ctrl`,
+  `Cmd`/`⌘`, `Opt`/`⌥`, and `Esc` resolve to their Playwright key names,
+  on their own and inside a combo
+
+### Changed
+
+- An unrecognized key in a `type` step now fails with an error naming the
+  rejected key, the step value, and the aliases it accepts, in place of
+  Playwright's bare `Unknown key`
 
 ## [0.2.0-alpha.5] – 2026-07-28
 
