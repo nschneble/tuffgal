@@ -1,10 +1,18 @@
 # DOM tests
 
-Real-browser tests for the report's client-side behavior — the filter
-intersection, empty-state, and live-region wording that `report.js` owns.
-The `src/**/*.test.ts` suite renders HTML strings and never builds a live DOM,
-so it cannot reach this logic; these tests launch Chromium and drive the actual
-report.
+Real-browser tests for behavior the `src/**/*.test.ts` suite cannot reach,
+because it renders HTML strings and mocks Playwright rather than driving
+either one.
+
+- `breakpoint-filter` covers the report's client-side filter intersection,
+  empty-state, and live-region wording, which `report.js` owns and a
+  string render never builds a live DOM for.
+- `type-keys` covers the `type` step's key handling against a real
+  keyboard. Relabelling Playwright's unknown-key failure depends on
+  matching its message text, which is internal to playwright-core, so a
+  reworded release would leave the mocked suite green while authors
+  silently fell back to the bare upstream error. This is what notices.
+  It also proves every alias resolves to a key Playwright really knows.
 
 They live outside `src/` on purpose. `npm test` stays pure-unit and mocks
 Playwright, so CI needs no browser; a real-Chromium test in that glob would

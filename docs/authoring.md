@@ -183,11 +183,39 @@ such as a network call, use `waitFor` or `expect.anyOf` instead.
 `type` dispatches keyboard input on the page, outside of any focused input
 field. Use it for hotkeys (`Ctrl+K` to open a command palette), modal
 dismissal (`Esc`), or focus cycling (`Tab`). Individual keys (`"A"`), named
-keys (`"Esc"`, `"Return"`), and key combos (`"Shift+A"`) all work.
+keys (`"Escape"`), and key combos (`"Shift+A"`) all work.
+
+Key names are Playwright's, with one alias layer on top for the glyphs and
+abbreviations authors reach for by habit:
+
+| Alias      | Playwright key |
+| ---------- | -------------- |
+| `Ctrl`     | `Control`      |
+| `Cmd`, `⌘` | `Meta`         |
+| `Opt`, `⌥` | `Alt`          |
+| `Esc`      | `Escape`       |
+| `Return`   | `Enter`        |
+
+Aliases resolve on every token of a combo (`⌘+K`, `Opt+Shift+Esc`) and are
+exact-case: `Esc` resolves, `esc` does not. Every other name goes to
+Playwright untouched, so `^` stays a literal caret rather than a modifier.
+A `+` separates a combo only when something precedes it, so `Ctrl++`
+presses `Control` and `+`, and the `Esc` in `+Esc` is part of one literal
+token rather than an alias. An unrecognized key fails the action with an
+error naming the key Playwright rejected, the step value it came from, and
+the aliases above.
+
+`Cmd` always resolves to `Meta`, never to whichever modifier the host OS
+prefers. Resolving per platform would make a modifier mean `Control` on
+the machine that captured a baseline and `Meta` on the machine comparing
+against it. That is environment drift, and the
+[manifest](reporting.md#environment-environmentreport) and exit code `3`
+exist to catch exactly that. When a story wants the platform's own
+modifier, use Playwright's `ControlOrMeta`; it passes straight through.
 
 ```json
 { "kind": "type", "value": "Escape" }
-{ "kind": "type", "value": "Control+K" }
+{ "kind": "type", "value": "Cmd+K" }
 ```
 
 ## When to use which feature

@@ -145,11 +145,14 @@ export const stepSchema = z.discriminatedUnion('kind', [
     hint: hintSchema,
   }),
   /**
-   * Keyboard input directed at the page (not an input field). Passed
-   * straight to Playwright's `keyboard.press`, so single keys ("A"),
+   * Keyboard input directed at the page (not an input field). Resolves a
+   * fixed set of glyphs and abbreviations ("Cmd", "⌘", "Esc") first, then
+   * hands the key to Playwright's `keyboard.press`, so single keys ("A"),
    * named keys ("Escape", "Tab"), and combinations ("Shift+A",
-   * "Control+Enter") all work. Use for hotkeys, modal dismissal, focus
-   * cycling.
+   * "Control+Enter") all work. Names are validated at press time, not by
+   * this schema, so Playwright stays the one list of keys. Use for
+   * hotkeys, modal dismissal, focus cycling. See runner/steps/keys.ts for
+   * the alias table.
    */
   z.object({
     kind: z.literal('type'),

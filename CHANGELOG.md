@@ -8,6 +8,20 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.2.0-alpha.6] – 2026-08-09
+
+### Added
+
+- Key glyph and abbreviation aliases for the `type` step: `Ctrl`,
+  `Cmd`/`⌘`, `Opt`/`⌥`, `Esc`, and `Return` resolve to their Playwright
+  key names, on their own and inside a combo
+
+### Changed
+
+- An unrecognized key in a `type` step now fails with an error naming the
+  rejected key, the step value, and the aliases tuffgal accepts, in place
+  of Playwright's bare `Unknown key`
+
 ## [0.2.0-alpha.5] – 2026-07-28
 
 ### Fixed
@@ -305,7 +319,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.5...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.6...HEAD
+[0.2.0-alpha.6]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.6
 [0.2.0-alpha.5]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.5
 [0.2.0-alpha.4]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.4
 [0.2.0-alpha.3]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.3
