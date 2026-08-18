@@ -1600,7 +1600,7 @@ describe('renderActionNotes: candidate + a11y-drift notes', () => {
     );
   });
 
-  it('stacks candidate note before a11y-drift note on an a11y-only changed row', () => {
+  it('renders NO candidate note on an a11y-only changed row', () => {
     const html = renderReport(
       actionResult({
         action: 'visit-settings',
@@ -1610,15 +1610,195 @@ describe('renderActionNotes: candidate + a11y-drift notes', () => {
       }),
       REPORT_DIR,
     );
+    assert.ok(
+      !html.includes('class="candidate-note"'),
+      'the pixels matched, so no screenshot is proposed as a new baseline',
+    );
+    assert.ok(
+      html.includes('class="a11y-drift-note"'),
+      'the a11y-drift note carries what actually moved',
+    );
+  });
+
+  it('stacks candidate note before a11y-drift note when pixels drifted too', () => {
+    const html = renderReport(
+      actionResult({
+        action: 'visit-settings',
+        status: 'changed',
+        diffPath: '/fake/report/dir/diff/visit-settings.png',
+        a11yChanged: true,
+        a11yBaselinePath: '/fake/report/dir/base/visit-settings/0.a11y.yaml',
+      }),
+      REPORT_DIR,
+    );
     const candidateIndex = html.indexOf('class="candidate-note"');
     const a11yIndex = html.indexOf('class="a11y-drift-note"');
     assert.ok(
       candidateIndex !== -1 && a11yIndex !== -1,
-      'both notes render on an a11y-only changed row',
+      'both notes render when a row drifted in pixels AND in the tree',
     );
     assert.ok(
       candidateIndex < a11yIndex,
       'candidate note precedes the a11y-drift note',
+    );
+  });
+});
+
+describe('renderA11yDiff: the a11y-only changed row', () => {
+  function a11yOnlyReport(actionOverrides: Partial<ActionResult> = {}): string {
+    return renderReport(
+      makeRunResult({
+        totals: {
+          stories: 1,
+          passed: 0,
+          changed: 1,
+          failed: 0,
+          new: 0,
+          deleted: 0,
+        },
+        stories: [
+          makeStory({
+            status: 'changed',
+            actions: [
+              makeAction({
+                action: 'visit-settings',
+                status: 'changed',
+                baselinePath: '/fake/report/dir/base/visit-settings/0.png',
+                actualPath: '/fake/report/dir/actual/visit-settings/0.png',
+                diffPixels: 0,
+                diffRatio: 0,
+                ssimScore: 1,
+                a11yChanged: true,
+                a11yBaselinePath:
+                  '/fake/report/dir/base/visit-settings/0.a11y.yaml',
+                a11yDiff: {
+                  lines: [
+                    ' - navigation:',
+                    '-  - link "Home"',
+                    '+  - link "Home page"',
+                  ],
+                  added: 1,
+                  removed: 1,
+                  truncated: false,
+                },
+                ...actionOverrides,
+              }),
+            ],
+          }),
+        ],
+      }),
+      REPORT_DIR,
+    );
+  }
+
+  it('renders the diff in place of the screenshot viewer', () => {
+    const html = a11yOnlyReport();
+    assert.ok(html.includes('class="a11y-diff"'), 'the diff block renders');
+    assert.ok(
+      !html.includes('class="shot-radio"') && !html.includes('class="shot-'),
+      'no screenshot variants, radios, or panels on an a11y-only row',
+    );
+    assert.ok(
+      !html.includes('differs'),
+      'no 0% pixel-diff stat on a row whose pixels matched',
+    );
+    assert.ok(
+      html.includes('toggle accessibility diff'),
+      'the collapsible names what it holds',
+    );
+  });
+
+  it('marks each changed line for sight and for assistive tech', () => {
+    const html = a11yOnlyReport();
+    assert.ok(
+      html.includes(
+        '<span class="a11y-diff-line a11y-diff-line--remove"><span class="sr-only">Removed: </span><span aria-hidden="true">-</span>  - link &quot;Home&quot;</span>',
+      ),
+      'a removed line carries the marker glyph, a spoken word, and the escaped text',
+    );
+    assert.ok(
+      html.includes(
+        '<span class="a11y-diff-line a11y-diff-line--add"><span class="sr-only">Added: </span><span aria-hidden="true">+</span>  - link &quot;Home page&quot;</span>',
+      ),
+      'an added line does the same',
+    );
+    assert.ok(
+      html.includes('<span class="a11y-diff-line"> - navigation:</span>'),
+      'an unchanged context line is announced as neither',
+    );
+  });
+
+  it('names and focuses the scrollable diff block', () => {
+    const html = a11yOnlyReport();
+    assert.ok(
+      html.includes(
+        '<pre class="a11y-diff" tabindex="0" role="group" aria-label="Accessibility snapshot diff for visit-settings">',
+      ),
+      'the horizontally scrollable block is a named tab stop',
+    );
+  });
+
+  it('flags a clipped diff with the full counts', () => {
+    const html = a11yOnlyReport({
+      a11yDiff: {
+        lines: [' - navigation:', '-  - link "Home"'],
+        added: 12,
+        removed: 9,
+        truncated: true,
+      },
+    });
+    assert.ok(
+      html.includes('Diff clipped. 12 added, 9 removed in full.'),
+      'the clipped render still states the real size',
+    );
+  });
+
+  it('degrades to prose when the result carries no diff', () => {
+    const html = a11yOnlyReport({ a11yDiff: undefined });
+    assert.ok(
+      html.includes('No line diff recorded for this run.'),
+      'an older results.json still explains the row',
+    );
+    assert.ok(!html.includes('<pre class="a11y-diff"'), 'no empty diff block');
+  });
+
+  it('reports counts when the snapshots were too large to diff', () => {
+    const html = a11yOnlyReport({
+      a11yDiff: { lines: [], added: 2100, removed: 2100, truncated: true },
+    });
+    assert.ok(
+      html.includes('No line diff available: 2100 added, 2100 removed.'),
+      'the coarse fallback still names the size of the change',
+    );
+  });
+
+  it('keeps the screenshot viewer when pixels drifted too', () => {
+    const html = a11yOnlyReport({
+      diffPath: '/fake/report/dir/diff/visit-settings.png',
+      diffRatio: 0.04,
+      diffPixels: 1200,
+    });
+    assert.ok(
+      !html.includes('class="a11y-diff"'),
+      'a pixel-drifted row keeps the overlay, which is the thing worth seeing',
+    );
+    assert.ok(html.includes('differs'), 'and keeps its diff stat');
+  });
+
+  it('keeps the screenshot viewer on a size-mismatch row (no a11yChanged)', () => {
+    const html = a11yOnlyReport({
+      a11yChanged: undefined,
+      a11yDiff: undefined,
+      diffRatio: undefined,
+      failureMessage: 'Screenshot size changed from 1280x800 to 1280x1200',
+      sizeMismatch: {
+        baseline: { width: 1280, height: 800 },
+        actual: { width: 1280, height: 1200 },
+      },
+    });
+    assert.ok(
+      !html.includes('class="a11y-diff"'),
+      'the a11y-only branch keys on a11yChanged, never on a missing diffPath',
     );
   });
 });

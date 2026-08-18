@@ -22,6 +22,7 @@ import {
   writeTransientPng,
 } from '../screenshots/baselineStore.ts';
 import { sleep } from '../util.ts';
+import { buildA11yDiff } from './a11yDiff.ts';
 import { comparisonRootFor, type RunMode } from './mode.ts';
 import { interpolate, interpolateHint } from './interpolate.ts';
 import { LocatorNotFoundError, resolveLocator } from './resolveLocator.ts';
@@ -431,6 +432,12 @@ async function captureAndCompare(
   const baselineA11y = await readJsonBaseline(a11yBaselinePathForRead);
   const a11yChanged =
     baselineA11y !== undefined && a11yTreeChanged(baselineA11y, a11yJson);
+  // Rendered once here and carried on the result, so the report and the Action's
+  // sticky comment render the same diff instead of each re-deriving one.
+  const a11yDiff =
+    a11yChanged && baselineA11y !== undefined
+      ? buildA11yDiff(baselineA11y, a11yJson)
+      : undefined;
 
   try {
     const pixelThreshold = action.diff?.pixelThreshold ?? 0.1;
@@ -473,6 +480,7 @@ async function captureAndCompare(
         diffRatio: score.diffRatio,
         ssimScore: score.ssimScore,
         a11yChanged: a11yChanged || undefined,
+        a11yDiff,
         a11yBaselinePath: a11yBaselinePathForRead,
         a11yActualPath: paths.a11yActual,
       });
@@ -500,6 +508,7 @@ async function captureAndCompare(
       diffRatio: score.diffRatio,
       ssimScore: score.ssimScore,
       a11yChanged: a11yChanged || undefined,
+      a11yDiff,
       a11yBaselinePath: a11yBaselinePathForRead,
       a11yActualPath: paths.a11yActual,
     });

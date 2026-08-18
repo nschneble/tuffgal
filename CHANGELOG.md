@@ -6,7 +6,17 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Added
+
+- `a11yDiff` on every result whose accessibility tree drifted: a unified
+  line diff of the committed and captured `a11y.yaml`, recorded in
+  `results.json` so the report and downstream consumers render one diff
+
+### Changed
+
+- An a11y-only changed row in the report now shows that diff in place of
+  the screenshot viewer, which otherwise offered a flip between two
+  identical PNGs under a `0% differs · 0 pixels` stat
 
 ## [0.2.0-alpha.6] – 2026-08-09
 

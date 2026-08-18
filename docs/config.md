@@ -276,6 +276,11 @@ How each captured action's screenshots are presented in the report. Default:
   the `diff` overlay lives on its chip rather than the gesture. The image is
   scaled to fit the viewport height.
 
+Under either setting, a `changed` row whose pixels matched and whose
+accessibility snapshot is the only thing that drifted shows that snapshot's
+line diff in place of the viewer. Its two screenshots are identical, so there
+is nothing to compare.
+
 ```ts
 interactiveMode: false,
 ```
