@@ -526,12 +526,13 @@ function renderAction(
   reportDir: string,
   interactiveMode: boolean,
 ): string {
-  const screenshots = renderScreenshots(
-    action,
-    actionId,
-    reportDir,
-    interactiveMode,
-  );
+  // An a11y-only row's screenshots are identical by definition, so the viewer
+  // would offer a baseline/actual flip between two matching PNGs under a "0%
+  // differs · 0 pixels" stat. The accessibility diff replaces it as the row's
+  // body; the collapsible and its summary are otherwise untouched.
+  const screenshots = isA11yOnly(action)
+    ? renderA11yDiff(action)
+    : renderScreenshots(action, actionId, reportDir, interactiveMode);
   const errorBlock =
     action.status === 'failed'
       ? `<pre class="action-error">${escapeHtml(action.failureMessage ?? 'unknown error')}</pre>`
@@ -549,7 +550,7 @@ ${statusBadge(action.status)}
 <details class="shots">
   <summary class="action-row">
     ${rowInner}
-    <span class="sr-only">toggle screenshots</span>
+    <span class="sr-only">toggle ${isA11yOnly(action) ? 'accessibility diff' : 'screenshots'}</span>
   </summary>
   ${screenshots}
 </details>`
@@ -576,10 +577,11 @@ ${statusBadge(action.status)}
  * row/screenshots/error block. Both are plain `<p role="note">`, NOT headings:
  * they live in the story `<ol>` subtree, so a heading would orphan under a
  * list-item (same rationale as {@link renderBreakpointGroup}'s caption). Neither
- * is a live region (present at load), so an a11y-only `changed` row can carry
- * BOTH with no double-announce.
+ * is a live region (present at load), so a row carrying both never
+ * double-announces.
  *
- *   - candidate note: on `changed`/`new` rows only, supplementary prose flagging
+ *   - candidate note: on `changed`/`new` rows that are not a11y-only (see
+ *     {@link isA11yOnly}), supplementary prose flagging
  *     "this run's actual screenshot is the proposed new baseline". Names the
  *     Actual variant explicitly (the note sits OUTSIDE the <details>, so "this
  *     render" would point at whichever tab is selected, or nothing when
@@ -596,9 +598,77 @@ ${statusBadge(action.status)}
  * Order: candidate note first, then a11y-drift note, so an a11y-only changed row
  * reads "proposed new baseline" before the a11y specifics.
  */
+/**
+ * A `changed` row whose pixels matched and whose accessibility tree is the only
+ * thing that moved. Gated STRICTLY on `a11yChanged === true` per the
+ * ActionResult contract, never inferred from a missing `diffPath` alone: the
+ * size-mismatch branch also lacks one and deliberately omits `a11yChanged`.
+ * `!diffPath` still narrows it further, keeping a row that drifted BOTH in
+ * pixels and in the tree on the screenshot viewer, where the overlay is the
+ * thing worth seeing.
+ */
+function isA11yOnly(action: ActionResult): boolean {
+  return (
+    action.a11yChanged === true &&
+    action.status === 'changed' &&
+    action.diffPath === undefined
+  );
+}
+
+/**
+ * The accessibility-tree diff, rendered in place of the screenshot viewer on an
+ * a11y-only row. Each line carries its `+`/`-` marker in the text itself, so the
+ * change class never rides on color alone, plus an sr-only "Added"/"Removed"
+ * word so AT hears it rather than reading a bare glyph. Unchanged context lines
+ * and the `…` elision marker get no announcement.
+ *
+ * Falls back to prose when the result carries no diff — either an older
+ * `results.json` predating the field, or a pair too large to diff line-by-line
+ * (in which case the recorded counts still name the size of the change).
+ */
+function renderA11yDiff(action: ActionResult): string {
+  const intro = `<p class="a11y-diff-intro">Pixels unchanged. The accessibility snapshot drifted.</p>`;
+  const diff = action.a11yDiff;
+  if (!diff || diff.lines.length === 0) {
+    const detail = diff
+      ? `No line diff available: ${diff.added} added, ${diff.removed} removed.`
+      : 'No line diff recorded for this run.';
+    return `${intro}
+<p class="a11y-diff-empty">${escapeHtml(detail)}</p>`;
+  }
+  const rows = diff.lines
+    .map((line) => {
+      const marker = line[0];
+      if (marker === '+' || marker === '-') {
+        const kind = marker === '+' ? 'add' : 'remove';
+        const spoken = marker === '+' ? 'Added' : 'Removed';
+        return `<span class="a11y-diff-line a11y-diff-line--${kind}"><span class="sr-only">${spoken}: </span><span aria-hidden="true">${escapeHtml(marker)}</span>${escapeHtml(line.slice(1))}</span>`;
+      }
+      return `<span class="a11y-diff-line">${escapeHtml(line)}</span>`;
+    })
+    // Joined with no separator: each line is a block box inside `white-space:
+    // pre`, so a newline between them would render as an extra blank line.
+    .join('');
+  const truncated = diff.truncated
+    ? `<p class="a11y-diff-empty">Diff clipped. ${diff.added} added, ${diff.removed} removed in full.</p>`
+    : '';
+  // The block scrolls horizontally, so it is a tab stop (2.1.1) and needs a
+  // name. `role="group"` takes one; `<pre>`'s own `generic` role prohibits it,
+  // and `region` would mint a landmark per drifted action.
+  return `${intro}
+<pre class="a11y-diff" tabindex="0" role="group" aria-label="Accessibility snapshot diff for ${escapeHtml(action.action)}"><code>${rows}</code></pre>
+${truncated}`;
+}
+
 function renderActionNotes(action: ActionResult, reportDir: string): string {
   const notes: string[] = [];
-  if (action.status === 'changed' || action.status === 'new') {
+  // Suppressed on an a11y-only row: its pixels matched, so naming the screenshot
+  // as the proposed baseline would read as a visual change that did not happen.
+  // The a11y-drift note below carries what actually moved.
+  if (
+    (action.status === 'changed' || action.status === 'new') &&
+    !isA11yOnly(action)
+  ) {
     notes.push(
       `<p class="candidate-note" role="note">This run's actual screenshot is the proposed new baseline.</p>`,
     );

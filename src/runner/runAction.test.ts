@@ -743,6 +743,56 @@ describe('runAction: CI mode a11y-only drift', () => {
     assert.deepEqual(await readFile(join(baselineDir, 'desktop.png')), png);
   });
 
+  it('carries the rendered line diff of the two snapshots', async () => {
+    // The report and the Action's sticky comment both render this payload
+    // instead of re-deriving a diff, so the result has to carry it.
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- button "Old"');
+
+    const result = await runAction({
+      page: fakePage(png, '- button "New"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.deepEqual(result.a11yDiff, {
+      lines: ['-- button "Old"', '+- button "New"'],
+      added: 1,
+      removed: 1,
+      truncated: false,
+    });
+  });
+
+  it('carries no line diff on a pass, where nothing drifted', async () => {
+    const config = await makeConfig();
+    const png = solidPng(10, 20, 30);
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), png);
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- button "Same"');
+
+    const result = await runAction({
+      page: fakePage(png, '- button "Same"'),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'ci',
+    });
+
+    assert.equal(result.status, 'pass');
+    assert.equal(result.a11yDiff, undefined);
+  });
+
   it('records the breakpoint-keyed a11y baseline path when the drift came from a breakpoint-source baseline', async () => {
     // Baseline-source is `breakpoint` (a `desktop.a11y.yaml` exists), so the
     // recorded a11yBaselinePath must be the breakpoint-keyed file that was

@@ -8,6 +8,10 @@
  * every conditional report section — the environment-mismatch banner and the
  * deleted (orphaned-baseline) list — so a preview shows the whole surface.
  *
+ * The changed story drifts both ways: pixels on desktop (the screenshot
+ * viewer) and the accessibility tree alone on mobile (the snapshot diff that
+ * stands in for it).
+ *
  * `npm run preview`                  — everything, including banner + deleted
  * `npm run preview -- --clean`       — happy path: no mismatch, nothing orphaned
  * `npm run preview -- --interactive` — press-and-hold screenshot viewer instead
@@ -23,7 +27,8 @@ import { PNG } from 'pngjs';
 import type { EnvironmentManifest } from '../src/runner/manifest.ts';
 import type { RunResult } from '../src/schema/result.ts';
 import { writeReport } from '../src/reporter/writeReport.ts';
-import { diffPngs } from '../src/screenshots/diff.ts';
+import { buildA11yDiff } from '../src/runner/a11yDiff.ts';
+import { renderDiffOverlay, scoreDiff } from '../src/screenshots/diff.ts';
 
 type Rgba = readonly [number, number, number, number];
 
@@ -100,7 +105,9 @@ function openInBrowser(target: string): void {
       stdio: 'ignore',
       detached: true,
     }).unref();
-  } catch {}
+  } catch {
+    // the report path is already printed, so opening is best effort
+  }
 }
 
 const BP = {
@@ -111,6 +118,31 @@ const BP = {
     breakpointHeight: 800,
   },
 } as const;
+
+// The mobile settings capture: same pixels either side, one control swapped
+// and one live region added, which is what an a11y-only changed row looks like.
+const SETTINGS_A11Y_BASELINE = `- navigation "Settings":
+  - link "Profile"
+  - link "Notifications"
+  - link "Billing"
+- main:
+  - heading "Notifications" [level=1]
+  - checkbox "Email me about product news"
+  - checkbox "Email me about security alerts"
+  - button "Save"
+`;
+
+const SETTINGS_A11Y_ACTUAL = `- navigation "Settings":
+  - link "Profile"
+  - link "Notifications"
+  - link "Billing"
+- main:
+  - heading "Notifications" [level=1]
+  - switch "Email me about product news"
+  - checkbox "Email me about security alerts"
+  - button "Save"
+  - status "Saved 2 minutes ago"
+`;
 
 function manifest(
   overrides: Partial<EnvironmentManifest> = {},
@@ -149,6 +181,11 @@ async function main(): Promise<void> {
     opts: { shift?: number } = {},
   ): string =>
     writeShot(name, mockPage(bp.breakpointWidth, bp.breakpointHeight, opts));
+  const writeSnapshot = (name: string, tree: string): string => {
+    const path = join(dir, `${name}.a11y.yaml`);
+    writeFileSync(path, tree);
+    return path;
+  };
 
   const settingsBase = mockPage(
     BP.desktop.breakpointWidth,
@@ -159,7 +196,8 @@ async function main(): Promise<void> {
     BP.desktop.breakpointHeight,
     { shift: 10 },
   );
-  const settingsDiff = diffPngs(settingsBase, settingsActual, 0.1);
+  const settingsDiff = scoreDiff(settingsBase, settingsActual, 0.1);
+  const settingsOverlay = renderDiffOverlay(settingsDiff.decoded, 0.1);
 
   const actual = manifest();
   const expected = clean
@@ -218,7 +256,7 @@ async function main(): Promise<void> {
         actions: [
           {
             ...BP.mobile,
-            action: 'navigate',
+            action: 'visit-home',
             parameters: { url: '/' },
             status: 'pass',
             startedAt: '2026-06-19T13:58:17.000Z',
@@ -227,7 +265,7 @@ async function main(): Promise<void> {
           },
           {
             ...BP.mobile,
-            action: 'screenshot',
+            action: 'capture-home',
             status: 'pass',
             startedAt: '2026-06-19T13:58:18.200Z',
             finishedAt: '2026-06-19T13:58:18.900Z',
@@ -237,7 +275,7 @@ async function main(): Promise<void> {
           },
           {
             ...BP.desktop,
-            action: 'navigate',
+            action: 'visit-home',
             parameters: { url: '/' },
             status: 'pass',
             startedAt: '2026-06-19T13:58:18.900Z',
@@ -246,7 +284,7 @@ async function main(): Promise<void> {
           },
           {
             ...BP.desktop,
-            action: 'screenshot',
+            action: 'capture-home',
             status: 'pass',
             startedAt: '2026-06-19T13:58:20.000Z',
             finishedAt: '2026-06-19T13:58:20.700Z',
@@ -266,7 +304,7 @@ async function main(): Promise<void> {
         actions: [
           {
             ...BP.mobile,
-            action: 'navigate',
+            action: 'visit-pricing',
             parameters: { url: '/pricing' },
             status: 'pass',
             startedAt: '2026-06-19T13:58:25.200Z',
@@ -275,7 +313,7 @@ async function main(): Promise<void> {
           },
           {
             ...BP.mobile,
-            action: 'screenshot',
+            action: 'capture-pricing',
             status: 'new',
             startedAt: '2026-06-19T13:58:26.200Z',
             finishedAt: '2026-06-19T13:58:27.000Z',
@@ -285,7 +323,7 @@ async function main(): Promise<void> {
           },
           {
             ...BP.desktop,
-            action: 'screenshot',
+            action: 'capture-pricing',
             status: 'new',
             startedAt: '2026-06-19T13:58:27.000Z',
             finishedAt: '2026-06-19T13:58:29.000Z',
@@ -296,7 +334,7 @@ async function main(): Promise<void> {
         ],
       },
       {
-        story: 'A user opens settings and the layout drifted.',
+        story: 'A user opens settings and the page drifted.',
         file: 'user-opens-settings.json',
         status: 'changed',
         startedAt: '2026-06-19T13:58:25.200Z',
@@ -305,7 +343,7 @@ async function main(): Promise<void> {
         actions: [
           {
             ...BP.mobile,
-            action: 'navigate',
+            action: 'visit-settings',
             parameters: { url: '/settings' },
             status: 'pass',
             startedAt: '2026-06-19T13:58:25.200Z',
@@ -314,17 +352,33 @@ async function main(): Promise<void> {
           },
           {
             ...BP.mobile,
-            action: 'screenshot',
-            status: 'pass',
+            action: 'capture-settings',
+            status: 'changed',
             startedAt: '2026-06-19T13:58:26.300Z',
             finishedAt: '2026-06-19T13:58:27.200Z',
             durationMs: 900,
             baselinePath: shot('settings-mobile-base', BP.mobile),
             actualPath: shot('settings-mobile-actual', BP.mobile),
+            diffPixels: 0,
+            diffRatio: 0,
+            ssimScore: 1,
+            a11yChanged: true,
+            a11yBaselinePath: writeSnapshot(
+              'settings-mobile-base',
+              SETTINGS_A11Y_BASELINE,
+            ),
+            a11yActualPath: writeSnapshot(
+              'settings-mobile-actual',
+              SETTINGS_A11Y_ACTUAL,
+            ),
+            a11yDiff: buildA11yDiff(
+              SETTINGS_A11Y_BASELINE,
+              SETTINGS_A11Y_ACTUAL,
+            ),
           },
           {
             ...BP.desktop,
-            action: 'navigate',
+            action: 'visit-settings',
             parameters: { url: '/settings' },
             status: 'pass',
             startedAt: '2026-06-19T13:58:27.200Z',
@@ -333,17 +387,17 @@ async function main(): Promise<void> {
           },
           {
             ...BP.desktop,
-            action: 'screenshot',
+            action: 'capture-settings',
             status: 'changed',
             startedAt: '2026-06-19T13:58:28.300Z',
             finishedAt: '2026-06-19T13:58:29.200Z',
             durationMs: 900,
             baselinePath: writeShot('settings-desktop-base', settingsBase),
             actualPath: writeShot('settings-desktop-actual', settingsActual),
-            diffPath: writeShot('settings-desktop-diff', settingsDiff.diffPng),
-            diffPixels: settingsDiff.diffPixels,
-            diffRatio: settingsDiff.diffRatio,
-            ssimScore: settingsDiff.ssimScore,
+            diffPath: writeShot('settings-desktop-diff', settingsOverlay),
+            diffPixels: settingsDiff.score.diffPixels,
+            diffRatio: settingsDiff.score.diffRatio,
+            ssimScore: settingsDiff.score.ssimScore,
           },
         ],
       },
@@ -358,7 +412,7 @@ async function main(): Promise<void> {
         actions: [
           {
             ...BP.mobile,
-            action: 'navigate',
+            action: 'visit-cart',
             parameters: { url: '/cart' },
             status: 'pass',
             startedAt: '2026-06-19T13:58:40.000Z',
@@ -367,7 +421,7 @@ async function main(): Promise<void> {
           },
           {
             ...BP.mobile,
-            action: 'click',
+            action: 'press-buy',
             parameters: { selector: 'button#buy' },
             status: 'failed',
             startedAt: '2026-06-19T13:58:41.000Z',
@@ -378,7 +432,7 @@ async function main(): Promise<void> {
           },
           {
             ...BP.desktop,
-            action: 'navigate',
+            action: 'visit-cart',
             parameters: { url: '/cart' },
             status: 'pass',
             startedAt: '2026-06-19T13:58:46.000Z',
@@ -387,7 +441,7 @@ async function main(): Promise<void> {
           },
           {
             ...BP.desktop,
-            action: 'click',
+            action: 'press-buy',
             parameters: { selector: 'button#buy' },
             status: 'failed',
             startedAt: '2026-06-19T13:58:47.000Z',

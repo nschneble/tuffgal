@@ -95,6 +95,34 @@ export interface ActionResult {
   a11yBaselinePath?: string;
   /** Path to the accessibility-tree snapshot captured during this run. */
   a11yActualPath?: string;
+  /**
+   * Rendered line diff of the two snapshots above, present whenever
+   * `a11yChanged` is `true`. Carried in `results.json` so every consumer reads
+   * ONE diff: the HTML report renders it in place of the screenshot viewer on an
+   * a11y-only row, and the Action's sticky PR comment renders it in a fenced
+   * block. Absent on results produced before this field existed, in which case a
+   * consumer falls back to naming the drift without detail.
+   */
+  a11yDiff?: A11yDiff;
+}
+
+/**
+ * A unified line diff between the committed and captured `a11y.yaml`, built by
+ * `runner/a11yDiff.ts`.
+ *
+ * - `lines`: prefixed lines in output order (`' '` unchanged, `'-'` removed,
+ *   `'+'` added), with elided unchanged stretches replaced by a lone `…`. Empty
+ *   only when the snapshots were too large to diff line-by-line, in which case
+ *   `truncated` is `true` and the counts still describe the change.
+ * - `added` / `removed`: total changed line counts for the WHOLE diff, before
+ *   any clipping, so a clipped render can still state the real size.
+ * - `truncated`: `true` when `lines` omits part of the diff.
+ */
+export interface A11yDiff {
+  lines: string[];
+  added: number;
+  removed: number;
+  truncated: boolean;
 }
 
 /**
