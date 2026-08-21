@@ -81,10 +81,6 @@ export type BreakpointName = keyof typeof BREAKPOINTS;
  */
 export type CaptureMode = 'viewport' | 'fullPage';
 
-/**
- * The accepted `colorScheme` values. Single source for the type and for
- * {@link isColorScheme}, so no validator can hand-copy a stale list.
- */
 export const COLOR_SCHEMES = ['light', 'dark', 'no-preference'] as const;
 
 /**
@@ -97,21 +93,11 @@ export const COLOR_SCHEMES = ['light', 'dark', 'no-preference'] as const;
  */
 export type ColorScheme = (typeof COLOR_SCHEMES)[number];
 
-/**
- * Narrows an untrusted value to a {@link ColorScheme}. Both the config
- * validator and the manifest shape check read raw JSON/JS, so neither can
- * lean on the type alone.
- */
 export function isColorScheme(value: unknown): value is ColorScheme {
   return (COLOR_SCHEMES as readonly unknown[]).includes(value);
 }
 
-/**
- * Maps a configured scheme to the one Playwright emulates. Passing the
- * deprecated `no-preference` through CLEARS Chromium's override, so the
- * page paints what the host reports; rendering it as `light` keeps the pin
- * host-independent. An unset scheme stays `undefined`.
- */
+/** Passing `no-preference` through unpins the scheme to track the host. */
 export function resolveContextColorScheme(
   colorScheme: ColorScheme | undefined,
 ): Exclude<ColorScheme, 'no-preference'> | undefined {
@@ -206,8 +192,7 @@ export interface TuffgalConfig {
   captureMode?: CaptureMode;
   /**
    * Pins the `prefers-color-scheme` every breakpoint context renders
-   * under, so baselines record a deliberate mode rather than whatever
-   * the machine running the suite reports. Omit the field to keep
+   * under, so baselines record a deliberate mode. Omit the field to keep
    * Playwright's own default, which is `light`. See {@link ColorScheme}.
    */
   colorScheme?: ColorScheme;

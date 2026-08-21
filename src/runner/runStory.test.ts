@@ -546,22 +546,18 @@ describe('runStoryWithBrowser: colorScheme threads into the context', () => {
   ] as const;
 
   for (const [configured, emulated] of pinned) {
-    it(`forwards ${configured} to newContext as ${emulated}`, async () => {
+    it(`forwards ${configured} to every context as ${emulated}`, async () => {
       const config = await makeConfig();
       const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
       const { browser, colorSchemes } = capturingBrowser(only.context);
 
       await runStoryWithBrowser(
         browser,
-        makeOptions(
-          { ...config, colorScheme: configured },
-          { breakpoint: { name: 'desktop', width: 1280, height: 800 } },
-        ),
+        makeOptions({ ...config, colorScheme: configured }),
         new Date(),
       );
 
-      assert.equal(colorSchemes.length, 1);
-      assert.equal(colorSchemes[0], emulated);
+      assert.deepEqual(colorSchemes, [emulated, emulated]);
     });
   }
 
