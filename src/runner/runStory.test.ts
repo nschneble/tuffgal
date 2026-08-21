@@ -538,7 +538,7 @@ describe('runStoryWithBrowser: auth state resolves from authNeeds, not needs', (
 });
 
 describe('runStoryWithBrowser: colorScheme threads into the context', () => {
-  // no-preference is host-dependent passed through, so light emulates it
+  // no-preference is host-dependent when passed through; light emulates it
   const pinned = [
     ['dark', 'dark'],
     ['light', 'light'],
@@ -581,7 +581,7 @@ describe('runStoryWithBrowser: colorScheme threads into the context', () => {
     );
 
     assert.equal(colorSchemes.length, 1);
-    assert.equal(colorSchemes[0], undefined);
+    assert.strictEqual(colorSchemes[0], undefined);
   });
 });
 

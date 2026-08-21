@@ -82,12 +82,41 @@ export type BreakpointName = keyof typeof BREAKPOINTS;
 export type CaptureMode = 'viewport' | 'fullPage';
 
 /**
- * Which `prefers-color-scheme` a page renders under. `no-preference` is
- * a legacy value, dropped from the media query and deprecated by
- * Playwright; tuffgal renders it as `light` so it cannot vary with the
- * machine. Pin `light` or `dark` for a deliberate mode.
+ * The accepted `colorScheme` values. Single source for the type and for
+ * {@link isColorScheme}, so no validator can hand-copy a stale list.
  */
-export type ColorScheme = 'light' | 'dark' | 'no-preference';
+export const COLOR_SCHEMES = ['light', 'dark', 'no-preference'] as const;
+
+/**
+ * Which `prefers-color-scheme` a page renders under:
+ *   - `light`: pages render under `prefers-color-scheme: light`.
+ *   - `dark`: pages render under `prefers-color-scheme: dark`.
+ *   - `no-preference`: a legacy value, dropped from the media query and
+ *     deprecated by Playwright. Rendered as `light` so it cannot vary with
+ *     the machine. Prefer `light` outright.
+ */
+export type ColorScheme = (typeof COLOR_SCHEMES)[number];
+
+/**
+ * Narrows an untrusted value to a {@link ColorScheme}. Both the config
+ * validator and the manifest shape check read raw JSON/JS, so neither can
+ * lean on the type alone.
+ */
+export function isColorScheme(value: unknown): value is ColorScheme {
+  return (COLOR_SCHEMES as readonly unknown[]).includes(value);
+}
+
+/**
+ * Maps a configured scheme to the one Playwright emulates. Passing the
+ * deprecated `no-preference` through CLEARS Chromium's override, so the
+ * page paints what the host reports; rendering it as `light` keeps the pin
+ * host-independent. An unset scheme stays `undefined`.
+ */
+export function resolveContextColorScheme(
+  colorScheme: ColorScheme | undefined,
+): Exclude<ColorScheme, 'no-preference'> | undefined {
+  return colorScheme === 'no-preference' ? 'light' : colorScheme;
+}
 
 /**
  * One resolved breakpoint mode: a name plus the viewport dimensions to render
@@ -226,8 +255,9 @@ export interface TuffgalConfig {
 }
 
 /**
- * Resolved config, every optional field replaced with a concrete value
- * so downstream consumers can rely on the shape without per-field `??`.
+ * Resolved config: every optional field WITH a default is replaced by its
+ * concrete value, so consumers skip the per-field `??`. Fields with no
+ * meaningful default stay `T | undefined` and are declared that way.
  * Returned by `loadConfig`. Not part of the public surface.
  */
 export interface ResolvedConfig {
@@ -383,12 +413,7 @@ export function assertValidConfig(input: unknown, source: string): void {
     fail("`captureMode` must be 'viewport' or 'fullPage' when provided.");
   }
 
-  if (
-    config.colorScheme !== undefined &&
-    config.colorScheme !== 'light' &&
-    config.colorScheme !== 'dark' &&
-    config.colorScheme !== 'no-preference'
-  ) {
+  if (config.colorScheme !== undefined && !isColorScheme(config.colorScheme)) {
     fail(
       "`colorScheme` must be 'light', 'dark', or 'no-preference' when " +
         'provided.',

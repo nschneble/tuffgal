@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import type { ColorScheme, ResolvedConfig } from '../config.ts';
+import {
+  isColorScheme,
+  type ColorScheme,
+  type ResolvedConfig,
+} from '../config.ts';
 
 /**
  * Bump when the capture pipeline changes behaviour in a way that shifts pixels
@@ -142,9 +146,9 @@ export async function readManifest(
  * the comparison reads so a truncated or wrong-typed manifest is caught here
  * (surfaced as `malformed`) rather than producing a garbage per-key delta.
  *
- * `colorScheme` is the one key allowed to be absent: requiring it would turn
- * every manifest committed before it existed into a `malformed` read overnight.
- * Present-but-invalid still fails.
+ * `colorScheme` is the one key allowed to be absent: requiring it would
+ * turn every manifest committed before it existed into a `malformed` read
+ * overnight. Present-but-invalid still fails.
  *
  * Exported so `approve --from` can run the same shape check against a candidate
  * artifact's `environment.actual` before promoting it into the committed
@@ -179,12 +183,7 @@ export function validateManifestShape(value: unknown): string | undefined {
     }
   }
   const colorScheme = manifest.colorScheme;
-  if (
-    colorScheme !== undefined &&
-    colorScheme !== 'light' &&
-    colorScheme !== 'dark' &&
-    colorScheme !== 'no-preference'
-  ) {
+  if (colorScheme !== undefined && !isColorScheme(colorScheme)) {
     return "`colorScheme` must be 'light', 'dark', or 'no-preference' when present";
   }
   if (!Array.isArray(manifest.breakpoints)) {
@@ -226,8 +225,8 @@ export interface EnvironmentComparison {
  *     reorder (even at identical dimensions) is treated as a change worth a
  *     re-approve prompt rather than silently equal. Order-sensitivity is the
  *     conservative pixel-safety choice. `colorScheme` is the one key whose
- *     ABSENCE from the committed manifest is compatible with any actual value:
- *     gating baselines captured before the field existed would force a global
+ *     ABSENCE from the committed manifest matches any actual value: gating
+ *     baselines captured before the field existed would force a global
  *     re-seed for pixels that never moved. Informational keys
  *     (`tuffgalVersion`/`playwrightVersion`) are never compared.
  */
@@ -329,10 +328,10 @@ export interface CapturedBrowser {
  * change, so a stale hardcode here would silently defeat that.
  *
  * `colorScheme` follows suit: it records what was RENDERED, not what was
- * configured. An unset config still paints light, because Playwright's context
- * default is `'light'`. Recording the unset case as absent would leave the
- * migration rule armed forever, so the first suite to pin `'dark'` drifts in
- * silence.
+ * configured. An unset config still paints light, because Playwright's
+ * context default is `'light'`. Recording the unset case as absent would
+ * leave the migration rule armed forever, so the first suite to pin
+ * `'dark'` drifts in silence.
  */
 export function captureEnvironment(
   config: ResolvedConfig,

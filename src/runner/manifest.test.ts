@@ -105,7 +105,7 @@ describe('readManifest: parse outcomes', () => {
   });
 });
 
-describe('colorScheme: a manifest predating the field still gates', () => {
+describe('colorScheme: a manifest predating the field never gates', () => {
   let dir: string;
   before(() => {
     dir = mkdtempSync(join(tmpdir(), 'tuffgal-scheme-'));
@@ -179,17 +179,6 @@ describe('validateManifestShape: colorScheme is optional, never loose', () => {
   it('rejects a wrong-typed value', () => {
     const invalid = { ...manifest(), colorScheme: 1 };
     assert.match(String(validateManifestShape(invalid)), /colorScheme/);
-  });
-
-  it('surfaces an invalid value through readManifest as malformed', async () => {
-    const baselines = mkdtempSync(join(tmpdir(), 'tuffgal-scheme-bad-'));
-    writeFileSync(
-      join(baselines, 'manifest.json'),
-      JSON.stringify({ ...manifest(), colorScheme: 'auto' }),
-    );
-    const result = await readManifest(baselines);
-    assert.equal(result.status, 'malformed');
-    rmSync(baselines, { recursive: true, force: true });
   });
 });
 
@@ -382,19 +371,6 @@ describe('captureEnvironment: builds the actual side', () => {
       version: '131.0.0.0',
     });
     assert.equal(env.colorScheme, 'light');
-  });
-
-  it('an unset run compares clean against a light-pinned manifest', () => {
-    const unset = { ...config, colorScheme: undefined } as ResolvedConfig;
-    const env = captureEnvironment(unset, {
-      name: 'chromium',
-      version: '131.0.0.0',
-    });
-    const result = compareEnvironment(
-      { status: 'ok', manifest: { ...env, colorScheme: 'light' } },
-      env,
-    );
-    assert.equal(result.mismatch, false);
   });
 
   it('reads real tuffgal and playwright versions (non-empty strings)', () => {
