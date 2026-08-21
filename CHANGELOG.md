@@ -8,6 +8,15 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.2.0-alpha.8] – 2026-08-20
+
+### Added
+
+`colorScheme` config option pinning the `prefers-color-scheme` every
+breakpoint renders under, so a project can baseline its dark theme instead
+of the light one Tuffgal has always rendered. Omit the field and nothing
+changes, including for baselines approved before it existed.
+
 ## [0.2.0-alpha.7] – 2026-08-18
 
 ### Added
@@ -333,7 +342,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.7...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.8...HEAD
+[0.2.0-alpha.8]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.8
 [0.2.0-alpha.7]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.7
 [0.2.0-alpha.6]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.6
 [0.2.0-alpha.5]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.5

@@ -2,6 +2,7 @@ import { access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Browser, type BrowserContext, type Page } from 'playwright';
 import {
+  resolveContextColorScheme,
   resolveSelectorList,
   type ResolvedBreakpoint,
   type ResolvedConfig,
@@ -134,6 +135,7 @@ export async function runStoryWithBrowser(
       storageState: storageStatePath,
       ignoreHTTPSErrors: true,
       permissions: ['clipboard-read', 'clipboard-write'],
+      colorScheme: resolveContextColorScheme(config.colorScheme),
     });
     // The whole per-breakpoint lifecycle runs under try/finally so the context
     // is ALWAYS closed, even when something inside throws. Throw policy: an

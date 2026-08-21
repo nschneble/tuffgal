@@ -73,12 +73,12 @@ committed set.
 ### The environment manifest
 
 `approve --from` also writes `baselines/manifest.json` recording the environment
-the promoted baselines were captured under (capture schema, browser version,
-platform, capture mode, breakpoints, device scale factor, frozen time). On the
-next `run --ci` Tuffgal checks the live capture environment against it. A
-pixel-affecting mismatch still runs the comparison, but banners the report and
-exits `3`: the signal is "expect a full re-approve", distinct from ordinary
-pending changes.
+the promoted baselines were captured under. The keys compared for drift are
+capture schema, browser version, platform, capture mode, color scheme,
+breakpoints, device scale factor, and frozen time. On the next `run --ci`
+Tuffgal checks the live capture environment against it. A pixel-affecting
+mismatch still runs the comparison, but banners the report and exits `3`: the
+signal is "expect a full re-approve", distinct from ordinary pending changes.
 
 ### Exit codes
 

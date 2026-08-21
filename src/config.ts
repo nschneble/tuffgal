@@ -81,6 +81,29 @@ export type BreakpointName = keyof typeof BREAKPOINTS;
  */
 export type CaptureMode = 'viewport' | 'fullPage';
 
+export const COLOR_SCHEMES = ['light', 'dark', 'no-preference'] as const;
+
+/**
+ * Which `prefers-color-scheme` a page renders under:
+ *   - `light`: pages render under `prefers-color-scheme: light`.
+ *   - `dark`: pages render under `prefers-color-scheme: dark`.
+ *   - `no-preference`: a legacy value, dropped from the media query and
+ *     deprecated by Playwright. Rendered as `light` so it cannot vary with
+ *     the machine. Prefer `light` outright.
+ */
+export type ColorScheme = (typeof COLOR_SCHEMES)[number];
+
+export function isColorScheme(value: unknown): value is ColorScheme {
+  return (COLOR_SCHEMES as readonly unknown[]).includes(value);
+}
+
+/** Passing `no-preference` through unpins the scheme to track the host. */
+export function resolveContextColorScheme(
+  colorScheme: ColorScheme | undefined,
+): Exclude<ColorScheme, 'no-preference'> | undefined {
+  return colorScheme === 'no-preference' ? 'light' : colorScheme;
+}
+
 /**
  * One resolved breakpoint mode: a name plus the viewport dimensions to render
  * at. Built from a {@link BreakpointSelector} (a registry entry, optionally
@@ -168,6 +191,12 @@ export interface TuffgalConfig {
    */
   captureMode?: CaptureMode;
   /**
+   * Pins the `prefers-color-scheme` every breakpoint context renders
+   * under, so baselines record a deliberate mode. Omit the field to keep
+   * Playwright's own default, which is `light`. See {@link ColorScheme}.
+   */
+  colorScheme?: ColorScheme;
+  /**
    * Safety cap on a `fullPage` capture's total area, in pixels (width ×
    * height). A `fullPage` shot composites the whole scrollable document, so an
    * infinite-scroll or runaway-tall page decodes to an enormous RGBA array
@@ -211,8 +240,9 @@ export interface TuffgalConfig {
 }
 
 /**
- * Resolved config, every optional field replaced with a concrete value
- * so downstream consumers can rely on the shape without per-field `??`.
+ * Resolved config: every optional field WITH a default is replaced by its
+ * concrete value, so consumers skip the per-field `??`. Fields with no
+ * meaningful default stay `T | undefined` and are declared that way.
  * Returned by `loadConfig`. Not part of the public surface.
  */
 export interface ResolvedConfig {
@@ -231,6 +261,8 @@ export interface ResolvedConfig {
   breakpoints: [ResolvedBreakpoint, ...ResolvedBreakpoint[]];
   /** Resolved screenshot scope; defaults to `viewport`. */
   captureMode: CaptureMode;
+  /** Pinned colour scheme, or `undefined` for Playwright's `light` default. */
+  colorScheme: ColorScheme | undefined;
   /** Resolved full-page area cap in pixels; defaults to 30_000_000. */
   maxFullPagePixels: number;
   defaultTimeoutMs: number;
@@ -366,6 +398,13 @@ export function assertValidConfig(input: unknown, source: string): void {
     fail("`captureMode` must be 'viewport' or 'fullPage' when provided.");
   }
 
+  if (config.colorScheme !== undefined && !isColorScheme(config.colorScheme)) {
+    fail(
+      "`colorScheme` must be 'light', 'dark', or 'no-preference' when " +
+        'provided.',
+    );
+  }
+
   if (config.breakpoints !== undefined) {
     const validNames = Object.keys(BREAKPOINTS);
     const breakpoints = config.breakpoints;
@@ -428,6 +467,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     storageStatePins: input.storageStatePins ?? [],
     breakpoints,
     captureMode: input.captureMode ?? DEFAULTS.captureMode,
+    colorScheme: input.colorScheme,
     maxFullPagePixels: input.maxFullPagePixels ?? DEFAULTS.maxFullPagePixels,
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:

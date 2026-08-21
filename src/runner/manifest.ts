@@ -1,7 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import type { ResolvedConfig } from '../config.ts';
+import {
+  isColorScheme,
+  resolveContextColorScheme,
+  type ColorScheme,
+  type ResolvedConfig,
+} from '../config.ts';
 
 /**
  * Bump when the capture pipeline changes behaviour in a way that shifts pixels
@@ -50,6 +55,8 @@ export interface EnvironmentManifest {
   browserVersion: string;
   platform: string;
   captureMode: string;
+  /** Rendered scheme. Optional: manifests predating it carry no key. */
+  colorScheme?: ColorScheme;
   breakpoints: ManifestBreakpoint[];
   deviceScaleFactor: number;
   frozenTime: string;
@@ -70,6 +77,7 @@ export const PIXEL_AFFECTING_KEYS = [
   'browserVersion',
   'platform',
   'captureMode',
+  'colorScheme',
   'breakpoints',
   'deviceScaleFactor',
   'frozenTime',
@@ -139,6 +147,10 @@ export async function readManifest(
  * the comparison reads so a truncated or wrong-typed manifest is caught here
  * (surfaced as `malformed`) rather than producing a garbage per-key delta.
  *
+ * `colorScheme` is the one key allowed to be absent: requiring it would
+ * turn every manifest committed before it existed into a `malformed` read
+ * overnight. Present-but-invalid still fails.
+ *
  * Exported so `approve --from` can run the same shape check against a candidate
  * artifact's `environment.actual` before promoting it into the committed
  * manifest. A well-formed-but-wrong-shaped environment block must fail closed,
@@ -170,6 +182,10 @@ export function validateManifestShape(value: unknown): string | undefined {
     if (typeof manifest[key] !== 'string') {
       return `\`${key}\` must be a string`;
     }
+  }
+  const colorScheme = manifest.colorScheme;
+  if (colorScheme !== undefined && !isColorScheme(colorScheme)) {
+    return "`colorScheme` must be 'light', 'dark', or 'no-preference' when present";
   }
   if (!Array.isArray(manifest.breakpoints)) {
     return '`breakpoints` must be an array';
@@ -209,7 +225,10 @@ export interface EnvironmentComparison {
  *     and order-sensitively: the manifest records an ordered list, and a
  *     reorder (even at identical dimensions) is treated as a change worth a
  *     re-approve prompt rather than silently equal. Order-sensitivity is the
- *     conservative pixel-safety choice. Informational keys
+ *     conservative pixel-safety choice. `colorScheme` is the one key whose
+ *     ABSENCE from the committed manifest matches any actual value: gating
+ *     baselines captured before the field existed would force a global
+ *     re-seed for pixels that never moved. Informational keys
  *     (`tuffgalVersion`/`playwrightVersion`) are never compared.
  */
 export function compareEnvironment(
@@ -227,6 +246,15 @@ export function compareEnvironment(
   for (const key of PIXEL_AFFECTING_KEYS) {
     if (key === 'breakpoints') {
       if (!breakpointsEqual(manifest.breakpoints, actual.breakpoints)) {
+        mismatchKeys.push(key);
+      }
+      continue;
+    }
+    if (key === 'colorScheme') {
+      if (
+        manifest.colorScheme !== undefined &&
+        manifest.colorScheme !== actual.colorScheme
+      ) {
         mismatchKeys.push(key);
       }
       continue;
@@ -299,6 +327,12 @@ export interface CapturedBrowser {
  * applies. If a future wave makes the scale factor configurable, thread it here
  * and this constant must track it. The manifest's whole job is to notice a DSF
  * change, so a stale hardcode here would silently defeat that.
+ *
+ * `colorScheme` follows suit: it records what was RENDERED, so it resolves
+ * the configured value exactly as the runner does and falls back to
+ * Playwright's `'light'` context default. Recording an unset config as
+ * absent would leave the migration rule armed forever, so the first suite
+ * to pin `'dark'` would drift in silence.
  */
 export function captureEnvironment(
   config: ResolvedConfig,
@@ -313,6 +347,7 @@ export function captureEnvironment(
     browserVersion: browser.version,
     platform: process.platform,
     captureMode: config.captureMode,
+    colorScheme: resolveContextColorScheme(config.colorScheme) ?? 'light',
     breakpoints: config.breakpoints.map((breakpoint) => ({
       name: breakpoint.name,
       width: breakpoint.width,

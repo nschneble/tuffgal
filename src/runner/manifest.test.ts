@@ -12,6 +12,7 @@ import {
   captureEnvironment,
   compareEnvironment,
   readManifest,
+  validateManifestShape,
   type EnvironmentManifest,
   type ManifestReadResult,
 } from './manifest.ts';
@@ -101,6 +102,83 @@ describe('readManifest: parse outcomes', () => {
     );
     const result = await readManifest(baselines);
     assert.equal(result.status, 'malformed');
+  });
+});
+
+describe('colorScheme: a manifest predating the field never gates', () => {
+  let dir: string;
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), 'tuffgal-scheme-'));
+  });
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('reads as ok and compares clean against any actual value', async () => {
+    const baselines = mkdtempSync(join(dir, 'legacy-'));
+    const committed = manifest();
+    assert.equal(
+      'colorScheme' in committed,
+      false,
+      'fixture must carry no colorScheme key',
+    );
+    writeFileSync(join(baselines, 'manifest.json'), JSON.stringify(committed));
+
+    const read = await readManifest(baselines);
+    assert.equal(read.status, 'ok');
+    for (const actual of ['light', 'dark', 'no-preference'] as const) {
+      const result = compareEnvironment(
+        read,
+        manifest({ colorScheme: actual }),
+      );
+      assert.equal(result.mismatch, false, `${actual} must not gate`);
+      assert.deepEqual(result.mismatchKeys, []);
+    }
+  });
+
+  it('flags a committed value that diverges from the run', () => {
+    const result = compareEnvironment(
+      ok({ colorScheme: 'dark' }),
+      manifest({ colorScheme: 'light' }),
+    );
+    assert.equal(result.mismatch, true);
+    assert.deepEqual(result.mismatchKeys, ['colorScheme']);
+  });
+
+  it('passes a committed value that matches the run', () => {
+    const result = compareEnvironment(
+      ok({ colorScheme: 'dark' }),
+      manifest({ colorScheme: 'dark' }),
+    );
+    assert.equal(result.mismatch, false);
+    assert.deepEqual(result.mismatchKeys, []);
+  });
+
+  it('flags a committed value when the run records none', () => {
+    const result = compareEnvironment(ok({ colorScheme: 'dark' }), manifest());
+    assert.deepEqual(result.mismatchKeys, ['colorScheme']);
+  });
+});
+
+describe('validateManifestShape: colorScheme is optional, never loose', () => {
+  it('accepts a manifest with the key absent', () => {
+    assert.equal(validateManifestShape(manifest()), undefined);
+  });
+
+  it('accepts each valid value', () => {
+    for (const colorScheme of ['light', 'dark', 'no-preference'] as const) {
+      assert.equal(validateManifestShape(manifest({ colorScheme })), undefined);
+    }
+  });
+
+  it('rejects an out-of-enum value', () => {
+    const invalid = { ...manifest(), colorScheme: 'auto' };
+    assert.match(String(validateManifestShape(invalid)), /colorScheme/);
+  });
+
+  it('rejects a wrong-typed value', () => {
+    const invalid = { ...manifest(), colorScheme: 1 };
+    assert.match(String(validateManifestShape(invalid)), /colorScheme/);
   });
 });
 
@@ -276,6 +354,31 @@ describe('captureEnvironment: builds the actual side', () => {
       { name: 'mobile', width: 375, height: 667 },
       { name: 'desktop', width: 1280, height: 800 },
     ]);
+  });
+
+  it('records the pinned colorScheme from the resolved config', () => {
+    const env = captureEnvironment(
+      { ...config, colorScheme: 'dark' } as ResolvedConfig,
+      { name: 'chromium', version: '131.0.0.0' },
+    );
+    assert.equal(env.colorScheme, 'dark');
+  });
+
+  it("records 'light' for a 'no-preference' config, the scheme painted", () => {
+    const env = captureEnvironment(
+      { ...config, colorScheme: 'no-preference' } as ResolvedConfig,
+      { name: 'chromium', version: '131.0.0.0' },
+    );
+    assert.equal(env.colorScheme, 'light');
+  });
+
+  it("records 'light' when the config pins nothing", () => {
+    const unset = { ...config, colorScheme: undefined } as ResolvedConfig;
+    const env = captureEnvironment(unset, {
+      name: 'chromium',
+      version: '131.0.0.0',
+    });
+    assert.equal(env.colorScheme, 'light');
   });
 
   it('reads real tuffgal and playwright versions (non-empty strings)', () => {
