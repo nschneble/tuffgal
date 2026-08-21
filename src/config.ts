@@ -82,6 +82,13 @@ export type BreakpointName = keyof typeof BREAKPOINTS;
 export type CaptureMode = 'viewport' | 'fullPage';
 
 /**
+ * Which `prefers-color-scheme` a page renders under. `no-preference` is
+ * a legacy value browsers resolve to `light` (it was dropped from the
+ * media query); pin `light` or `dark` for a deliberate mode.
+ */
+export type ColorScheme = 'light' | 'dark' | 'no-preference';
+
+/**
  * One resolved breakpoint mode: a name plus the viewport dimensions to render
  * at. Built from a {@link BreakpointSelector} (a registry entry, optionally
  * with a dimension override). Exported so the runner consumes the same shape
@@ -168,6 +175,13 @@ export interface TuffgalConfig {
    */
   captureMode?: CaptureMode;
   /**
+   * Pins the `prefers-color-scheme` every breakpoint context renders
+   * under, so baselines record a deliberate mode rather than whatever
+   * the machine running the suite reports. Omit the field to leave
+   * emulation untouched. See {@link ColorScheme}.
+   */
+  colorScheme?: ColorScheme;
+  /**
    * Safety cap on a `fullPage` capture's total area, in pixels (width ×
    * height). A `fullPage` shot composites the whole scrollable document, so an
    * infinite-scroll or runaway-tall page decodes to an enormous RGBA array
@@ -231,6 +245,8 @@ export interface ResolvedConfig {
   breakpoints: [ResolvedBreakpoint, ...ResolvedBreakpoint[]];
   /** Resolved screenshot scope; defaults to `viewport`. */
   captureMode: CaptureMode;
+  /** Pinned colour scheme, or `undefined` to leave emulation untouched. */
+  colorScheme: ColorScheme | undefined;
   /** Resolved full-page area cap in pixels; defaults to 30_000_000. */
   maxFullPagePixels: number;
   defaultTimeoutMs: number;
@@ -366,6 +382,18 @@ export function assertValidConfig(input: unknown, source: string): void {
     fail("`captureMode` must be 'viewport' or 'fullPage' when provided.");
   }
 
+  if (
+    config.colorScheme !== undefined &&
+    config.colorScheme !== 'light' &&
+    config.colorScheme !== 'dark' &&
+    config.colorScheme !== 'no-preference'
+  ) {
+    fail(
+      "`colorScheme` must be 'light', 'dark', or 'no-preference' when " +
+        'provided.',
+    );
+  }
+
   if (config.breakpoints !== undefined) {
     const validNames = Object.keys(BREAKPOINTS);
     const breakpoints = config.breakpoints;
@@ -428,6 +456,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     storageStatePins: input.storageStatePins ?? [],
     breakpoints,
     captureMode: input.captureMode ?? DEFAULTS.captureMode,
+    colorScheme: input.colorScheme,
     maxFullPagePixels: input.maxFullPagePixels ?? DEFAULTS.maxFullPagePixels,
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:

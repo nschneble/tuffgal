@@ -6,7 +6,7 @@ import { describe, it } from 'node:test';
 import { PNG } from 'pngjs';
 import type { Browser, BrowserContext, Page } from 'playwright';
 
-import type { ResolvedConfig } from '../config.ts';
+import type { ColorScheme, ResolvedConfig } from '../config.ts';
 import type { Action } from '../schema/action.ts';
 import type { Story } from '../schema/story.ts';
 import { pathExists } from '../util.ts';
@@ -277,24 +277,28 @@ function fakeBrowser(contexts: BrowserContext[]): Browser {
 
 /**
  * Fake `Browser` that hands out a single pre-built context and CAPTURES the
- * `storageState` argument every `newContext` call receives. That captured value
- * is what proves which on-disk auth file `runStoryWithBrowser` resolved and
- * loaded; the whole point of the authNeeds-vs-needs wiring test.
+ * options every `newContext` call receives. Those captured values are what
+ * prove which on-disk auth file `runStoryWithBrowser` resolved and loaded
+ * (the authNeeds-vs-needs wiring), and which colour scheme it forwarded.
  */
 function capturingBrowser(context: BrowserContext): {
   browser: Browser;
   storageStates: Array<string | undefined>;
+  colorSchemes: Array<ColorScheme | undefined>;
 } {
   const storageStates: Array<string | undefined> = [];
+  const colorSchemes: Array<ColorScheme | undefined> = [];
   const browser = {
     async newContext(options: {
       storageState?: string;
+      colorScheme?: ColorScheme;
     }): Promise<BrowserContext> {
       storageStates.push(options.storageState);
+      colorSchemes.push(options.colorScheme);
       return context;
     },
   } as unknown as Browser;
-  return { browser, storageStates };
+  return { browser, storageStates, colorSchemes };
 }
 
 function waitAction(name: string): Action {
@@ -530,6 +534,45 @@ describe('runStoryWithBrowser: auth state resolves from authNeeds, not needs', (
     );
 
     assert.equal(storageStates[0], authFile);
+  });
+});
+
+describe('runStoryWithBrowser: colorScheme threads into the context', () => {
+  it('forwards a pinned colorScheme to newContext', async () => {
+    const config = await makeConfig();
+    const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
+    const { browser, colorSchemes } = capturingBrowser(only.context);
+
+    await runStoryWithBrowser(
+      browser,
+      makeOptions(
+        { ...config, colorScheme: 'dark' },
+        { breakpoint: { name: 'desktop', width: 1280, height: 800 } },
+      ),
+      new Date(),
+    );
+
+    assert.equal(colorSchemes.length, 1);
+    assert.equal(colorSchemes[0], 'dark');
+  });
+
+  it('forwards undefined when no colorScheme is configured', async () => {
+    // an unset scheme must arrive as exactly undefined, never a stand-in
+    const config = await makeConfig();
+    assert.equal(config.colorScheme, undefined);
+    const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
+    const { browser, colorSchemes } = capturingBrowser(only.context);
+
+    await runStoryWithBrowser(
+      browser,
+      makeOptions(config, {
+        breakpoint: { name: 'desktop', width: 1280, height: 800 },
+      }),
+      new Date(),
+    );
+
+    assert.equal(colorSchemes.length, 1);
+    assert.equal(colorSchemes[0], undefined);
   });
 });
 

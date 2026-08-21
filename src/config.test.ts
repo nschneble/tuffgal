@@ -146,6 +146,18 @@ describe('assertValidConfig', () => {
     assert.throws(() => assertValidConfig(config, SOURCE), /captureMode/);
   });
 
+  it('accepts a valid colorScheme', () => {
+    for (const scheme of ['light', 'dark', 'no-preference']) {
+      const config = { ...validConfig(), colorScheme: scheme };
+      assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+    }
+  });
+
+  it('rejects an unknown colorScheme', () => {
+    const config = { ...validConfig(), colorScheme: 'auto' };
+    assert.throws(() => assertValidConfig(config, SOURCE), /colorScheme/);
+  });
+
   it('accepts a boolean interactiveMode', () => {
     for (const value of [true, false]) {
       const config = { ...validConfig(), interactiveMode: value };
@@ -197,6 +209,17 @@ describe('loadConfig breakpoint resolution', () => {
   it('resolves an explicit captureMode', async () => {
     const resolved = await load("captureMode: 'fullPage',");
     assert.equal(resolved.captureMode, 'fullPage');
+  });
+
+  // a default here would re-emulate every already-committed baseline
+  it('leaves colorScheme undefined when nothing is set', async () => {
+    const resolved = await load('');
+    assert.equal(resolved.colorScheme, undefined);
+  });
+
+  it('resolves an explicit colorScheme', async () => {
+    const resolved = await load("colorScheme: 'dark',");
+    assert.equal(resolved.colorScheme, 'dark');
   });
 
   it('defaults maxFullPagePixels to 30_000_000 when nothing is set', async () => {
