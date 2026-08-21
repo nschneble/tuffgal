@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import {
   isColorScheme,
+  resolveContextColorScheme,
   type ColorScheme,
   type ResolvedConfig,
 } from '../config.ts';
@@ -327,11 +328,11 @@ export interface CapturedBrowser {
  * and this constant must track it. The manifest's whole job is to notice a DSF
  * change, so a stale hardcode here would silently defeat that.
  *
- * `colorScheme` follows suit: it records what was RENDERED, not what was
- * configured. An unset config still paints light, because Playwright's
- * context default is `'light'`. Recording the unset case as absent would
- * leave the migration rule armed forever, so the first suite to pin
- * `'dark'` drifts in silence.
+ * `colorScheme` follows suit: it records what was RENDERED, so it resolves
+ * the configured value exactly as the runner does and falls back to
+ * Playwright's `'light'` context default. Recording an unset config as
+ * absent would leave the migration rule armed forever, so the first suite
+ * to pin `'dark'` would drift in silence.
  */
 export function captureEnvironment(
   config: ResolvedConfig,
@@ -346,7 +347,7 @@ export function captureEnvironment(
     browserVersion: browser.version,
     platform: process.platform,
     captureMode: config.captureMode,
-    colorScheme: config.colorScheme ?? 'light',
+    colorScheme: resolveContextColorScheme(config.colorScheme) ?? 'light',
     breakpoints: config.breakpoints.map((breakpoint) => ({
       name: breakpoint.name,
       width: breakpoint.width,

@@ -274,10 +274,10 @@ before this field existed.
   Media Queries Level 5 defines the feature as `light | dark`, and
   Playwright deprecates it. Passing it through to the browser would clear
   the emulation and leave each page painting whatever the host machine
-  prefers, so Tuffgal renders it as `light` instead. Prefer `light`
-  outright: the environment manifest records the two values distinctly,
-  so switching between them prompts a re-approve even though the pixels
-  do not move.
+  prefers, so Tuffgal renders it as `light` instead. The environment
+  manifest records the scheme actually painted, so it stores `light` for
+  this value too and switching between the two never prompts a re-approve.
+  Prefer `light` outright all the same.
 
 ```ts
 colorScheme: 'dark',

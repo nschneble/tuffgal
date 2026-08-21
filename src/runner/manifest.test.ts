@@ -364,6 +364,14 @@ describe('captureEnvironment: builds the actual side', () => {
     assert.equal(env.colorScheme, 'dark');
   });
 
+  it("records 'light' for a 'no-preference' config, the scheme painted", () => {
+    const env = captureEnvironment(
+      { ...config, colorScheme: 'no-preference' } as ResolvedConfig,
+      { name: 'chromium', version: '131.0.0.0' },
+    );
+    assert.equal(env.colorScheme, 'light');
+  });
+
   it("records 'light' when the config pins nothing", () => {
     const unset = { ...config, colorScheme: undefined } as ResolvedConfig;
     const env = captureEnvironment(unset, {
