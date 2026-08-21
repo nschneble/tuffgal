@@ -6,7 +6,13 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Added
+
+- `colorScheme` config option pinning the `prefers-color-scheme` every
+  breakpoint renders under, so a project can baseline its dark theme
+  instead of the light one Tuffgal has always rendered. Omit the field
+  and nothing changes, including for baselines approved before it
+  existed
 
 ## [0.2.0-alpha.7] – 2026-08-18
 

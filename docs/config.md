@@ -259,6 +259,43 @@ the breakpoint dimensions, so this field has no effect under the default
 maxFullPagePixels: 30_000_000,
 ```
 
+### `colorScheme?: 'light' | 'dark' | 'no-preference'`
+
+Pins the `prefers-color-scheme` every breakpoint context renders under, so
+a project that ships both a light and a dark theme can baseline the one it
+means to test. No default. Leave the field out and Tuffgal does not set the
+option at all, which is what it has always done: Playwright's own context
+default is `light`, so an unpinned project renders light, exactly as it did
+before this field existed.
+
+- `light`: pages render under `prefers-color-scheme: light`.
+- `dark`: pages render under `prefers-color-scheme: dark`.
+- `no-preference`: accepted, but rendered as `light`. It is a legacy value:
+  Media Queries Level 5 defines the feature as `light | dark`, and
+  Playwright deprecates it. Passing it through to the browser would clear
+  the emulation and leave each page painting whatever the host machine
+  prefers, so Tuffgal renders it as `light` instead. Prefer `light`
+  outright: the environment manifest records the two values distinctly,
+  so switching between them prompts a re-approve even though the pixels
+  do not move.
+
+```ts
+colorScheme: 'dark',
+```
+
+This applies to every captured action across every breakpoint. There is no
+story-level override. Switching an existing project between schemes
+re-renders every page under the new scheme, so any baseline whose pixels
+move reports `changed` until you `approve` fresh ones.
+
+The scheme is one of the pixel-affecting keys in `baselines/manifest.json`
+(see [reporting.md](reporting.md#environment-environmentreport)), so a CI
+run whose scheme differs from the one in the committed manifest still runs
+the comparison, but banners the report and exits `3`. Baselines approved
+before this field existed record no scheme at all, and an absent key
+matches any current value, so adopting the option never forces a re-approve
+on its own.
+
 ### `interactiveMode?: boolean`
 
 How each captured action's screenshots are presented in the report. Default:

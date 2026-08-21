@@ -109,12 +109,12 @@ defensive parse guard for pre-`0.2.0` artifacts; every current run emits it.
 }
 ```
 
-| Field          | Type     | Meaning                                                                                                                                                          |
-| -------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `expected`     | object?  | The committed `<baselines>/manifest.json` when one exists and parses, else `null`. `null` covers both the bootstrap case (no manifest yet) and local mode.       |
-| `actual`       | object   | The capture environment this run rendered under (capture schema, browser version, platform, capture mode, breakpoints, device scale factor, frozen time).        |
-| `mismatch`     | boolean  | `true` when a pixel-affecting key diverged (CI mode with a present manifest) or the committed manifest was unreadable. Always `false` in local mode / bootstrap. |
-| `mismatchKeys` | string[] | The specific diverging keys, or `["manifest"]` when the manifest could not be parsed. Empty when `mismatch` is `false`.                                          |
+| Field          | Type     | Meaning                                                                                                                                                                                                    |
+| -------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `expected`     | object?  | The committed `<baselines>/manifest.json` when one exists and parses, else `null`. `null` covers both the bootstrap case (no manifest yet) and local mode.                                                 |
+| `actual`       | object   | The capture environment this run rendered under. The keys compared for drift are capture schema, browser version, platform, capture mode, color scheme, breakpoints, device scale factor, and frozen time. |
+| `mismatch`     | boolean  | `true` when a pixel-affecting key diverged (CI mode with a present manifest) or the committed manifest was unreadable. Always `false` in local mode / bootstrap.                                           |
+| `mismatchKeys` | string[] | The specific diverging keys, or `["manifest"]` when the manifest could not be parsed. Empty when `mismatch` is `false`.                                                                                    |
 
 ## `deleted[]`: `DeletedBaseline`
 
