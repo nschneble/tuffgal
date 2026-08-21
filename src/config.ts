@@ -83,8 +83,9 @@ export type CaptureMode = 'viewport' | 'fullPage';
 
 /**
  * Which `prefers-color-scheme` a page renders under. `no-preference` is
- * a legacy value browsers resolve to `light` (it was dropped from the
- * media query); pin `light` or `dark` for a deliberate mode.
+ * a legacy value, dropped from the media query and deprecated by
+ * Playwright; tuffgal renders it as `light` so it cannot vary with the
+ * machine. Pin `light` or `dark` for a deliberate mode.
  */
 export type ColorScheme = 'light' | 'dark' | 'no-preference';
 
@@ -177,8 +178,8 @@ export interface TuffgalConfig {
   /**
    * Pins the `prefers-color-scheme` every breakpoint context renders
    * under, so baselines record a deliberate mode rather than whatever
-   * the machine running the suite reports. Omit the field to leave
-   * emulation untouched. See {@link ColorScheme}.
+   * the machine running the suite reports. Omit the field to keep
+   * Playwright's own default, which is `light`. See {@link ColorScheme}.
    */
   colorScheme?: ColorScheme;
   /**
@@ -245,7 +246,7 @@ export interface ResolvedConfig {
   breakpoints: [ResolvedBreakpoint, ...ResolvedBreakpoint[]];
   /** Resolved screenshot scope; defaults to `viewport`. */
   captureMode: CaptureMode;
-  /** Pinned colour scheme, or `undefined` to leave emulation untouched. */
+  /** Pinned colour scheme, or `undefined` for Playwright's `light` default. */
   colorScheme: ColorScheme | undefined;
   /** Resolved full-page area cap in pixels; defaults to 30_000_000. */
   maxFullPagePixels: number;

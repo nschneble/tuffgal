@@ -538,23 +538,32 @@ describe('runStoryWithBrowser: auth state resolves from authNeeds, not needs', (
 });
 
 describe('runStoryWithBrowser: colorScheme threads into the context', () => {
-  it('forwards a pinned colorScheme to newContext', async () => {
-    const config = await makeConfig();
-    const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
-    const { browser, colorSchemes } = capturingBrowser(only.context);
+  // no-preference is host-dependent passed through, so light emulates it
+  const pinned = [
+    ['dark', 'dark'],
+    ['light', 'light'],
+    ['no-preference', 'light'],
+  ] as const;
 
-    await runStoryWithBrowser(
-      browser,
-      makeOptions(
-        { ...config, colorScheme: 'dark' },
-        { breakpoint: { name: 'desktop', width: 1280, height: 800 } },
-      ),
-      new Date(),
-    );
+  for (const [configured, emulated] of pinned) {
+    it(`forwards ${configured} to newContext as ${emulated}`, async () => {
+      const config = await makeConfig();
+      const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
+      const { browser, colorSchemes } = capturingBrowser(only.context);
 
-    assert.equal(colorSchemes.length, 1);
-    assert.equal(colorSchemes[0], 'dark');
-  });
+      await runStoryWithBrowser(
+        browser,
+        makeOptions(
+          { ...config, colorScheme: configured },
+          { breakpoint: { name: 'desktop', width: 1280, height: 800 } },
+        ),
+        new Date(),
+      );
+
+      assert.equal(colorSchemes.length, 1);
+      assert.equal(colorSchemes[0], emulated);
+    });
+  }
 
   it('forwards undefined when no colorScheme is configured', async () => {
     // an unset scheme must arrive as exactly undefined, never a stand-in

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { type Browser, type BrowserContext, type Page } from 'playwright';
 import {
   resolveSelectorList,
+  type ColorScheme,
   type ResolvedBreakpoint,
   type ResolvedConfig,
 } from '../config.ts';
@@ -134,7 +135,7 @@ export async function runStoryWithBrowser(
       storageState: storageStatePath,
       ignoreHTTPSErrors: true,
       permissions: ['clipboard-read', 'clipboard-write'],
-      colorScheme: config.colorScheme,
+      colorScheme: resolveContextColorScheme(config.colorScheme),
     });
     // The whole per-breakpoint lifecycle runs under try/finally so the context
     // is ALWAYS closed, even when something inside throws. Throw policy: an
@@ -231,6 +232,18 @@ export function resolveRunSet(
     return resolveSelectorList(story.breakpoints);
   }
   return config.breakpoints;
+}
+
+/**
+ * Maps a configured scheme to the one Playwright emulates. Passing the
+ * deprecated `no-preference` through CLEARS Chromium's override, so the page
+ * paints what the host reports; rendering it as `light` keeps the pin
+ * host-independent. An unset scheme stays `undefined`, absent stays absent.
+ */
+export function resolveContextColorScheme(
+  colorScheme: ColorScheme | undefined,
+): Exclude<ColorScheme, 'no-preference'> | undefined {
+  return colorScheme === 'no-preference' ? 'light' : colorScheme;
 }
 
 /**
