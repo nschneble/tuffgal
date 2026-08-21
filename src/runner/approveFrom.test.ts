@@ -256,6 +256,25 @@ describe('approveFrom: happy path', () => {
     assert.deepEqual(PNG.sync.read(written).data, PNG.sync.read(bytes).data);
   });
 
+  it('promotes colorScheme into the committed manifest', async () => {
+    // a keyless committed manifest never gates, so a dropped key is silent
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults({
+      environment: {
+        expected: null,
+        actual: { ...environment(), colorScheme: 'dark' },
+        mismatch: false,
+        mismatchKeys: [],
+      },
+    });
+
+    await approveFrom(config(), { from: candidateDir });
+    const manifest = JSON.parse(
+      await readFile(join(baselinesDir, 'manifest.json'), 'utf8'),
+    ) as EnvironmentManifest;
+    assert.equal(manifest.colorScheme, 'dark');
+  });
+
   it('refreshes a pre-existing manifest with the new environment', async () => {
     await mkdir(baselinesDir, { recursive: true });
     await writeFile(
