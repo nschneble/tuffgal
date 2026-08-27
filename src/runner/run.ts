@@ -126,7 +126,7 @@ export async function runAll(
       : undefined;
     const actions = await loadActions(config.paths.actions);
     const allStories = await loadStories(config.paths.stories);
-    const scheduled = buildSchedule(allStories);
+    const scheduled = buildSchedule(allStories, config);
     const subset = options.storyFilter
       ? scheduled.filter((item) => matchesFilter(item, options.storyFilter!))
       : scheduled;

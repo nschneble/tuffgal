@@ -1,3 +1,7 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+import type { ResolvedConfig } from '../config.ts';
 import { normalisedNeeds } from '../schema/story.ts';
 import type { StoryFile } from '../schema/load.ts';
 import type { StoryResult } from '../schema/result.ts';
@@ -25,11 +29,17 @@ export interface ScheduleSummary {
 
 /**
  * Validates that every produced label is emitted by at most one story and
- * that every `needs` label has a matching producer. Throws a descriptive
- * error on any mismatch so a typo in a JSON file fails loudly at load time,
- * not at run time.
+ * that every `needs` label is satisfiable: either a scheduled story
+ * `produces` it, or `<paths.authState>/<label>.json` is already on disk, a
+ * storage state the project seeded outside this run for
+ * `resolveStorageStateForNeeds` to load. Throws a descriptive error on any
+ * mismatch so a typo in a JSON file fails loudly at load time, not at run
+ * time.
  */
-export function buildSchedule(stories: StoryFile[]): ScheduledStory[] {
+export function buildSchedule(
+  stories: StoryFile[],
+  config: ResolvedConfig,
+): ScheduledStory[] {
   const scheduled: ScheduledStory[] = stories.map((entry) => ({
     ...entry,
     needs: normalisedNeeds(entry.story),
@@ -51,11 +61,19 @@ export function buildSchedule(stories: StoryFile[]): ScheduledStory[] {
 
   for (const item of scheduled) {
     for (const label of item.needs) {
-      if (!producerByLabel.has(label)) {
-        throw new SchedulerError(
-          `${item.file} needs label "${label}" but no story produces it.`,
-        );
+      if (producerByLabel.has(label)) {
+        continue;
       }
+      // A pre-seeded storage state stands in for a producer: the run reads
+      // <authState>/<label>.json instead of rendering the story that would
+      // have written it.
+      if (existsSync(join(config.paths.authState, `${label}.json`))) {
+        continue;
+      }
+      throw new SchedulerError(
+        `${item.file} needs label "${label}" but no story produces it and ` +
+          `no storage state for it exists in ${config.paths.authState}.`,
+      );
     }
   }
 
@@ -97,12 +115,21 @@ export async function drainSchedule(
   };
   const ordered: ScheduledStory[] = [];
 
+  // Only a label some scheduled story produces can ever be satisfied here:
+  // `satisfyProduced` is the sole path that clears an outstanding need. A
+  // label no story produces is a pre-seeded storage state that `buildSchedule`
+  // already accepted, so waiting on it would deadlock the drain. The full
+  // `item.needs` stays untouched for the auth loader, which still resolves the
+  // seeded file from disk.
+  const producedLabels = new Set(scheduled.flatMap((item) => item.produces));
+
   // Label → the stories that need it, plus each story's still-outstanding needs.
   const consumersByLabel = new Map<string, ScheduledStory[]>();
   const outstandingNeeds = new Map<string, Set<string>>();
   for (const item of scheduled) {
-    outstandingNeeds.set(item.file, new Set(item.needs));
-    for (const label of item.needs) {
+    const blocking = item.needs.filter((label) => producedLabels.has(label));
+    outstandingNeeds.set(item.file, new Set(blocking));
+    for (const label of blocking) {
       const consumers = consumersByLabel.get(label) ?? [];
       consumers.push(item);
       consumersByLabel.set(label, consumers);
@@ -110,9 +137,10 @@ export async function drainSchedule(
   }
 
   // Stories with no prerequisites are ready immediately. Later stories are
-  // pushed here as their last outstanding need clears.
+  // pushed here as their last outstanding need clears. Read from the same map
+  // the clearing path decrements, so the two cannot drift.
   const ready: ScheduledStory[] = scheduled.filter(
-    (item) => item.needs.length === 0,
+    (item) => outstandingNeeds.get(item.file)?.size === 0,
   );
 
   const allDone = (): boolean => context.results.size === scheduled.length;

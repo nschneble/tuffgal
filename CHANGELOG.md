@@ -6,7 +6,11 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Fixed
+
+- A `needs` label no story `produces` no longer aborts the run when
+  `<paths.authState>/<label>.json` is already on disk, so a project can
+  seed a storage state itself and have stories consume it
 
 ## [0.2.0-alpha.8] – 2026-08-20
 
