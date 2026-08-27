@@ -22,19 +22,14 @@ export interface ScheduledStory extends StoryFile {
   authNeeds?: string[];
 }
 
-export interface ScheduleSummary {
-  ready: ScheduledStory[];
-  blocked: ScheduledStory[];
-}
-
 /**
  * Validates that every produced label is emitted by at most one story and
  * that every `needs` label is satisfiable: either a scheduled story
- * `produces` it, or `<paths.authState>/<label>.json` is already on disk, a
- * storage state the project seeded outside this run for
- * `resolveStorageStateForNeeds` to load. Throws a descriptive error on any
- * mismatch so a typo in a JSON file fails loudly at load time, not at run
- * time.
+ * `produces` it, or `<paths.authState>/<label>.json` already exists for
+ * `resolveStorageStateForNeeds` to load. The disk check is a bare existence
+ * probe, so a file left behind by an earlier run satisfies it exactly as a
+ * deliberately seeded one does. Throws a descriptive error on any mismatch so
+ * a typo in a JSON file fails loudly at load time, not at run time.
  */
 export function buildSchedule(
   stories: StoryFile[],
@@ -72,7 +67,7 @@ export function buildSchedule(
       }
       throw new SchedulerError(
         `${item.file} needs label "${label}" but no story produces it and ` +
-          `no storage state for it exists in ${config.paths.authState}.`,
+          `no storage state exists at ${join(config.paths.authState, `${label}.json`)}.`,
       );
     }
   }
@@ -115,12 +110,11 @@ export async function drainSchedule(
   };
   const ordered: ScheduledStory[] = [];
 
-  // Only a label some scheduled story produces can ever be satisfied here:
-  // `satisfyProduced` is the sole path that clears an outstanding need. A
-  // label no story produces is a pre-seeded storage state that `buildSchedule`
-  // already accepted, so waiting on it would deadlock the drain. The full
-  // `item.needs` stays untouched for the auth loader, which still resolves the
-  // seeded file from disk.
+  // `satisfyProduced` is the sole path that clears an outstanding need, so a
+  // need no scheduled story produces would never clear. The run path already
+  // strips those in `adaptNeedsForPass`; this filter covers direct callers and
+  // tests. The full `item.needs` stays untouched for the auth loader, which
+  // still resolves a seeded file from disk.
   const producedLabels = new Set(scheduled.flatMap((item) => item.produces));
 
   // Label → the stories that need it, plus each story's still-outstanding needs.

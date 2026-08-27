@@ -43,7 +43,10 @@ export type StoryStep = z.infer<typeof storyStepSchema>;
  * dependency DAG, validate uniqueness, detect cycles, and inherit storage
  * state from a producer onto its consumers. A produced label's storage
  * state lives at `.auth/<label>.json` and is loaded as the initial state
- * for every consumer.
+ * for every consumer. A label may also have no producing story at all, as
+ * long as that file already exists when the run starts: a project can seed
+ * one itself (a Playwright `globalSetup`, say) and stories `needs` it the
+ * same way.
  *
  * `storageState: "logged-in"` is retained as syntactic sugar, equivalent
  * to `needs: ["logged-in"]`. New stories should prefer the explicit form.

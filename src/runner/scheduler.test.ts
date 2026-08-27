@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { StoryFile } from '../schema/load.ts';
@@ -17,22 +17,21 @@ import {
 } from './scheduler.ts';
 
 // buildSchedule probes <authState>/<label>.json for labels no story produces,
-// so every call needs a real directory. This one stays empty; tests that want
-// a pre-seeded label write into a fresh subdirectory of it.
-const authStateRoot = mkdtempSync(join(tmpdir(), 'tuffgal-scheduler-'));
-
-after(() => {
-  rmSync(authStateRoot, { recursive: true, force: true });
-});
+// so every call needs a real directory. A root holds only the subdirectories
+// `seededAuthState` mints under it, never a <label>.json of its own, so passing
+// a root straight to `schedulerConfig` is the "nothing seeded" case.
 
 /** buildSchedule only reads `paths.authState`, so the fixture carries that. */
-function schedulerConfig(authState: string = authStateRoot): ResolvedConfig {
+function schedulerConfig(authState: string): ResolvedConfig {
   return { paths: { authState } } as unknown as ResolvedConfig;
 }
 
-/** A directory holding one seeded storage state per label. */
-function seededAuthState(prefix: string, ...labels: string[]): string {
-  const dir = mkdtempSync(join(authStateRoot, `${prefix}-`));
+function seededAuthState(
+  root: string,
+  prefix: string,
+  ...labels: string[]
+): string {
+  const dir = mkdtempSync(join(root, `${prefix}-`));
   for (const label of labels) {
     writeFileSync(
       join(dir, `${label}.json`),
@@ -75,13 +74,21 @@ const passRunner: StoryRunner = (item) => Promise.resolve(passResult(item));
 const noop = (): void => {};
 
 describe('buildSchedule: validation', () => {
+  let authStateRoot: string;
+  before(() => {
+    authStateRoot = mkdtempSync(join(tmpdir(), 'tuffgal-scheduler-build-'));
+  });
+  after(() => {
+    rmSync(authStateRoot, { recursive: true, force: true });
+  });
+
   it('throws when two stories produce the same label', () => {
     const stories = [
       makeStoryFile('a.json', { produces: ['shared'] }),
       makeStoryFile('b.json', { produces: ['shared'] }),
     ];
     assert.throws(
-      () => buildSchedule(stories, schedulerConfig()),
+      () => buildSchedule(stories, schedulerConfig(authStateRoot)),
       SchedulerError,
     );
   });
@@ -89,7 +96,7 @@ describe('buildSchedule: validation', () => {
   it('throws when a needed label has no producer', () => {
     const stories = [makeStoryFile('a.json', { needs: ['missing'] })];
     assert.throws(
-      () => buildSchedule(stories, schedulerConfig()),
+      () => buildSchedule(stories, schedulerConfig(authStateRoot)),
       SchedulerError,
     );
   });
@@ -100,7 +107,7 @@ describe('buildSchedule: validation', () => {
       makeStoryFile('b.json', { needs: ['la'], produces: ['lb'] }),
     ];
     assert.throws(
-      () => buildSchedule(stories, schedulerConfig()),
+      () => buildSchedule(stories, schedulerConfig(authStateRoot)),
       (error: unknown) => {
         assert.ok(error instanceof SchedulerError);
         assert.match(error.message, /Cycle detected/);
@@ -110,7 +117,7 @@ describe('buildSchedule: validation', () => {
   });
 
   it('accepts a producerless label seeded on disk, and only that label', () => {
-    const authState = seededAuthState('build', 'theme-dark');
+    const authState = seededAuthState(authStateRoot, 'build', 'theme-dark');
     const scheduled = buildSchedule(
       [makeStoryFile('dark.json', { needs: ['theme-dark'] })],
       schedulerConfig(authState),
@@ -133,7 +140,7 @@ describe('buildSchedule: validation', () => {
       makeStoryFile('auth.json', { produces: ['logged-in'] }),
       makeStoryFile('dash.json', { storageState: 'logged-in' }),
     ];
-    const scheduled = buildSchedule(stories, schedulerConfig());
+    const scheduled = buildSchedule(stories, schedulerConfig(authStateRoot));
     const dash = scheduled.find((item) => item.file === 'dash.json');
     assert.ok(dash);
     assert.deepEqual(dash.needs, ['logged-in']);
@@ -141,6 +148,14 @@ describe('buildSchedule: validation', () => {
 });
 
 describe('drainSchedule: execution', () => {
+  let authStateRoot: string;
+  before(() => {
+    authStateRoot = mkdtempSync(join(tmpdir(), 'tuffgal-scheduler-drain-'));
+  });
+  after(() => {
+    rmSync(authStateRoot, { recursive: true, force: true });
+  });
+
   it('resolves immediately for an empty schedule', async () => {
     const results = await drainSchedule([], 2, passRunner, noop, noop);
     assert.deepEqual(results, []);
@@ -149,7 +164,7 @@ describe('drainSchedule: execution', () => {
   it('runs all independent stories', async () => {
     const scheduled = buildSchedule(
       [makeStoryFile('a.json'), makeStoryFile('b.json')],
-      schedulerConfig(),
+      schedulerConfig(authStateRoot),
     );
     const results = await drainSchedule(scheduled, 2, passRunner, noop, noop);
     assert.equal(results.length, 2);
@@ -162,7 +177,7 @@ describe('drainSchedule: execution', () => {
         makeStoryFile('consumer.json', { needs: ['ready'] }),
         makeStoryFile('producer.json', { produces: ['ready'] }),
       ],
-      schedulerConfig(),
+      schedulerConfig(authStateRoot),
     );
     const order: string[] = [];
     const runner: StoryRunner = async (item) => {
@@ -182,7 +197,7 @@ describe('drainSchedule: execution', () => {
     async () => {
       const scheduled = buildSchedule(
         [makeStoryFile('dark.json', { needs: ['theme-dark'] })],
-        schedulerConfig(seededAuthState('drain', 'theme-dark')),
+        schedulerConfig(seededAuthState(authStateRoot, 'drain', 'theme-dark')),
       );
       const ran: string[] = [];
       const runner: StoryRunner = async (item) => {
@@ -204,7 +219,7 @@ describe('drainSchedule: execution', () => {
           makeStoryFile('consumer.json', { needs: ['theme-dark', 'ready'] }),
           makeStoryFile('producer.json', { produces: ['ready'] }),
         ],
-        schedulerConfig(seededAuthState('mixed', 'theme-dark')),
+        schedulerConfig(seededAuthState(authStateRoot, 'mixed', 'theme-dark')),
       );
       const order: string[] = [];
       const runner: StoryRunner = async (item) => {
@@ -222,7 +237,7 @@ describe('drainSchedule: execution', () => {
         makeStoryFile('producer.json', { produces: ['ready'] }),
         makeStoryFile('consumer.json', { needs: ['ready'] }),
       ],
-      schedulerConfig(),
+      schedulerConfig(authStateRoot),
     );
     const runner: StoryRunner = async (item) => {
       if (item.file === 'producer.json') {
@@ -241,6 +256,35 @@ describe('drainSchedule: execution', () => {
     );
   });
 
+  // One worker keeps seed.json queued, not in flight, when the producer fails.
+  // With two it starts first and its own completion overwrites the synthetic
+  // skip, so the assertion below reads `pass` either way and a predicate that
+  // skipped on "has any need" would survive. Verified: at 2 workers this test
+  // passes against that mutant.
+  it('leaves a pre-seeded need unblocked when an unrelated producer fails', async () => {
+    const scheduled = buildSchedule(
+      [
+        makeStoryFile('producer.json', { produces: ['ready'] }),
+        makeStoryFile('seed.json', { needs: ['theme-dark'] }),
+        makeStoryFile('dependent.json', { needs: ['ready'] }),
+      ],
+      schedulerConfig(
+        seededAuthState(authStateRoot, 'unrelated', 'theme-dark'),
+      ),
+    );
+    const runner: StoryRunner = async (item) => {
+      if (item.file === 'producer.json') {
+        return { ...passResult(item), status: 'failed' };
+      }
+      return passResult(item);
+    };
+    const results = await drainSchedule(scheduled, 1, runner, noop, noop);
+    const byFile = new Map(results.map((result) => [result.file, result]));
+    assert.equal(byFile.get('seed.json')?.status, 'pass');
+    assert.equal(byFile.get('dependent.json')?.status, 'failed');
+    assert.equal(byFile.get('dependent.json')?.actions[0]?.action, '(blocked)');
+  });
+
   it('cascades a failure transitively through the chain', async () => {
     // a (fails) -> b needs la -> c needs lb. Both b and c must be blocked.
     const scheduled = buildSchedule(
@@ -249,7 +293,7 @@ describe('drainSchedule: execution', () => {
         makeStoryFile('b.json', { needs: ['la'], produces: ['lb'] }),
         makeStoryFile('c.json', { needs: ['lb'] }),
       ],
-      schedulerConfig(),
+      schedulerConfig(authStateRoot),
     );
     const runner: StoryRunner = async (item) => {
       if (item.file === 'a.json') {
@@ -281,7 +325,7 @@ describe('drainSchedule: execution', () => {
         makeStoryFile('c.json'),
         makeStoryFile('d.json'),
       ],
-      schedulerConfig(),
+      schedulerConfig(authStateRoot),
     );
     let active = 0;
     let peak = 0;

@@ -130,14 +130,14 @@ All file-path fields are resolved relative to the directory containing
 Where Tuffgal reads + writes content. All paths are relative to the config
 file's location.
 
-| Field        | Type      | Default          | Meaning                                                                                                                     |
-| ------------ | --------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `actions`    | `string`  | _required_       | Directory of action JSON files. Recurses into subdirectories                                                                |
-| `authState`  | `string?` | `.auth`          | Storage state cache for `produces`/`needs` label inheritance (**add to .gitignore**)                                        |
-| `localCache` | `string?` | `tuffgal/.cache` | Per-machine cache for local (advisory) self-diff mode. Never committed (**add to .gitignore**); `init` scaffolds the ignore |
-| `baselines`  | `string`  | _required_       | Committed PNG baselines and a11y snapshots                                                                                  |
-| `stories`    | `string`  | _required_       | Directory of story JSON files. Recurses into subdirectories                                                                 |
-| `report`     | `string`  | _required_       | Generated HTML report and traces. (**add to .gitignore**)                                                                   |
+| Field        | Type      | Default          | Meaning                                                                                                                                                                                                                     |
+| ------------ | --------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actions`    | `string`  | _required_       | Directory of action JSON files. Recurses into subdirectories                                                                                                                                                                |
+| `authState`  | `string?` | `.auth`          | Storage state cache for `produces`/`needs` label inheritance, and read at load time to satisfy a `needs` label no story `produces` (**add to .gitignore**, so a hand-seeded file must be regenerated per machine and in CI) |
+| `localCache` | `string?` | `tuffgal/.cache` | Per-machine cache for local (advisory) self-diff mode. Never committed (**add to .gitignore**); `init` scaffolds the ignore                                                                                                 |
+| `baselines`  | `string`  | _required_       | Committed PNG baselines and a11y snapshots                                                                                                                                                                                  |
+| `stories`    | `string`  | _required_       | Directory of story JSON files. Recurses into subdirectories                                                                                                                                                                 |
+| `report`     | `string`  | _required_       | Generated HTML report and traces. (**add to .gitignore**)                                                                                                                                                                   |
 
 > `tuffgal init` scaffolds `authState: 'tuffgal/.auth'` so the cache stays
 > inside the `tuffgal/` content directory next to actions, stories, and

@@ -41,6 +41,16 @@ callback. Fixtures are named functions referenced from stories.
 state to `paths.authState/<label>.json` and consumer stories with matching
 `needs` inherit it.
 
+**Or seed the file yourself.** If a Playwright `globalSetup` already writes a
+storage state, you can keep that script and point it at
+`paths.authState/<label>.json`, then have stories `needs` that label with no
+producer story for it. Tuffgal accepts a label no story `produces` as long as
+the file is on disk. Tuffgal has no `globalSetup` hook of its own, so run the
+script yourself before invoking `tuffgal run` — a `pretest`-style npm script or
+a CI step ahead of the run. `paths.authState` is gitignored, so the seeded file
+has to be regenerated on each machine and in CI, exactly as under Playwright
+Test.
+
 ## Translation cookbook
 
 (To be filled in by the first migrating consumer)
@@ -48,6 +58,9 @@ state to `paths.authState/<label>.json` and consumer stories with matching
 - [ ] `test.describe` → directory structure under `paths.stories/`
 - [ ] `test.beforeAll` for DB seeding → `database.reset` in `tuffgal.config.ts`
 - [ ] `test.beforeEach` for storage state → `needs` label on the story
+- [ ] `globalSetup` writing a storage-state file → keep the script, run it
+      before `tuffgal run`, write to `paths.authState/<label>.json`, and
+      `needs` that label with no producer story
 - [ ] Snapshot directory → `paths.baselines/`
 - [ ] `test.use({ baseURL })` → `baseUrl` in `tuffgal.config.ts`
 

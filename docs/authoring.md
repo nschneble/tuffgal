@@ -459,9 +459,19 @@ storage state to `paths.authState/<label>.json`. Every story that `needs`
 that label inherits the file as its initial context state, so there's no
 replay of the producer's actions.
 
+A producer story is not the only way that file can come to exist. You can write
+`<label>.json` to `paths.authState` yourself — from a Playwright `globalSetup`,
+a login script, whatever suits — and then `needs` that label from stories with
+no producer story for it anywhere in the run. Tuffgal validates `needs` when it
+builds the schedule, so the file has to be on disk **before** the run starts;
+Tuffgal will not run your seeding script for you. Since `paths.authState` is
+gitignored, a seeded file is per-machine: regenerate it on every developer
+machine and in CI.
+
 Common patterns:
 
 - A `login` story `produces: ["logged-in"]`
+- A `globalSetup` writes `logged-in.json` and no story `produces` it
 - Stories that don't care about auth pass over `needs`
 - Don't create cycles (Don't produce the same label from two stories)
 
