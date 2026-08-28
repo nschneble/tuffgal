@@ -8,12 +8,19 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Added
 
-- A `needs` label that no story `produces` no longer fails the run when
-  `<paths.authState>/<label>.json` is already on disk, so a project can
-  seed a storage state itself and have stories consume it
+- A `needs` label that no story `produces` no longer fails the run when the
+  project declares it in `seededLabels` and
+  `<paths.authState>/<label>.json` is on disk, so a project can seed a
+  storage state itself and have stories consume it
+- `seededLabels` config option naming the labels a project seeds itself
 
 ### Fixed
 
+- A pre-seeded `<label>.json` left behind by a renamed or deleted producer
+  story no longer satisfies the `needs` of the story that lost it. Nothing
+  prunes `paths.authState`, so a bare file on disk is no longer enough:
+  the label must also be declared in `seededLabels`, and a declared label
+  whose file is missing throws its own error naming the path to seed
 - A story that `needs` both a pre-seeded label and a produced one now loads
   the producer's storage state, whichever order `needs` lists them in.
   A pre-seeded file is always on disk, so listing it first used to shadow

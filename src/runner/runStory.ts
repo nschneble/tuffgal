@@ -366,15 +366,15 @@ async function stopTracing(
  * pre-seeded-only one, whatever order `needs` lists them in. Order cannot decide
  * this, because the two kinds of label do not offer the same guarantee. A
  * pre-seeded label's file is guaranteed present — `buildSchedule` admits the
- * label only because the file exists — while a produced label's file appears
- * only once its producer has actually run and persisted one. Walking `needs`
- * raw therefore lets a pre-seeded label listed first shadow the producer's real
- * auth, and the story renders under the wrong identity with nothing to show for
- * it: no error, no failed action, just a screenshot of the wrong session. The
- * author cannot always reorder their way out either, since `normalisedNeeds`
- * appends the `storageState: 'logged-in'` shorthand to the END of the list.
- * Within a tier the first match still wins, so two produced (or two pre-seeded)
- * labels keep resolving in `needs` order.
+ * label only when `seededLabels` declares it AND the file already exists — while
+ * a produced label's file appears only once its producer has actually run and
+ * persisted one. Walking `needs` raw therefore lets a pre-seeded label listed
+ * first shadow the producer's real auth, and the story renders under the wrong
+ * identity with nothing to show for it: no error, no failed action, just a
+ * screenshot of the wrong session. The author cannot always reorder their way
+ * out either, since `normalisedNeeds` appends the `storageState: 'logged-in'`
+ * shorthand to the END of the list. Within a tier the first match still wins,
+ * so two produced (or two pre-seeded) labels keep resolving in `needs` order.
  */
 async function resolveStorageStateForNeeds(
   config: ResolvedConfig,

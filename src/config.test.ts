@@ -69,6 +69,25 @@ describe('assertValidConfig', () => {
     assert.throws(() => assertValidConfig(config, SOURCE), /paths\.localCache/);
   });
 
+  it('accepts a seededLabels array of non-empty strings', () => {
+    const config = { ...validConfig(), seededLabels: ['logged-in'] };
+    assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+  });
+
+  it('rejects a non-array seededLabels', () => {
+    const config = { ...validConfig(), seededLabels: 'logged-in' };
+    assert.throws(() => assertValidConfig(config, SOURCE), /seededLabels/);
+  });
+
+  // An empty string resolves <authState>/.json, a real path that a stray file
+  // could occupy, so it is rejected rather than silently declared.
+  it('rejects a seededLabels entry that is empty or not a string', () => {
+    for (const entry of ['', 42, null]) {
+      const config = { ...validConfig(), seededLabels: ['ok', entry] };
+      assert.throws(() => assertValidConfig(config, SOURCE), /seededLabels/);
+    }
+  });
+
   it('requires a string baseUrl', () => {
     const config = validConfig();
     config.baseUrl = 123;
@@ -240,6 +259,18 @@ describe('loadConfig breakpoint resolution', () => {
   it('resolves an explicit interactiveMode', async () => {
     const resolved = await load('interactiveMode: true,');
     assert.equal(resolved.interactiveMode, true);
+  });
+
+  it('defaults seededLabels to empty when nothing is set', async () => {
+    // buildSchedule reads this straight into a Set, so an omitted field has to
+    // resolve to a real empty array rather than undefined.
+    const resolved = await load('');
+    assert.deepEqual(resolved.seededLabels, []);
+  });
+
+  it('resolves an explicit seededLabels', async () => {
+    const resolved = await load("seededLabels: ['logged-in', 'theme-dark'],");
+    assert.deepEqual(resolved.seededLabels, ['logged-in', 'theme-dark']);
   });
 
   it('defaults paths.localCache to the cache dir the scaffolded .gitignore covers', async () => {

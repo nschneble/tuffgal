@@ -14,11 +14,13 @@ export interface ScheduledStory extends StoryFile {
 /**
  * Validates that every produced label is emitted by at most one story and
  * that every `needs` label is satisfiable: either a scheduled story
- * `produces` it, or `<paths.authState>/<label>.json` already exists for
- * `resolveStorageStateForNeeds` to load. The disk check is a bare existence
- * probe, so a file left behind by an earlier run satisfies it exactly as a
- * deliberately seeded one does. Throws a descriptive error on any mismatch so
- * a typo in a JSON file fails loudly at load time, not at run time.
+ * `produces` it, or the project declared it in `config.seededLabels` AND
+ * `<paths.authState>/<label>.json` exists for `resolveStorageStateForNeeds` to
+ * load. Both halves are required, because neither alone separates a deliberate
+ * seed from residue: a bare file can be what a renamed or deleted producer left
+ * behind, and a bare declaration can name a file nobody ever wrote. Throws a
+ * descriptive error on any mismatch so a typo in a JSON file fails loudly at
+ * load time, not at run time.
  */
 export function buildSchedule(
   stories: StoryFile[],
@@ -43,21 +45,31 @@ export function buildSchedule(
     }
   }
 
+  const declaredSeeds = new Set(config.seededLabels);
   for (const item of scheduled) {
     for (const label of item.needs) {
       if (producerByLabel.has(label)) {
         continue;
       }
-      // A pre-seeded storage state stands in for a producer: the run reads
-      // <authState>/<label>.json instead of rendering the story that would
-      // have written it.
-      if (existsSync(join(config.paths.authState, `${label}.json`))) {
-        continue;
+      // A declared pre-seeded storage state stands in for a producer: the run
+      // reads <authState>/<label>.json instead of rendering the story that
+      // would have written it. An undeclared label is indistinguishable from a
+      // typo, whether or not some file happens to sit at that path.
+      const seedPath = join(config.paths.authState, `${label}.json`);
+      if (!declaredSeeds.has(label)) {
+        throw new SchedulerError(
+          `${item.file} needs label "${label}" but no story produces it and ` +
+            `it is not listed in \`seededLabels\`. Add a story that produces ` +
+            `it, or declare it in \`seededLabels\` and seed ${seedPath}.`,
+        );
       }
-      throw new SchedulerError(
-        `${item.file} needs label "${label}" but no story produces it and ` +
-          `no storage state exists at ${join(config.paths.authState, `${label}.json`)}.`,
-      );
+      if (!existsSync(seedPath)) {
+        throw new SchedulerError(
+          `${item.file} needs label "${label}", declared in \`seededLabels\`, ` +
+            `but no storage state exists at ${seedPath}. Run your seeding ` +
+            `script before \`tuffgal run\`; Tuffgal does not run it for you.`,
+        );
+      }
     }
   }
 

@@ -22,9 +22,16 @@ import {
 // `seededAuthState` mints under it, never a <label>.json of its own, so passing
 // a root straight to `schedulerConfig` is the "nothing seeded" case.
 
-/** buildSchedule only reads `paths.authState`, so the fixture carries that. */
-function schedulerConfig(authState: string): ResolvedConfig {
-  return { paths: { authState } } as unknown as ResolvedConfig;
+/**
+ * buildSchedule reads `paths.authState` and `seededLabels`, so the fixture
+ * carries both. Admission needs the two together: a file on disk whose label
+ * this list omits is rejected.
+ */
+function schedulerConfig(
+  authState: string,
+  seededLabels: string[] = [],
+): ResolvedConfig {
+  return { paths: { authState }, seededLabels } as unknown as ResolvedConfig;
 }
 
 function seededAuthState(
@@ -117,22 +124,64 @@ describe('buildSchedule: validation', () => {
     );
   });
 
-  it('accepts a producerless label seeded on disk, and only that label', () => {
+  it('accepts a declared producerless label seeded on disk, and only that label', () => {
     const authState = seededAuthState(authStateRoot, 'build', 'theme-dark');
     const scheduled = buildSchedule(
       [makeStoryFile('dark.json', { needs: ['theme-dark'] })],
-      schedulerConfig(authState),
+      schedulerConfig(authState, ['theme-dark']),
     );
     assert.deepEqual(scheduled[0]?.needs, ['theme-dark']);
-    // A sibling label in the same directory has no file, so it still throws:
-    // the probe is per label, not "the auth directory exists".
+    // A sibling label declared alongside it has no file of its own, so it
+    // still throws: the probe is per label, not "the auth directory exists".
     assert.throws(
       () =>
         buildSchedule(
           [makeStoryFile('light.json', { needs: ['theme-light'] })],
-          schedulerConfig(authState),
+          schedulerConfig(authState, ['theme-dark', 'theme-light']),
         ),
       SchedulerError,
+    );
+  });
+
+  // The renamed/removed-producer case. <authState>/theme-dark.json outlives the
+  // story that used to produce it (nothing ever prunes that directory), and no
+  // config declares the label, so the residue must not stand in for the
+  // producer it lost. A file on disk is not consent.
+  it('throws for an undeclared producerless label even with its file on disk', () => {
+    const authState = seededAuthState(authStateRoot, 'residue', 'theme-dark');
+    assert.throws(
+      () =>
+        buildSchedule(
+          [makeStoryFile('dark.json', { needs: ['theme-dark'] })],
+          schedulerConfig(authState),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof SchedulerError);
+        assert.match(error.message, /not listed in `seededLabels`/);
+        // Distinct from the declared-but-unseeded message below. Collapsing
+        // the two sends a user who declared the label hunting through their
+        // config instead of at the seed script that never ran.
+        assert.doesNotMatch(error.message, /no storage state exists/);
+        return true;
+      },
+    );
+  });
+
+  it('throws for a declared label with no file, pointing at the seed', () => {
+    const authState = seededAuthState(authStateRoot, 'unseeded');
+    assert.throws(
+      () =>
+        buildSchedule(
+          [makeStoryFile('dark.json', { needs: ['theme-dark'] })],
+          schedulerConfig(authState, ['theme-dark']),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof SchedulerError);
+        assert.match(error.message, /no storage state exists at/);
+        assert.match(error.message, /declared in `seededLabels`/);
+        assert.doesNotMatch(error.message, /not listed in `seededLabels`/);
+        return true;
+      },
     );
   });
 
@@ -210,7 +259,9 @@ describe('drainSchedule: execution', () => {
     async () => {
       const scheduled = buildSchedule(
         [makeStoryFile('dark.json', { needs: ['theme-dark'] })],
-        schedulerConfig(seededAuthState(authStateRoot, 'drain', 'theme-dark')),
+        schedulerConfig(seededAuthState(authStateRoot, 'drain', 'theme-dark'), [
+          'theme-dark',
+        ]),
       );
       const ran: string[] = [];
       const runner: StoryRunner = async (item) => {
@@ -232,7 +283,9 @@ describe('drainSchedule: execution', () => {
           makeStoryFile('consumer.json', { needs: ['theme-dark', 'ready'] }),
           makeStoryFile('producer.json', { produces: ['ready'] }),
         ],
-        schedulerConfig(seededAuthState(authStateRoot, 'mixed', 'theme-dark')),
+        schedulerConfig(seededAuthState(authStateRoot, 'mixed', 'theme-dark'), [
+          'theme-dark',
+        ]),
       );
       const order: string[] = [];
       const runner: StoryRunner = async (item) => {
@@ -283,6 +336,7 @@ describe('drainSchedule: execution', () => {
       ],
       schedulerConfig(
         seededAuthState(authStateRoot, 'unrelated', 'theme-dark'),
+        ['theme-dark'],
       ),
     );
     const runner: StoryRunner = async (item) => {

@@ -44,8 +44,10 @@ state to `paths.authState/<label>.json` and consumer stories with matching
 **Or seed the file yourself.** If a Playwright `globalSetup` already writes a
 storage state, you can keep that script and point it at
 `paths.authState/<label>.json`, then have stories `needs` that label with no
-producer story for it. Tuffgal accepts a label no story `produces` as long as
-the file is on disk. Tuffgal has no `globalSetup` hook of its own, so run the
+producer story for it. Tuffgal accepts a label no story `produces` when your
+config declares it in [`seededLabels`](config.md#seededlabels-string) and the
+file is on disk — the declaration is what separates a state you meant to seed
+from a leftover file. Tuffgal has no `globalSetup` hook of its own, so run the
 script yourself before invoking `tuffgal run` — a `pretest`-style npm script or
 a CI step ahead of the run. `paths.authState` is gitignored, so the seeded file
 has to be regenerated on each machine and in CI, exactly as under Playwright
@@ -59,8 +61,8 @@ Test.
 - [ ] `test.beforeAll` for DB seeding → `database.reset` in `tuffgal.config.ts`
 - [ ] `test.beforeEach` for storage state → `needs` label on the story
 - [ ] `globalSetup` writing a storage-state file → keep the script, run it
-      before `tuffgal run`, write to `paths.authState/<label>.json`, and
-      `needs` that label with no producer story
+      before `tuffgal run`, write to `paths.authState/<label>.json`, declare the
+      label in `seededLabels`, and `needs` it with no producer story
 - [ ] Snapshot directory → `paths.baselines/`
 - [ ] `test.use({ baseURL })` → `baseUrl` in `tuffgal.config.ts`
 

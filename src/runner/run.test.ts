@@ -512,8 +512,9 @@ describe('runAll: a consumer prefers its producer auth over a pre-seeded file', 
         actions: [{ action: 'open' }],
       }),
     );
-    // The pre-seeded file is on disk before the run, which is exactly why
-    // buildSchedule accepts a `seeded` label no story produces.
+    // The pre-seeded file is on disk before the run and `seededLabels` below
+    // declares it, which together are why buildSchedule accepts a `seeded`
+    // label no story produces.
     const seededFile = join(authStateDir, 'seeded.json');
     await writeFile(seededFile, JSON.stringify({ cookies: [], origins: [] }));
 
@@ -523,6 +524,7 @@ describe('runAll: a consumer prefers its producer auth over a pre-seeded file', 
       frozenTime: '2026-01-15T12:00:00.000Z',
       captureMode: 'viewport',
       interactiveMode: false,
+      seededLabels: ['seeded'],
       breakpoints: [{ name: 'desktop', width: 1280, height: 800 }],
       paths: {
         actions: actionsDir,

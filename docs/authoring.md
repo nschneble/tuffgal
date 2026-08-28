@@ -462,16 +462,27 @@ replay of the producer's actions.
 A producer story is not the only way that file can come to exist. You can write
 `<label>.json` to `paths.authState` yourself — from a Playwright `globalSetup`,
 a login script, whatever suits — and then `needs` that label from stories with
-no producer story for it anywhere in the run. Tuffgal validates `needs` when it
-builds the schedule, so the file has to be on disk **before** the run starts;
-Tuffgal will not run your seeding script for you. Since `paths.authState` is
-gitignored, a seeded file is per-machine: regenerate it on every developer
-machine and in CI.
+no producer story for it anywhere in the run. That takes two steps:
+
+1. List the label in [`seededLabels`](config.md#seededlabels-string) in
+   `tuffgal.config.ts`, declaring that your project seeds it.
+2. Have your script write `<label>.json` into `paths.authState`.
+
+Tuffgal validates `needs` when it builds the schedule, so the file has to be on
+disk **before** the run starts; Tuffgal will not run your seeding script for
+you. Both halves are required, and a missing one throws with its own message:
+an undeclared label reads as a typo (or as a producer story you renamed away),
+and a declared label with no file points you at the seeding script. That is what
+keeps a stale `<label>.json` — left behind by a producer story you since
+renamed or deleted, because nothing prunes `paths.authState` — from quietly
+standing in for the producer it lost. Since `paths.authState` is gitignored, a
+seeded file is per-machine: regenerate it on every developer machine and in CI.
 
 Common patterns:
 
 - A `login` story `produces: ["logged-in"]`
-- A `globalSetup` writes `logged-in.json` and no story `produces` it
+- A `globalSetup` writes `logged-in.json`, `seededLabels` declares
+  `"logged-in"`, and no story `produces` it
 - Stories that don't care about auth pass over `needs`
 - Don't create cycles (Don't produce the same label from two stories)
 
