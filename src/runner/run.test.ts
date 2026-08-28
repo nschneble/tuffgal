@@ -480,6 +480,86 @@ describe('runAll: shared browser lifecycle', () => {
   });
 });
 
+describe('runAll: each breakpoint pass renders at its own viewport', () => {
+  // nothing else pins this: folding breakpoint into base stays green
+  it('varies the viewport per pass and tags each story with both breakpoints', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tuffgal-runall-bp-'));
+    const actionsDir = join(root, 'actions');
+    const storiesDir = join(root, 'stories');
+    await mkdir(actionsDir, { recursive: true });
+    await mkdir(storiesDir, { recursive: true });
+    await writeFile(
+      join(actionsDir, 'open.json'),
+      JSON.stringify({ action: 'open', steps: [{ kind: 'wait', ms: 0 }] }),
+    );
+    await writeFile(
+      join(storiesDir, 'home.json'),
+      JSON.stringify({ story: 'home', actions: [{ action: 'open' }] }),
+    );
+    await writeFile(
+      join(storiesDir, 'about.json'),
+      JSON.stringify({ story: 'about', actions: [{ action: 'open' }] }),
+    );
+
+    const config = {
+      baseUrl: 'http://localhost:3000',
+      defaultTimeoutMs: 1000,
+      frozenTime: '2026-01-15T12:00:00.000Z',
+      captureMode: 'viewport',
+      interactiveMode: false,
+      breakpoints: [
+        { name: 'mobile', width: 390, height: 844 },
+        { name: 'desktop', width: 1280, height: 800 },
+      ],
+      paths: {
+        actions: actionsDir,
+        stories: storiesDir,
+        baselines: join(root, 'baselines'),
+        localCache: join(root, 'cache'),
+        report: join(root, 'report'),
+        authState: join(root, 'auth'),
+      },
+    } as unknown as ResolvedConfig;
+
+    const viewports: string[] = [];
+    const browser = {
+      async newContext(options: {
+        viewport?: { width: number; height: number };
+      }): Promise<BrowserContext> {
+        viewports.push(
+          `${options.viewport?.width}x${options.viewport?.height}`,
+        );
+        return fakeContext(fakePage(solidPng(9, 9, 9)));
+      },
+      version(): string {
+        return '131.0.0.0';
+      },
+      async close(): Promise<void> {},
+    } as unknown as Browser;
+
+    const result = await runAll(
+      config,
+      { headed: false, mode: 'local' },
+      async () => browser,
+    );
+
+    assert.deepEqual(viewports.toSorted(), [
+      '1280x800',
+      '1280x800',
+      '390x844',
+      '390x844',
+    ]);
+    assert.equal(result.totals.stories, 2);
+    for (const storyResult of result.stories) {
+      assert.deepEqual(
+        storyResult.actions.map((each) => each.breakpoint).toSorted(),
+        ['desktop', 'mobile'],
+        `${storyResult.file} must carry an action per breakpoint`,
+      );
+    }
+  });
+});
+
 describe('runAll: a consumer prefers its producer auth over a pre-seeded file', () => {
   // The only place the produced-before-pre-seeded ranking is exercised end to
   // end. runStory.test.ts proves the resolver ranks correctly when it is handed
