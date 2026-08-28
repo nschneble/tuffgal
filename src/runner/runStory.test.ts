@@ -15,7 +15,8 @@ import type { Action } from '../schema/action.ts';
 import type { StoryResult } from '../schema/result.ts';
 import type { Story } from '../schema/story.ts';
 import { pathExists } from '../util.ts';
-import { drainSchedule, type ScheduledStory } from './scheduler.ts';
+import { drainSchedule } from './drain.ts';
+import type { ScheduledStory } from './schedule.ts';
 import {
   mergeStoryStatus,
   resolveRunSet,

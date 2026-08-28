@@ -25,12 +25,8 @@ import {
   runStoryWithBrowser,
   type RunStoryOptions,
 } from './runStory.ts';
-import {
-  buildSchedule,
-  collectProducedLabels,
-  drainSchedule,
-  type ScheduledStory,
-} from './scheduler.ts';
+import { collectProducedLabels, drainSchedule } from './drain.ts';
+import { buildSchedule, type ScheduledStory } from './schedule.ts';
 import {
   mergeStoryResults,
   resolveBreakpointPasses,
