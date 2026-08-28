@@ -23,15 +23,6 @@ export interface RunStoryOptions {
   story: Story;
   file: string;
   needs: string[];
-  /**
-   * The needs used to resolve on-disk auth state, distinct from the
-   * scheduler-facing `needs` which a breakpoint pass strips to its in-pass
-   * subset (see {@link adaptNeedsForPass}). Retains the story's ORIGINAL needs
-   * so a consumer whose producer rendered in a different pass still loads that
-   * producer's persisted auth. Otherwise the consumer renders logged-out.
-   * Omitted by direct callers/tests, where it falls back to `needs`.
-   */
-  authNeeds?: string[];
   produces: string[];
   actions: Map<string, Action>;
   config: ResolvedConfig;
@@ -79,17 +70,14 @@ export async function runStoryWithBrowser(
   options: RunStoryOptions,
   startedAt: Date,
 ): Promise<StoryResult> {
-  const { story, file, needs, authNeeds, produces, config, coverage } = options;
+  const { story, file, needs, produces, config, coverage } = options;
   // Resolve the storage state once: it is viewport-independent, so every
-  // breakpoint context loads the same auth payload. Uses `authNeeds` (the
-  // story's ORIGINAL needs) rather than the scheduler-facing `needs`, which a
-  // breakpoint pass strips to its in-pass subset. A consumer whose producer
-  // rendered in a different pass must still load that producer's off-disk auth.
-  // Falls back to `needs` for direct callers/tests that omit `authNeeds`.
-  const storageStatePath = await resolveStorageStateForNeeds(
-    config,
-    authNeeds ?? needs,
-  );
+  // breakpoint context loads the same auth payload. `needs` is always the
+  // story's full label list — a breakpoint pass no longer strips it, because
+  // `drainSchedule` excludes the labels it cannot clear on its own. So a
+  // consumer whose producer rendered in a different pass still finds that
+  // producer's off-disk auth here instead of rendering logged-out.
+  const storageStatePath = await resolveStorageStateForNeeds(config, needs);
   // The run driver hands us a single breakpoint per call so each breakpoint is
   // its own reset/seed pass (the database-isolation guarantee). Direct
   // callers/tests that omit it fall back to the story's full run set, which

@@ -9,17 +9,6 @@ import type { StoryResult } from '../schema/result.ts';
 export interface ScheduledStory extends StoryFile {
   needs: string[];
   produces: string[];
-  /**
-   * The story's ORIGINAL needs, retained for AUTH resolution across a
-   * breakpoint pass even when `needs` (the scheduler-facing set) is stripped to
-   * the in-pass subset by {@link adaptNeedsForPass}. `resolveStorageStateForNeeds`
-   * reads this so a consumer whose producer rendered in a DIFFERENT pass still
-   * loads that producer's on-disk auth state. Otherwise the consumer would
-   * render logged-out. Absent on stories that never went through
-   * `adaptNeedsForPass` (direct callers/tests), where `needs` is already the
-   * full set; the auth path falls back to `needs` then.
-   */
-  authNeeds?: string[];
 }
 
 /**
@@ -111,10 +100,10 @@ export async function drainSchedule(
   const ordered: ScheduledStory[] = [];
 
   // `satisfyProduced` is the sole path that clears an outstanding need, so a
-  // need no scheduled story produces would never clear. The run path already
-  // strips those in `adaptNeedsForPass`; this filter covers direct callers and
-  // tests. The full `item.needs` stays untouched for the auth loader, which
-  // still resolves a seeded file from disk.
+  // need no story in THIS call produces would never clear: a pre-seeded label,
+  // or a producer that renders in a different breakpoint pass. This filter is
+  // the only place such a need is excluded from readiness. `item.needs` itself
+  // stays whole, so the auth loader still resolves those labels from disk.
   const producedLabels = new Set(scheduled.flatMap((item) => item.produces));
 
   // Label → the stories that need it, plus each story's still-outstanding needs.

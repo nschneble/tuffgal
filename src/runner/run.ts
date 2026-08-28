@@ -28,7 +28,6 @@ import {
   type ScheduledStory,
 } from './scheduler.ts';
 import {
-  adaptNeedsForPass,
   mergeStoryResults,
   resolveBreakpointPasses,
   storyRendersAt,
@@ -170,7 +169,7 @@ export async function runAll(
       }
       process.stdout.write('\n');
       const passResults = await drainSchedule(
-        adaptNeedsForPass(participating),
+        participating,
         workerCount,
         (item) =>
           runScheduledStory(
@@ -354,7 +353,6 @@ function runScheduledStory(
       story: item.story,
       file: item.file,
       needs: item.needs,
-      authNeeds: item.authNeeds,
       produces: item.produces,
       actions,
       config,
