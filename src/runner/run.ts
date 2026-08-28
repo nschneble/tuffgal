@@ -24,6 +24,7 @@ import { CoverageCollector } from './coverage.ts';
 import { mergeStoryStatus, runStoryWithBrowser } from './runStory.ts';
 import {
   buildSchedule,
+  collectProducedLabels,
   drainSchedule,
   type ScheduledStory,
 } from './scheduler.ts';
@@ -126,6 +127,11 @@ export async function runAll(
     const actions = await loadActions(config.paths.actions);
     const allStories = await loadStories(config.paths.stories);
     const scheduled = buildSchedule(allStories, config);
+    // Read from the WHOLE schedule, not the filtered subset below: a label is
+    // produced because the project declares a producer for it, so a --story
+    // filter must not reclassify it as pre-seeded and flip which auth file a
+    // surviving consumer loads (see resolveStorageStateForNeeds).
+    const producedLabels = collectProducedLabels(scheduled);
     const subset = options.storyFilter
       ? scheduled.filter((item) => matchesFilter(item, options.storyFilter!))
       : scheduled;
@@ -180,6 +186,7 @@ export async function runAll(
             breakpoint,
             mode,
             browser,
+            producedLabels,
           ),
         () => {},
         (_item, result) =>
@@ -342,6 +349,7 @@ function runScheduledStory(
   breakpoint: ResolvedBreakpoint,
   mode: RunMode,
   browser: Browser,
+  producedLabels: ReadonlySet<string>,
 ): Promise<StoryResult> {
   // Drive the story against the run's SHARED browser rather than launching a
   // per-story Chromium. `startedAt` is stamped here, as this story's work
@@ -354,6 +362,7 @@ function runScheduledStory(
       file: item.file,
       needs: item.needs,
       produces: item.produces,
+      producedLabels,
       actions,
       config,
       coverage,

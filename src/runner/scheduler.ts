@@ -75,6 +75,20 @@ interface RunContext {
 export type StoryRunner = (scheduled: ScheduledStory) => Promise<StoryResult>;
 
 /**
+ * The set of labels the given stories produce. Both callers deliberately pass a
+ * DIFFERENT list: `drainSchedule` passes its own per-call stories, because a
+ * need may only clear on a producer running in THAT pass, while `runAll` passes
+ * the whole schedule, because a producer's `<label>.json` outlives the pass
+ * that wrote it. Same rule, different question; do not collapse them into one
+ * shared value.
+ */
+export function collectProducedLabels(
+  scheduled: ScheduledStory[],
+): Set<string> {
+  return new Set(scheduled.flatMap((item) => item.produces));
+}
+
+/**
  * Drains the dependency graph with up to `workerCount` concurrent runs.
  * Readiness is tracked incrementally: each story carries the set of `needs`
  * labels still outstanding, and completing a producer decrements only the
@@ -104,7 +118,7 @@ export async function drainSchedule(
   // or a producer that renders in a different breakpoint pass. This filter is
   // the only place such a need is excluded from readiness. `item.needs` itself
   // stays whole, so the auth loader still resolves those labels from disk.
-  const producedLabels = new Set(scheduled.flatMap((item) => item.produces));
+  const producedLabels = collectProducedLabels(scheduled);
 
   // Label → the stories that need it, plus each story's still-outstanding needs.
   const consumersByLabel = new Map<string, ScheduledStory[]>();

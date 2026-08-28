@@ -10,6 +10,7 @@ import type { Story } from '../schema/story.ts';
 import type { StoryResult } from '../schema/result.ts';
 import {
   buildSchedule,
+  collectProducedLabels,
   drainSchedule,
   SchedulerError,
   type ScheduledStory,
@@ -144,6 +145,18 @@ describe('buildSchedule: validation', () => {
     const dash = scheduled.find((item) => item.file === 'dash.json');
     assert.ok(dash);
     assert.deepEqual(dash.needs, ['logged-in']);
+  });
+});
+
+describe('collectProducedLabels', () => {
+  it('unions every story produces, collapsing a repeated label', () => {
+    const labels = collectProducedLabels([
+      { produces: ['auth', 'cart'] },
+      { produces: ['cart'] },
+      { produces: [] },
+    ] as unknown as ScheduledStory[]);
+
+    assert.deepEqual([...labels].sort(), ['auth', 'cart']);
   });
 });
 

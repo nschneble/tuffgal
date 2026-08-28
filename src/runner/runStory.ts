@@ -35,6 +35,13 @@ export interface RunStoryOptions {
    */
   breakpoint?: ResolvedBreakpoint;
   /**
+   * Every label the run's schedule produces, which is what lets
+   * {@link resolveStorageStateForNeeds} rank this story's `needs` instead of
+   * trusting their order. Omitted only by direct callers/tests, which then get
+   * the plain first-match-wins walk.
+   */
+  producedLabels?: ReadonlySet<string>;
+  /**
    * Comparison contract for this run (see {@link RunMode}). Threaded down to
    * `runAction`, which uses it to decide whether a missing/changed baseline
    * auto-writes `paths.baselines` (local) or emits a candidate only (CI).
@@ -77,7 +84,11 @@ export async function runStoryWithBrowser(
   // `drainSchedule` excludes the labels it cannot clear on its own. So a
   // consumer whose producer rendered in a different pass still finds that
   // producer's off-disk auth here instead of rendering logged-out.
-  const storageStatePath = await resolveStorageStateForNeeds(config, needs);
+  const storageStatePath = await resolveStorageStateForNeeds(
+    config,
+    needs,
+    options.producedLabels,
+  );
   // The run driver hands us a single breakpoint per call so each breakpoint is
   // its own reset/seed pass (the database-isolation guarantee). Direct
   // callers/tests that omit it fall back to the story's full run set, which
@@ -349,11 +360,31 @@ async function stopTracing(
   return tracePath;
 }
 
+/**
+ * Picks the storage state this story loads: the first `needs` label with a file
+ * at `<authState>/<label>.json`, but walking every PRODUCED label before any
+ * pre-seeded-only one, whatever order `needs` lists them in. Order cannot decide
+ * this, because the two kinds of label do not offer the same guarantee. A
+ * pre-seeded label's file is guaranteed present — `buildSchedule` admits the
+ * label only because the file exists — while a produced label's file appears
+ * only once its producer has actually run and persisted one. Walking `needs`
+ * raw therefore lets a pre-seeded label listed first shadow the producer's real
+ * auth, and the story renders under the wrong identity with nothing to show for
+ * it: no error, no failed action, just a screenshot of the wrong session. The
+ * author cannot always reorder their way out either, since `normalisedNeeds`
+ * appends the `storageState: 'logged-in'` shorthand to the END of the list.
+ * Within a tier the first match still wins, so two produced (or two pre-seeded)
+ * labels keep resolving in `needs` order.
+ */
 async function resolveStorageStateForNeeds(
   config: ResolvedConfig,
   needs: string[],
+  producedLabels: ReadonlySet<string> = new Set(),
 ): Promise<string | undefined> {
-  for (const label of needs) {
+  const produced = needs.filter((label) => producedLabels.has(label));
+  const preSeeded = needs.filter((label) => !producedLabels.has(label));
+
+  for (const label of [...produced, ...preSeeded]) {
     const path = join(config.paths.authState, `${label}.json`);
     try {
       await access(path);

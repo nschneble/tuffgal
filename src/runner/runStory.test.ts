@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -575,6 +575,102 @@ describe('runStoryWithBrowser: auth crosses breakpoint passes', () => {
       assert.deepEqual(storageStates, [authFile]);
     },
   );
+});
+
+describe('runStoryWithBrowser: produced auth outranks pre-seeded auth', () => {
+  const ONLY: ResolvedBreakpoint = {
+    name: 'desktop',
+    width: 1280,
+    height: 800,
+  };
+
+  /**
+   * Writes a storage-state file per label, as both a hand-seeded project and a
+   * producer that already ran leave behind. Both kinds exist on disk here, so
+   * the only thing left to decide which one loads is the ranking.
+   */
+  async function seedAuthFiles(
+    config: ResolvedConfig,
+    labels: string[],
+  ): Promise<void> {
+    await mkdir(config.paths.authState, { recursive: true });
+    for (const label of labels) {
+      await writeFile(
+        join(config.paths.authState, `${label}.json`),
+        JSON.stringify({ cookies: [], origins: [] }),
+      );
+    }
+  }
+
+  async function resolvedStorageState(
+    config: ResolvedConfig,
+    needs: string[],
+    producedLabels: Set<string>,
+  ): Promise<string | undefined> {
+    const only = fakeContext(fakePage({ screenshot: solidPng(1, 2, 3) }));
+    const { browser, storageStates } = capturingBrowser(only.context);
+    await runStoryWithBrowser(
+      browser,
+      makeOptions(config, { needs, producedLabels, breakpoint: ONLY }),
+      new Date(),
+    );
+    assert.equal(storageStates.length, 1);
+    return storageStates[0];
+  }
+
+  it('loads the produced label even when a pre-seeded one is listed first', async () => {
+    const config = await makeConfig();
+    await seedAuthFiles(config, ['seeded', 'auth']);
+
+    const resolved = await resolvedStorageState(
+      config,
+      ['seeded', 'auth'],
+      new Set(['auth']),
+    );
+
+    // Array order says `seeded`; the ranking says `auth`, and it wins.
+    assert.equal(resolved, join(config.paths.authState, 'auth.json'));
+  });
+
+  it('is unchanged for a story needing only a produced label', async () => {
+    const config = await makeConfig();
+    await seedAuthFiles(config, ['seeded', 'auth']);
+
+    const resolved = await resolvedStorageState(
+      config,
+      ['auth'],
+      new Set(['auth']),
+    );
+
+    assert.equal(resolved, join(config.paths.authState, 'auth.json'));
+  });
+
+  it('is unchanged for a story needing only a pre-seeded label', async () => {
+    const config = await makeConfig();
+    await seedAuthFiles(config, ['seeded', 'auth']);
+
+    const resolved = await resolvedStorageState(
+      config,
+      ['seeded'],
+      new Set(['auth']),
+    );
+
+    assert.equal(resolved, join(config.paths.authState, 'seeded.json'));
+  });
+
+  it('keeps needs order between two produced labels', async () => {
+    const config = await makeConfig();
+    await seedAuthFiles(config, ['auth', 'other']);
+
+    const resolved = await resolvedStorageState(
+      config,
+      ['other', 'auth'],
+      new Set(['auth', 'other']),
+    );
+
+    // Same tier, so nothing reranks them: the first listed still wins.
+    assert.equal(resolved, join(config.paths.authState, 'other.json'));
+  });
 });
 
 describe('runStoryWithBrowser: colorScheme threads into the context', () => {
