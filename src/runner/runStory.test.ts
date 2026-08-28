@@ -6,10 +6,16 @@ import { describe, it } from 'node:test';
 import { PNG } from 'pngjs';
 import type { Browser, BrowserContext, Page } from 'playwright';
 
-import type { ColorScheme, ResolvedConfig } from '../config.ts';
+import type {
+  ColorScheme,
+  ResolvedBreakpoint,
+  ResolvedConfig,
+} from '../config.ts';
 import type { Action } from '../schema/action.ts';
+import type { StoryResult } from '../schema/result.ts';
 import type { Story } from '../schema/story.ts';
 import { pathExists } from '../util.ts';
+import { drainSchedule, type ScheduledStory } from './scheduler.ts';
 import {
   mergeStoryStatus,
   resolveRunSet,
@@ -223,7 +229,9 @@ interface ContextRecord {
 /**
  * Fake `BrowserContext` over a single fake page. Records the lifecycle calls
  * the assertions inspect: context close (no-leak), `storageState` writes
- * (`produces`), and tracing-stop paths (trace-zip uniqueness).
+ * (`produces`), and tracing-stop paths (trace-zip uniqueness). `storageState`
+ * also WRITES the file it is handed, as the real one does, so a producer leaves
+ * auth on disk for a later breakpoint pass to resolve.
  */
 function fakeContext(page: Page): {
   context: BrowserContext;
@@ -247,6 +255,7 @@ function fakeContext(page: Page): {
     },
     async storageState(opts: { path: string }): Promise<unknown> {
       record.storageStatePaths.push(opts.path);
+      await writeFile(opts.path, JSON.stringify({ cookies: [], origins: [] }));
       return {};
     },
     async close(): Promise<void> {
@@ -278,8 +287,8 @@ function fakeBrowser(contexts: BrowserContext[]): Browser {
 /**
  * Fake `Browser` that hands out a single pre-built context and CAPTURES the
  * options every `newContext` call receives. Those captured values are what
- * prove which on-disk auth file `runStoryWithBrowser` resolved and loaded
- * (the authNeeds-vs-needs wiring), and which colour scheme it forwarded.
+ * prove which on-disk auth file `runStoryWithBrowser` resolved from `needs`,
+ * and which colour scheme it forwarded.
  */
 function capturingBrowser(context: BrowserContext): {
   browser: Browser;
@@ -476,64 +485,191 @@ describe('runStoryWithBrowser: per-breakpoint loop', () => {
   });
 });
 
-describe('runStoryWithBrowser: auth state resolves from authNeeds, not needs', () => {
-  it('loads the auth file resolved from authNeeds even when the scheduler-facing needs is stripped empty', async () => {
-    const config = await makeConfig();
-    // Persist an auth payload for the `auth` label on disk.
-    // resolveStorageStateForNeeds only returns a path that EXISTS, so this file
-    // is what a correctly-wired run must resolve and hand to newContext.
+describe('runStoryWithBrowser: auth crosses breakpoint passes', () => {
+  const DESKTOP: ResolvedBreakpoint = {
+    name: 'desktop',
+    width: 1280,
+    height: 800,
+  };
+  const MOBILE: ResolvedBreakpoint = {
+    name: 'mobile',
+    width: 375,
+    height: 667,
+  };
+
+  function scheduled(
+    file: string,
+    needs: string[],
+    produces: string[],
+  ): ScheduledStory {
+    return {
+      file,
+      story: { story: file },
+      needs,
+      produces,
+    } as unknown as ScheduledStory;
+  }
+
+  function runPass(
+    config: ResolvedConfig,
+    browser: Browser,
+    item: ScheduledStory,
+    breakpoint: ResolvedBreakpoint,
+  ): Promise<StoryResult[]> {
+    return drainSchedule(
+      [item],
+      1,
+      (story) =>
+        runStoryWithBrowser(
+          browser,
+          makeOptions(config, {
+            file: story.file,
+            needs: story.needs,
+            produces: story.produces,
+            breakpoint,
+          }),
+          new Date(),
+        ),
+      () => {},
+      () => {},
+    );
+  }
+
+  // A consumer whose producer renders in a DIFFERENT pass must still load that
+  // producer's on-disk auth, and must not stall waiting for a producer that
+  // never runs in its pass. `needs` is now the single channel carrying both
+  // duties, so one test covers both: the timeout catches the stall, the
+  // resolved storage-state path catches the logged-out regression.
+  it(
+    'loads the auth its producer persisted in an earlier pass',
+    { timeout: 5_000 },
+    async () => {
+      const config = await makeConfig();
+      const authFile = join(config.paths.authState, 'auth.json');
+
+      // Pass 1, desktop: only the producer participates, and it writes
+      // <authState>/auth.json.
+      const login = fakeContext(fakePage({ screenshot: solidPng(1, 2, 3) }));
+      await runPass(
+        config,
+        fakeBrowser([login.context]),
+        scheduled('login.json', [], ['auth']),
+        DESKTOP,
+      );
+      assert.deepEqual(login.record.storageStatePaths, [authFile]);
+
+      // Pass 2, mobile: the producer does not participate, and the consumer
+      // carries its FULL needs; nothing strips them to the in-pass subset.
+      const profile = fakeContext(fakePage({ screenshot: solidPng(1, 2, 3) }));
+      const { browser, storageStates } = capturingBrowser(profile.context);
+      const results = await runPass(
+        config,
+        browser,
+        scheduled('profile.json', ['auth'], []),
+        MOBILE,
+      );
+
+      // The drain returned rather than waiting forever on the absent producer…
+      assert.equal(results.length, 1);
+      // …and the consumer's context was built from the file pass 1 wrote.
+      assert.deepEqual(storageStates, [authFile]);
+    },
+  );
+});
+
+describe('runStoryWithBrowser: produced auth outranks pre-seeded auth', () => {
+  const ONLY: ResolvedBreakpoint = {
+    name: 'desktop',
+    width: 1280,
+    height: 800,
+  };
+
+  /**
+   * Writes a storage-state file per label, as both a hand-seeded project and a
+   * producer that already ran leave behind. Both kinds exist on disk here, so
+   * the only thing left to decide which one loads is the ranking.
+   */
+  async function seedAuthFiles(
+    config: ResolvedConfig,
+    labels: string[],
+  ): Promise<void> {
     await mkdir(config.paths.authState, { recursive: true });
-    const authFile = join(config.paths.authState, 'auth.json');
-    await writeFile(authFile, '{}');
+    for (const label of labels) {
+      await writeFile(
+        join(config.paths.authState, `${label}.json`),
+        JSON.stringify({ cookies: [], origins: [] }),
+      );
+    }
+  }
 
-    const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
+  async function resolvedStorageState(
+    config: ResolvedConfig,
+    needs: string[],
+    producedAnywhere: Set<string>,
+  ): Promise<string | undefined> {
+    const only = fakeContext(fakePage({ screenshot: solidPng(1, 2, 3) }));
     const { browser, storageStates } = capturingBrowser(only.context);
-
     await runStoryWithBrowser(
       browser,
-      makeOptions(config, {
-        // A breakpoint pass strips the scheduler-facing needs to its in-pass
-        // subset; here, empty…
-        needs: [],
-        // …but the story's ORIGINAL needs still name `auth`. The wiring must
-        // resolve storage state from authNeeds; regress it to `needs` and the
-        // consumer renders logged-out (the exact bug this test guards).
-        authNeeds: ['auth'],
-        breakpoint: { name: 'desktop', width: 1280, height: 800 },
-      }),
+      makeOptions(config, { needs, producedAnywhere, breakpoint: ONLY }),
       new Date(),
     );
-
-    // The context was created with the auth file resolved from authNeeds. Had
-    // the code read the stripped `needs`, this would be undefined (no label to
-    // resolve), so the exact path is what proves authNeeds is the source.
     assert.equal(storageStates.length, 1);
-    assert.equal(storageStates[0], authFile);
+    return storageStates[0];
+  }
+
+  it('loads the produced label even when a pre-seeded one is listed first', async () => {
+    const config = await makeConfig();
+    await seedAuthFiles(config, ['seeded', 'auth']);
+
+    const resolved = await resolvedStorageState(
+      config,
+      ['seeded', 'auth'],
+      new Set(['auth']),
+    );
+
+    // Array order says `seeded`; the ranking says `auth`, and it wins.
+    assert.equal(resolved, join(config.paths.authState, 'auth.json'));
   });
 
-  it('falls back to needs when authNeeds is omitted (direct-caller path)', async () => {
-    // The `authNeeds ?? needs` fallback: a direct caller/test that never sets
-    // authNeeds must still load the auth file named by `needs`. Locks the other
-    // half of the wiring so a future edit cannot drop the fallback.
+  it('is unchanged for a story needing only a produced label', async () => {
     const config = await makeConfig();
-    await mkdir(config.paths.authState, { recursive: true });
-    const authFile = join(config.paths.authState, 'auth.json');
-    await writeFile(authFile, '{}');
+    await seedAuthFiles(config, ['seeded', 'auth']);
 
-    const only = fakeContext(fakePage({ screenshot: solidPng(10, 20, 30) }));
-    const { browser, storageStates } = capturingBrowser(only.context);
-
-    await runStoryWithBrowser(
-      browser,
-      makeOptions(config, {
-        needs: ['auth'],
-        // authNeeds intentionally omitted.
-        breakpoint: { name: 'desktop', width: 1280, height: 800 },
-      }),
-      new Date(),
+    const resolved = await resolvedStorageState(
+      config,
+      ['auth'],
+      new Set(['auth']),
     );
 
-    assert.equal(storageStates[0], authFile);
+    assert.equal(resolved, join(config.paths.authState, 'auth.json'));
+  });
+
+  it('is unchanged for a story needing only a pre-seeded label', async () => {
+    const config = await makeConfig();
+    await seedAuthFiles(config, ['seeded', 'auth']);
+
+    const resolved = await resolvedStorageState(
+      config,
+      ['seeded'],
+      new Set(['auth']),
+    );
+
+    assert.equal(resolved, join(config.paths.authState, 'seeded.json'));
+  });
+
+  it('keeps needs order between two produced labels', async () => {
+    const config = await makeConfig();
+    await seedAuthFiles(config, ['auth', 'other']);
+
+    const resolved = await resolvedStorageState(
+      config,
+      ['other', 'auth'],
+      new Set(['auth', 'other']),
+    );
+
+    // Same tier, so nothing reranks them: the first listed still wins.
+    assert.equal(resolved, join(config.paths.authState, 'other.json'));
   });
 });
 

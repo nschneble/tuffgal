@@ -8,6 +8,13 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.2.1-alpha.1] – 2026-08-27
+
+### Fixed
+
+- A `needs` label that no story `produces` fails the run when declared in
+  `seededLabels` and `<paths.authState>/<label>.json` is on disk
+
 ## [0.2.0-alpha.8] – 2026-08-20
 
 ### Added
@@ -342,7 +349,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.8...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.1-alpha.1...HEAD
+[0.2.1-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.1-alpha.1
 [0.2.0-alpha.8]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.8
 [0.2.0-alpha.7]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.7
 [0.2.0-alpha.6]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.6

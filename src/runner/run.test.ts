@@ -353,7 +353,11 @@ function fakePage(screenshot: Buffer): Page {
   } as unknown as Page;
 }
 
-/** A `BrowserContext` over a single fake page; the per-story isolation unit. */
+/**
+ * A `BrowserContext` over a single fake page; the per-story isolation unit.
+ * `storageState` writes the file it is handed, as the real one does, so a
+ * producer story leaves auth on disk for its consumer to resolve.
+ */
 function fakeContext(page: Page): BrowserContext {
   return {
     setDefaultTimeout(): void {},
@@ -364,7 +368,13 @@ function fakeContext(page: Page): BrowserContext {
     async newPage(): Promise<Page> {
       return page;
     },
-    async storageState(): Promise<unknown> {
+    async storageState(opts?: { path?: string }): Promise<unknown> {
+      if (opts?.path) {
+        await writeFile(
+          opts.path,
+          JSON.stringify({ cookies: [], origins: [] }),
+        );
+      }
       return {};
     },
     async close(): Promise<void> {},
@@ -467,6 +477,179 @@ describe('runAll: shared browser lifecycle', () => {
       sigtermBefore,
       'SIGTERM listener must be removed after runAll',
     );
+  });
+});
+
+describe('runAll: a consumer prefers its producer auth over a pre-seeded file', () => {
+  // The only place the produced-before-pre-seeded ranking is exercised end to
+  // end. runStory.test.ts proves the resolver ranks correctly when it is handed
+  // the produced set; this proves runAll actually hands it over.
+  it('loads the producer file even though the pre-seeded label is listed first', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tuffgal-runall-auth-'));
+    const actionsDir = join(root, 'actions');
+    const storiesDir = join(root, 'stories');
+    const authStateDir = join(root, 'auth');
+    await mkdir(actionsDir, { recursive: true });
+    await mkdir(storiesDir, { recursive: true });
+    await mkdir(authStateDir, { recursive: true });
+    await writeFile(
+      join(actionsDir, 'open.json'),
+      JSON.stringify({ action: 'open', steps: [{ kind: 'wait', ms: 0 }] }),
+    );
+    await writeFile(
+      join(storiesDir, 'login.json'),
+      JSON.stringify({
+        story: 'login',
+        produces: ['auth'],
+        actions: [{ action: 'open' }],
+      }),
+    );
+    await writeFile(
+      join(storiesDir, 'profile.json'),
+      JSON.stringify({
+        story: 'profile',
+        needs: ['seeded', 'auth'],
+        actions: [{ action: 'open' }],
+      }),
+    );
+    // The pre-seeded file is on disk before the run and `seededLabels` below
+    // declares it, which together are why buildSchedule accepts a `seeded`
+    // label no story produces.
+    const seededFile = join(authStateDir, 'seeded.json');
+    await writeFile(seededFile, JSON.stringify({ cookies: [], origins: [] }));
+
+    const config = {
+      baseUrl: 'http://localhost:3000',
+      defaultTimeoutMs: 1000,
+      frozenTime: '2026-01-15T12:00:00.000Z',
+      captureMode: 'viewport',
+      interactiveMode: false,
+      seededLabels: ['seeded'],
+      breakpoints: [{ name: 'desktop', width: 1280, height: 800 }],
+      paths: {
+        actions: actionsDir,
+        stories: storiesDir,
+        baselines: join(root, 'baselines'),
+        localCache: join(root, 'cache'),
+        report: join(root, 'report'),
+        authState: authStateDir,
+      },
+    } as unknown as ResolvedConfig;
+
+    const storageStates: Array<string | undefined> = [];
+    const browser = {
+      async newContext(options: {
+        storageState?: string;
+      }): Promise<BrowserContext> {
+        storageStates.push(options.storageState);
+        return fakeContext(fakePage(solidPng(9, 9, 9)));
+      },
+      version(): string {
+        return '131.0.0.0';
+      },
+      async close(): Promise<void> {},
+    } as unknown as Browser;
+
+    await runAll(config, { headed: false, mode: 'local' }, async () => browser);
+
+    // The producer runs first with no auth of its own, then the consumer, whose
+    // `needs` lists `seeded` ahead of `auth`, loads what the producer wrote.
+    assert.deepEqual(storageStates, [
+      undefined,
+      join(authStateDir, 'auth.json'),
+    ]);
+  });
+});
+
+describe('runAll: a --story filter does not reclassify a produced label', () => {
+  // `collectProducedLabels` reads the WHOLE schedule, not the filtered subset,
+  // so filtering a producer out of the run cannot demote its label to
+  // pre-seeded. Nothing else pins that: moving the collect below the filter
+  // leaves the rest of the suite green.
+  it('loads the filtered-out producer file, not the pre-seeded one', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tuffgal-runall-filter-'));
+    const actionsDir = join(root, 'actions');
+    const storiesDir = join(root, 'stories');
+    const authStateDir = join(root, 'auth');
+    await mkdir(actionsDir, { recursive: true });
+    await mkdir(storiesDir, { recursive: true });
+    await mkdir(authStateDir, { recursive: true });
+    await writeFile(
+      join(actionsDir, 'open.json'),
+      JSON.stringify({ action: 'open', steps: [{ kind: 'wait', ms: 0 }] }),
+    );
+    await writeFile(
+      join(storiesDir, 'login.json'),
+      JSON.stringify({
+        story: 'login',
+        produces: ['auth'],
+        actions: [{ action: 'open' }],
+      }),
+    );
+    await writeFile(
+      join(storiesDir, 'profile.json'),
+      JSON.stringify({
+        story: 'profile',
+        needs: ['seeded', 'auth'],
+        actions: [{ action: 'open' }],
+      }),
+    );
+    // Both files are on disk before the run: `seeded.json` because the project
+    // seeds it, `auth.json` as residue a previous unfiltered run left behind.
+    // So the only thing left to decide which one loads is whether `auth` is
+    // still ranked as a produced label with its producer filtered out.
+    await writeFile(
+      join(authStateDir, 'seeded.json'),
+      JSON.stringify({ cookies: [], origins: [] }),
+    );
+    await writeFile(
+      join(authStateDir, 'auth.json'),
+      JSON.stringify({ cookies: [], origins: [] }),
+    );
+
+    const config = {
+      baseUrl: 'http://localhost:3000',
+      defaultTimeoutMs: 1000,
+      frozenTime: '2026-01-15T12:00:00.000Z',
+      captureMode: 'viewport',
+      interactiveMode: false,
+      seededLabels: ['seeded'],
+      breakpoints: [{ name: 'desktop', width: 1280, height: 800 }],
+      paths: {
+        actions: actionsDir,
+        stories: storiesDir,
+        baselines: join(root, 'baselines'),
+        localCache: join(root, 'cache'),
+        report: join(root, 'report'),
+        authState: authStateDir,
+      },
+    } as unknown as ResolvedConfig;
+
+    const storageStates: Array<string | undefined> = [];
+    const browser = {
+      async newContext(options: {
+        storageState?: string;
+      }): Promise<BrowserContext> {
+        storageStates.push(options.storageState);
+        return fakeContext(fakePage(solidPng(9, 9, 9)));
+      },
+      version(): string {
+        return '131.0.0.0';
+      },
+      async close(): Promise<void> {},
+    } as unknown as Browser;
+
+    const result = await runAll(
+      config,
+      { headed: false, mode: 'local', storyFilter: 'profile' },
+      async () => browser,
+    );
+
+    // The producer never ran, so only the consumer opened a context.
+    assert.equal(result.totals.stories, 1);
+    // `needs` lists `seeded` first and both files exist, so a filter that
+    // demoted `auth` to pre-seeded would load `seeded.json` here.
+    assert.deepEqual(storageStates, [join(authStateDir, 'auth.json')]);
   });
 });
 

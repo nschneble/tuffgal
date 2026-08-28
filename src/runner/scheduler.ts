@@ -1,3 +1,7 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+import type { ResolvedConfig } from '../config.ts';
 import { normalisedNeeds } from '../schema/story.ts';
 import type { StoryFile } from '../schema/load.ts';
 import type { StoryResult } from '../schema/result.ts';
@@ -5,31 +9,23 @@ import type { StoryResult } from '../schema/result.ts';
 export interface ScheduledStory extends StoryFile {
   needs: string[];
   produces: string[];
-  /**
-   * The story's ORIGINAL needs, retained for AUTH resolution across a
-   * breakpoint pass even when `needs` (the scheduler-facing set) is stripped to
-   * the in-pass subset by {@link adaptNeedsForPass}. `resolveStorageStateForNeeds`
-   * reads this so a consumer whose producer rendered in a DIFFERENT pass still
-   * loads that producer's on-disk auth state. Otherwise the consumer would
-   * render logged-out. Absent on stories that never went through
-   * `adaptNeedsForPass` (direct callers/tests), where `needs` is already the
-   * full set; the auth path falls back to `needs` then.
-   */
-  authNeeds?: string[];
-}
-
-export interface ScheduleSummary {
-  ready: ScheduledStory[];
-  blocked: ScheduledStory[];
 }
 
 /**
  * Validates that every produced label is emitted by at most one story and
- * that every `needs` label has a matching producer. Throws a descriptive
- * error on any mismatch so a typo in a JSON file fails loudly at load time,
- * not at run time.
+ * that every `needs` label is satisfiable: either a scheduled story
+ * `produces` it, or the project declared it in `config.seededLabels` AND
+ * `<paths.authState>/<label>.json` exists for `resolveStorageStateForNeeds` to
+ * load. Both halves are required, because neither alone separates a deliberate
+ * seed from residue: a bare file can be what a renamed or deleted producer left
+ * behind, and a bare declaration can name a file nobody ever wrote. Throws a
+ * descriptive error on any mismatch so a typo in a JSON file fails loudly at
+ * load time, not at run time.
  */
-export function buildSchedule(stories: StoryFile[]): ScheduledStory[] {
+export function buildSchedule(
+  stories: StoryFile[],
+  config: ResolvedConfig,
+): ScheduledStory[] {
   const scheduled: ScheduledStory[] = stories.map((entry) => ({
     ...entry,
     needs: normalisedNeeds(entry.story),
@@ -49,11 +45,29 @@ export function buildSchedule(stories: StoryFile[]): ScheduledStory[] {
     }
   }
 
+  const declaredSeeds = new Set(config.seededLabels);
   for (const item of scheduled) {
     for (const label of item.needs) {
-      if (!producerByLabel.has(label)) {
+      if (producerByLabel.has(label)) {
+        continue;
+      }
+      // A declared pre-seeded storage state stands in for a producer: the run
+      // reads <authState>/<label>.json instead of rendering the story that
+      // would have written it. An undeclared label is indistinguishable from a
+      // typo, whether or not some file happens to sit at that path.
+      const seedPath = join(config.paths.authState, `${label}.json`);
+      if (!declaredSeeds.has(label)) {
         throw new SchedulerError(
-          `${item.file} needs label "${label}" but no story produces it.`,
+          `${item.file} needs label "${label}" but no story produces it and ` +
+            `it is not listed in \`seededLabels\`. Add a story that produces ` +
+            `it, or declare the label and seed ${seedPath}.`,
+        );
+      }
+      if (!existsSync(seedPath)) {
+        throw new SchedulerError(
+          `${item.file} needs label "${label}", declared in \`seededLabels\`, ` +
+            `but no storage state exists at ${seedPath}. Seed it before ` +
+            `\`tuffgal run\`.`,
         );
       }
     }
@@ -71,6 +85,13 @@ interface RunContext {
 }
 
 export type StoryRunner = (scheduled: ScheduledStory) => Promise<StoryResult>;
+
+/** The labels the given stories produce, scoped to the list passed in. */
+export function collectProducedLabels(
+  scheduled: ScheduledStory[],
+): Set<string> {
+  return new Set(scheduled.flatMap((item) => item.produces));
+}
 
 /**
  * Drains the dependency graph with up to `workerCount` concurrent runs.
@@ -97,12 +118,20 @@ export async function drainSchedule(
   };
   const ordered: ScheduledStory[] = [];
 
+  // `satisfyProduced` is the sole path that clears an outstanding need, so a
+  // need no story in THIS call produces would never clear: a pre-seeded label,
+  // or a producer that renders in a different breakpoint pass. This filter is
+  // the only place such a need is excluded from readiness. `item.needs` itself
+  // stays whole, so the auth loader still resolves those labels from disk.
+  const producedThisPass = collectProducedLabels(scheduled);
+
   // Label → the stories that need it, plus each story's still-outstanding needs.
   const consumersByLabel = new Map<string, ScheduledStory[]>();
   const outstandingNeeds = new Map<string, Set<string>>();
   for (const item of scheduled) {
-    outstandingNeeds.set(item.file, new Set(item.needs));
-    for (const label of item.needs) {
+    const blocking = item.needs.filter((label) => producedThisPass.has(label));
+    outstandingNeeds.set(item.file, new Set(blocking));
+    for (const label of blocking) {
       const consumers = consumersByLabel.get(label) ?? [];
       consumers.push(item);
       consumersByLabel.set(label, consumers);
@@ -110,9 +139,10 @@ export async function drainSchedule(
   }
 
   // Stories with no prerequisites are ready immediately. Later stories are
-  // pushed here as their last outstanding need clears.
+  // pushed here as their last outstanding need clears. Read from the same map
+  // the clearing path decrements, so the two cannot drift.
   const ready: ScheduledStory[] = scheduled.filter(
-    (item) => item.needs.length === 0,
+    (item) => outstandingNeeds.get(item.file)?.size === 0,
   );
 
   const allDone = (): boolean => context.results.size === scheduled.length;

@@ -23,15 +23,6 @@ export interface RunStoryOptions {
   story: Story;
   file: string;
   needs: string[];
-  /**
-   * The needs used to resolve on-disk auth state, distinct from the
-   * scheduler-facing `needs` which a breakpoint pass strips to its in-pass
-   * subset (see {@link adaptNeedsForPass}). Retains the story's ORIGINAL needs
-   * so a consumer whose producer rendered in a different pass still loads that
-   * producer's persisted auth. Otherwise the consumer renders logged-out.
-   * Omitted by direct callers/tests, where it falls back to `needs`.
-   */
-  authNeeds?: string[];
   produces: string[];
   actions: Map<string, Action>;
   config: ResolvedConfig;
@@ -43,6 +34,13 @@ export interface RunStoryOptions {
    * back to the story's full resolved run set.
    */
   breakpoint?: ResolvedBreakpoint;
+  /**
+   * Every label the run's schedule produces, which is what lets
+   * {@link resolveStorageStateForNeeds} rank this story's `needs` instead of
+   * trusting their order. Omitted only by direct callers/tests, which then get
+   * the plain first-match-wins walk.
+   */
+  producedAnywhere?: ReadonlySet<string>;
   /**
    * Comparison contract for this run (see {@link RunMode}). Threaded down to
    * `runAction`, which uses it to decide whether a missing/changed baseline
@@ -79,16 +77,17 @@ export async function runStoryWithBrowser(
   options: RunStoryOptions,
   startedAt: Date,
 ): Promise<StoryResult> {
-  const { story, file, needs, authNeeds, produces, config, coverage } = options;
+  const { story, file, needs, produces, config, coverage } = options;
   // Resolve the storage state once: it is viewport-independent, so every
-  // breakpoint context loads the same auth payload. Uses `authNeeds` (the
-  // story's ORIGINAL needs) rather than the scheduler-facing `needs`, which a
-  // breakpoint pass strips to its in-pass subset. A consumer whose producer
-  // rendered in a different pass must still load that producer's off-disk auth.
-  // Falls back to `needs` for direct callers/tests that omit `authNeeds`.
+  // breakpoint context loads the same auth payload. `needs` is always the
+  // story's full label list. A breakpoint pass no longer strips it, because
+  // `drainSchedule` excludes the labels it cannot clear on its own. So a
+  // consumer whose producer rendered in a different pass still finds that
+  // producer's off-disk auth here instead of rendering logged-out.
   const storageStatePath = await resolveStorageStateForNeeds(
     config,
-    authNeeds ?? needs,
+    needs,
+    options.producedAnywhere,
   );
   // The run driver hands us a single breakpoint per call so each breakpoint is
   // its own reset/seed pass (the database-isolation guarantee). Direct
@@ -361,11 +360,31 @@ async function stopTracing(
   return tracePath;
 }
 
+/**
+ * Picks the storage state this story loads: the first `needs` label with a file
+ * at `<authState>/<label>.json`, but walking every PRODUCED label before any
+ * pre-seeded-only one, whatever order `needs` lists them in. Order cannot decide
+ * this, because the two kinds of label do not offer the same guarantee. A
+ * pre-seeded label's file is guaranteed present (`buildSchedule` admits the
+ * label only when `seededLabels` declares it AND the file already exists),
+ * while a produced label's file appears only once its producer has actually run
+ * and persisted one. Walking `needs` raw therefore lets a pre-seeded label
+ * listed first shadow the producer's real auth, and the story renders under the
+ * wrong identity with nothing to show for it: no error, no failed action, just
+ * a screenshot of the wrong session. The author cannot always reorder their way
+ * out either, since `normalisedNeeds` appends the `storageState: 'logged-in'`
+ * shorthand to the END of the list. Within a tier the first match still wins,
+ * so two produced (or two pre-seeded) labels keep resolving in `needs` order.
+ */
 async function resolveStorageStateForNeeds(
   config: ResolvedConfig,
   needs: string[],
+  producedAnywhere: ReadonlySet<string> = new Set(),
 ): Promise<string | undefined> {
-  for (const label of needs) {
+  const produced = needs.filter((label) => producedAnywhere.has(label));
+  const preSeeded = needs.filter((label) => !producedAnywhere.has(label));
+
+  for (const label of [...produced, ...preSeeded]) {
     const path = join(config.paths.authState, `${label}.json`);
     try {
       await access(path);

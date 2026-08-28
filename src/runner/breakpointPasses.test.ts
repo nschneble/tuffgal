@@ -5,7 +5,6 @@ import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
 import type { StoryResult } from '../schema/result.ts';
 import type { ScheduledStory } from './scheduler.ts';
 import {
-  adaptNeedsForPass,
   mergeStoryResults,
   resolveBreakpointPasses,
   storyRendersAt,
@@ -127,55 +126,6 @@ describe('storyRendersAt', () => {
       storyRendersAt(item, config([DESKTOP, MOBILE]), DESKTOP),
       false,
     );
-  });
-});
-
-describe('adaptNeedsForPass', () => {
-  it('keeps scheduler needs whose producer also runs this pass', () => {
-    const producer = scheduled('auth.json', { produces: ['session'] });
-    const consumer = scheduled('home.json', { needs: ['session'] });
-    const adapted = adaptNeedsForPass([producer, consumer]);
-    // Same-breakpoint scheduling still holds the need so the drain waits on the
-    // producer (no deadlock introduced by the split)...
-    assert.deepEqual(adapted[1]!.needs, ['session']);
-    // ...and the auth-loading set carries the same label so on-disk auth loads.
-    assert.deepEqual(adapted[1]!.authNeeds, ['session']);
-  });
-
-  it('drops a scheduler need whose producer is absent but RETAINS it for auth', () => {
-    // Only the consumer participates; its producer renders at another
-    // breakpoint and persisted auth state in that pass. Keeping the scheduler
-    // need would deadlock the drain, so `needs` is stripped; but `authNeeds`
-    // must retain the label so `resolveStorageStateForNeeds` still loads the
-    // producer's off-disk auth. Stripping both is the bug that renders the
-    // consumer logged-out.
-    const consumer = scheduled('home.json', { needs: ['session'] });
-    const adapted = adaptNeedsForPass([consumer]);
-    assert.deepEqual(adapted[0]!.needs, []);
-    assert.deepEqual(adapted[0]!.authNeeds, ['session']);
-  });
-
-  it('cross-breakpoint consumer keeps auth need while scheduler need is stripped', () => {
-    // The load-bearing invariant. Project default renders `login` (produces
-    // `auth`) at `desktop`; a mobile-only story overrides breakpoints:['mobile']
-    // and needs:['auth']. In the `mobile` pass only the consumer participates.
-    const consumer = scheduled('profile.json', {
-      breakpoints: ['mobile'],
-      needs: ['auth'],
-    });
-    const mobilePass = adaptNeedsForPass([consumer]);
-    // Scheduler-facing: stripped, so the mobile pass does not deadlock waiting
-    // on a producer that renders only in the desktop pass.
-    assert.deepEqual(mobilePass[0]!.needs, []);
-    // Auth-facing: retained, so `resolveStorageStateForNeeds` reads
-    // <authState>/auth.json that the desktop-pass producer already persisted.
-    assert.deepEqual(mobilePass[0]!.authNeeds, ['auth']);
-  });
-
-  it('leaves produces untouched', () => {
-    const producer = scheduled('auth.json', { produces: ['session'] });
-    const adapted = adaptNeedsForPass([producer]);
-    assert.deepEqual(adapted[0]!.produces, ['session']);
   });
 });
 

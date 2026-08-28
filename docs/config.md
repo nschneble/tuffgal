@@ -51,6 +51,10 @@ export default defineConfig({
   // localStorage keys to persist across stories
   storageStatePins: ['auth.jwt', 'prefs.theme'],
 
+  // labels you seed yourself into `paths.authState` before the run
+  // a `needs` label no story `produces` must be listed here AND on disk
+  seededLabels: ['logged-in'],
+
   // viewport modes to run from the built-in registry
   // each renders in its own context + produces its own baseline
   // bare name uses registry dimensions, object overrides width/height
@@ -130,14 +134,14 @@ All file-path fields are resolved relative to the directory containing
 Where Tuffgal reads + writes content. All paths are relative to the config
 file's location.
 
-| Field        | Type      | Default          | Meaning                                                                                                                     |
-| ------------ | --------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `actions`    | `string`  | _required_       | Directory of action JSON files. Recurses into subdirectories                                                                |
-| `authState`  | `string?` | `.auth`          | Storage state cache for `produces`/`needs` label inheritance (**add to .gitignore**)                                        |
-| `localCache` | `string?` | `tuffgal/.cache` | Per-machine cache for local (advisory) self-diff mode. Never committed (**add to .gitignore**); `init` scaffolds the ignore |
-| `baselines`  | `string`  | _required_       | Committed PNG baselines and a11y snapshots                                                                                  |
-| `stories`    | `string`  | _required_       | Directory of story JSON files. Recurses into subdirectories                                                                 |
-| `report`     | `string`  | _required_       | Generated HTML report and traces. (**add to .gitignore**)                                                                   |
+| Field        | Type      | Default          | Meaning                                                                                                                                                                                                                                                                         |
+| ------------ | --------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actions`    | `string`  | _required_       | Directory of action JSON files. Recurses into subdirectories                                                                                                                                                                                                                    |
+| `authState`  | `string?` | `.auth`          | Storage state cache for `produces`/`needs` label inheritance, and read at load time to satisfy a `needs` label no story `produces` and [`seededLabels`](#seededlabels-string) declares (**add to .gitignore**, so a hand-seeded file must be regenerated per machine and in CI) |
+| `localCache` | `string?` | `tuffgal/.cache` | Per-machine cache for local (advisory) self-diff mode. Never committed (**add to .gitignore**); `init` scaffolds the ignore                                                                                                                                                     |
+| `baselines`  | `string`  | _required_       | Committed PNG baselines and a11y snapshots                                                                                                                                                                                                                                      |
+| `stories`    | `string`  | _required_       | Directory of story JSON files. Recurses into subdirectories                                                                                                                                                                                                                     |
+| `report`     | `string`  | _required_       | Generated HTML report and traces. (**add to .gitignore**)                                                                                                                                                                                                                       |
 
 > `tuffgal init` scaffolds `authState: 'tuffgal/.auth'` so the cache stays
 > inside the `tuffgal/` content directory next to actions, stories, and
@@ -176,6 +180,44 @@ through Playwright's storage state.
 
 JWTs, refresh tokens, dark-mode preferences, and accessibility preferences
 are common candidates.
+
+### `seededLabels?: string[]`
+
+Labels your project seeds itself by writing `<paths.authState>/<label>.json`
+before the run starts, rather than having a story `produces` them. Defaults to
+empty.
+
+A story's `needs` label that no story `produces` is admitted only when both
+hold: the label appears in this list, and its file is on disk. Each half fails
+with its own error, because each has its own fix. A label a story does
+`produce` needs no declaration at all:
+
+| Situation                            | Result                                                       |
+| ------------------------------------ | ------------------------------------------------------------ |
+| Not listed here, no producing story  | Throws. Add a producing story, or declare and seed the label |
+| Listed here, file missing            | Throws, naming the path your seeding script should write     |
+| Listed here, file present            | Accepted; the story loads that storage state                 |
+| Listed here, and a story produces it | Accepted; the producer wins and this declaration is ignored  |
+
+A story that `needs` both a produced label and a pre-seeded one loads the
+**producer's** storage state, whichever order `needs` lists them in, since a
+seeded file is on disk before the run by definition and would otherwise shadow
+the auth its producer is about to write.
+
+The declaration is what makes the difference between a state you meant to seed
+and a file that happens to be sitting there. Nothing prunes `paths.authState`,
+so renaming or deleting a producer story leaves its `<label>.json` behind;
+without a declaration to check against, that residue would satisfy the `needs`
+of the very story whose producer just disappeared, and the run would render
+against a stale session instead of failing.
+
+Declaring a label does not seed it. Tuffgal has no `globalSetup` hook, so run
+your seeding script yourself before `tuffgal run`. See
+[authoring.md](authoring.md#storage-state--dependency-graph).
+
+```ts
+seededLabels: ['logged-in', 'admin-session'],
+```
 
 ### `breakpoints?: BreakpointSelector[]`
 

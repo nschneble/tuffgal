@@ -174,6 +174,15 @@ export interface TuffgalConfig {
    */
   storageStatePins?: string[];
   /**
+   * Labels this project seeds itself, by writing
+   * `<paths.authState>/<label>.json` before the run starts. A `needs` label no
+   * story `produces` is admitted only when it is listed here AND its file is on
+   * disk, so a file left behind by a renamed or deleted producer story cannot
+   * quietly stand in for the producer it lost. Declaring a label does not seed
+   * it; Tuffgal never runs your seeding script.
+   */
+  seededLabels?: string[];
+  /**
    * Breakpoint modes this project runs, drawn from the built-in
    * {@link BREAKPOINTS} registry (`mobile` | `tablet` | `laptop` | `desktop`).
    * Each entry is either a bare name (registry dimensions) or
@@ -251,6 +260,8 @@ export interface ResolvedConfig {
   baseUrl: string;
   apiHost: string | undefined;
   storageStatePins: string[];
+  /** Labels the project declares it seeds itself; defaults to empty. */
+  seededLabels: string[];
   /**
    * Resolved breakpoint modes, always non-empty. Each entry carries the
    * viewport dimensions to render at. Built from `config.breakpoints` when set,
@@ -383,6 +394,18 @@ export function assertValidConfig(input: unknown, source: string): void {
     }
   }
 
+  if (config.seededLabels !== undefined) {
+    const labels = config.seededLabels;
+    if (
+      !Array.isArray(labels) ||
+      labels.some((label) => typeof label !== 'string' || label.length === 0)
+    ) {
+      fail(
+        '`seededLabels` must be an array of non-empty strings when provided.',
+      );
+    }
+  }
+
   if (
     config.interactiveMode !== undefined &&
     typeof config.interactiveMode !== 'boolean'
@@ -465,6 +488,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     baseUrl: input.baseUrl,
     apiHost: input.apiHost,
     storageStatePins: input.storageStatePins ?? [],
+    seededLabels: input.seededLabels ?? [],
     breakpoints,
     captureMode: input.captureMode ?? DEFAULTS.captureMode,
     colorScheme: input.colorScheme,
