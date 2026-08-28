@@ -6,19 +6,14 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-### Added
+_Nothing just yet_
 
-- A `needs` label that no story `produces` no longer fails the run when the
-  project declares it in `seededLabels` and
-  `<paths.authState>/<label>.json` is on disk, so a project can seed a
-  storage state itself and have stories consume it
-- `seededLabels` config option naming the labels a project seeds itself
-- An undeclared label whose `<label>.json` happens to be on disk still fails
-  the run, so a renamed or deleted producer's residue cannot stand in for it
-- A declared label with no `<label>.json` fails with its own error naming the
-  path your seeding script should write
-- A story that `needs` both a pre-seeded label and a produced one loads the
-  producer's storage state, whichever order `needs` lists them in
+## [0.2.1-alpha.1] – 2026-08-27
+
+### Fixed
+
+- A `needs` label that no story `produces` fails the run when declared in
+  `seededLabels` and `<paths.authState>/<label>.json` is on disk
 
 ## [0.2.0-alpha.8] – 2026-08-20
 
@@ -354,7 +349,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.0-alpha.8...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.1-alpha.1...HEAD
+[0.2.1-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.1-alpha.1
 [0.2.0-alpha.8]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.8
 [0.2.0-alpha.7]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.7
 [0.2.0-alpha.6]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.6
