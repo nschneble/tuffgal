@@ -189,13 +189,20 @@ empty.
 
 A story's `needs` label that no story `produces` is admitted only when both
 hold: the label appears in this list, and its file is on disk. Each half fails
-with its own error, because each has its own fix:
+with its own error, because each has its own fix. A label a story does
+`produce` needs no declaration at all:
 
-| Situation                           | Result                                                       |
-| ----------------------------------- | ------------------------------------------------------------ |
-| Not listed here, no producing story | Throws. Add a producing story, or declare and seed the label |
-| Listed here, file missing           | Throws, naming the path your seeding script should write     |
-| Listed here, file present           | Accepted; the story loads that storage state                 |
+| Situation                            | Result                                                       |
+| ------------------------------------ | ------------------------------------------------------------ |
+| Not listed here, no producing story  | Throws. Add a producing story, or declare and seed the label |
+| Listed here, file missing            | Throws, naming the path your seeding script should write     |
+| Listed here, file present            | Accepted; the story loads that storage state                 |
+| Listed here, and a story produces it | Accepted; the producer wins and this declaration is ignored  |
+
+A story that `needs` both a produced label and a pre-seeded one loads the
+**producer's** storage state, whichever order `needs` lists them in, since a
+seeded file is on disk before the run by definition and would otherwise shadow
+the auth its producer is about to write.
 
 The declaration is what makes the difference between a state you meant to seed
 and a file that happens to be sitting there. Nothing prunes `paths.authState`,
@@ -205,7 +212,7 @@ of the very story whose producer just disappeared, and the run would render
 against a stale session instead of failing.
 
 Declaring a label does not seed it. Tuffgal has no `globalSetup` hook, so run
-your seeding script yourself before `tuffgal run` — see
+your seeding script yourself before `tuffgal run`. See
 [authoring.md](authoring.md#storage-state--dependency-graph).
 
 ```ts

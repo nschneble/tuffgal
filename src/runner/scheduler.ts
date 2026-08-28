@@ -60,14 +60,14 @@ export function buildSchedule(
         throw new SchedulerError(
           `${item.file} needs label "${label}" but no story produces it and ` +
             `it is not listed in \`seededLabels\`. Add a story that produces ` +
-            `it, or declare it in \`seededLabels\` and seed ${seedPath}.`,
+            `it, or declare the label and seed ${seedPath}.`,
         );
       }
       if (!existsSync(seedPath)) {
         throw new SchedulerError(
           `${item.file} needs label "${label}", declared in \`seededLabels\`, ` +
-            `but no storage state exists at ${seedPath}. Run your seeding ` +
-            `script before \`tuffgal run\`; Tuffgal does not run it for you.`,
+            `but no storage state exists at ${seedPath}. Seed it before ` +
+            `\`tuffgal run\`.`,
         );
       }
     }
@@ -86,14 +86,7 @@ interface RunContext {
 
 export type StoryRunner = (scheduled: ScheduledStory) => Promise<StoryResult>;
 
-/**
- * The set of labels the given stories produce. Both callers deliberately pass a
- * DIFFERENT list: `drainSchedule` passes its own per-call stories, because a
- * need may only clear on a producer running in THAT pass, while `runAll` passes
- * the whole schedule, because a producer's `<label>.json` outlives the pass
- * that wrote it. Same rule, different question; do not collapse them into one
- * shared value.
- */
+/** The labels the given stories produce, scoped to the list passed in. */
 export function collectProducedLabels(
   scheduled: ScheduledStory[],
 ): Set<string> {
@@ -130,13 +123,13 @@ export async function drainSchedule(
   // or a producer that renders in a different breakpoint pass. This filter is
   // the only place such a need is excluded from readiness. `item.needs` itself
   // stays whole, so the auth loader still resolves those labels from disk.
-  const producedLabels = collectProducedLabels(scheduled);
+  const producedThisPass = collectProducedLabels(scheduled);
 
   // Label → the stories that need it, plus each story's still-outstanding needs.
   const consumersByLabel = new Map<string, ScheduledStory[]>();
   const outstandingNeeds = new Map<string, Set<string>>();
   for (const item of scheduled) {
-    const blocking = item.needs.filter((label) => producedLabels.has(label));
+    const blocking = item.needs.filter((label) => producedThisPass.has(label));
     outstandingNeeds.set(item.file, new Set(blocking));
     for (const label of blocking) {
       const consumers = consumersByLabel.get(label) ?? [];

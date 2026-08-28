@@ -40,7 +40,7 @@ export interface RunStoryOptions {
    * trusting their order. Omitted only by direct callers/tests, which then get
    * the plain first-match-wins walk.
    */
-  producedLabels?: ReadonlySet<string>;
+  producedAnywhere?: ReadonlySet<string>;
   /**
    * Comparison contract for this run (see {@link RunMode}). Threaded down to
    * `runAction`, which uses it to decide whether a missing/changed baseline
@@ -80,14 +80,14 @@ export async function runStoryWithBrowser(
   const { story, file, needs, produces, config, coverage } = options;
   // Resolve the storage state once: it is viewport-independent, so every
   // breakpoint context loads the same auth payload. `needs` is always the
-  // story's full label list — a breakpoint pass no longer strips it, because
+  // story's full label list. A breakpoint pass no longer strips it, because
   // `drainSchedule` excludes the labels it cannot clear on its own. So a
   // consumer whose producer rendered in a different pass still finds that
   // producer's off-disk auth here instead of rendering logged-out.
   const storageStatePath = await resolveStorageStateForNeeds(
     config,
     needs,
-    options.producedLabels,
+    options.producedAnywhere,
   );
   // The run driver hands us a single breakpoint per call so each breakpoint is
   // its own reset/seed pass (the database-isolation guarantee). Direct
@@ -365,13 +365,13 @@ async function stopTracing(
  * at `<authState>/<label>.json`, but walking every PRODUCED label before any
  * pre-seeded-only one, whatever order `needs` lists them in. Order cannot decide
  * this, because the two kinds of label do not offer the same guarantee. A
- * pre-seeded label's file is guaranteed present — `buildSchedule` admits the
- * label only when `seededLabels` declares it AND the file already exists — while
- * a produced label's file appears only once its producer has actually run and
- * persisted one. Walking `needs` raw therefore lets a pre-seeded label listed
- * first shadow the producer's real auth, and the story renders under the wrong
- * identity with nothing to show for it: no error, no failed action, just a
- * screenshot of the wrong session. The author cannot always reorder their way
+ * pre-seeded label's file is guaranteed present (`buildSchedule` admits the
+ * label only when `seededLabels` declares it AND the file already exists),
+ * while a produced label's file appears only once its producer has actually run
+ * and persisted one. Walking `needs` raw therefore lets a pre-seeded label
+ * listed first shadow the producer's real auth, and the story renders under the
+ * wrong identity with nothing to show for it: no error, no failed action, just
+ * a screenshot of the wrong session. The author cannot always reorder their way
  * out either, since `normalisedNeeds` appends the `storageState: 'logged-in'`
  * shorthand to the END of the list. Within a tier the first match still wins,
  * so two produced (or two pre-seeded) labels keep resolving in `needs` order.
@@ -379,10 +379,10 @@ async function stopTracing(
 async function resolveStorageStateForNeeds(
   config: ResolvedConfig,
   needs: string[],
-  producedLabels: ReadonlySet<string> = new Set(),
+  producedAnywhere: ReadonlySet<string> = new Set(),
 ): Promise<string | undefined> {
-  const produced = needs.filter((label) => producedLabels.has(label));
-  const preSeeded = needs.filter((label) => !producedLabels.has(label));
+  const produced = needs.filter((label) => producedAnywhere.has(label));
+  const preSeeded = needs.filter((label) => !producedAnywhere.has(label));
 
   for (const label of [...produced, ...preSeeded]) {
     const path = join(config.paths.authState, `${label}.json`);

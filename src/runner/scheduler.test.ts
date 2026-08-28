@@ -185,6 +185,26 @@ describe('buildSchedule: validation', () => {
     );
   });
 
+  // A label can be both produced and declared. The producer wins and the
+  // declaration is ignored, which is only observable through the file: nothing
+  // seeds `ready.json` here, so a declaration that outranked the producer
+  // would reach the seed probe and throw.
+  it('lets a producer outrank a seededLabels declaration of the same label', () => {
+    const authState = seededAuthState(authStateRoot, 'dual');
+    const scheduled = buildSchedule(
+      [
+        makeStoryFile('producer.json', { produces: ['ready'] }),
+        makeStoryFile('consumer.json', { needs: ['ready'] }),
+      ],
+      schedulerConfig(authState, ['ready']),
+    );
+    const consumer = scheduled.find((item) => item.file === 'consumer.json');
+    assert.deepEqual(consumer?.needs, ['ready']);
+    // Still a produced label, so it keeps gating readiness in drainSchedule
+    // rather than being excluded as pre-seeded.
+    assert.ok(collectProducedLabels(scheduled).has('ready'));
+  });
+
   it('folds storageState "logged-in" into needs', () => {
     const stories = [
       makeStoryFile('auth.json', { produces: ['logged-in'] }),
@@ -327,30 +347,37 @@ describe('drainSchedule: execution', () => {
   // skip, so the assertion below reads `pass` either way and a predicate that
   // skipped on "has any need" would survive. Verified: at 2 workers this test
   // passes against that mutant.
-  it('leaves a pre-seeded need unblocked when an unrelated producer fails', async () => {
-    const scheduled = buildSchedule(
-      [
-        makeStoryFile('producer.json', { produces: ['ready'] }),
-        makeStoryFile('seed.json', { needs: ['theme-dark'] }),
-        makeStoryFile('dependent.json', { needs: ['ready'] }),
-      ],
-      schedulerConfig(
-        seededAuthState(authStateRoot, 'unrelated', 'theme-dark'),
-        ['theme-dark'],
-      ),
-    );
-    const runner: StoryRunner = async (item) => {
-      if (item.file === 'producer.json') {
-        return { ...passResult(item), status: 'failed' };
-      }
-      return passResult(item);
-    };
-    const results = await drainSchedule(scheduled, 1, runner, noop, noop);
-    const byFile = new Map(results.map((result) => [result.file, result]));
-    assert.equal(byFile.get('seed.json')?.status, 'pass');
-    assert.equal(byFile.get('dependent.json')?.status, 'failed');
-    assert.equal(byFile.get('dependent.json')?.actions[0]?.action, '(blocked)');
-  });
+  it(
+    'leaves a pre-seeded need unblocked when an unrelated producer fails',
+    { timeout: 5_000 },
+    async () => {
+      const scheduled = buildSchedule(
+        [
+          makeStoryFile('producer.json', { produces: ['ready'] }),
+          makeStoryFile('seed.json', { needs: ['theme-dark'] }),
+          makeStoryFile('dependent.json', { needs: ['ready'] }),
+        ],
+        schedulerConfig(
+          seededAuthState(authStateRoot, 'unrelated', 'theme-dark'),
+          ['theme-dark'],
+        ),
+      );
+      const runner: StoryRunner = async (item) => {
+        if (item.file === 'producer.json') {
+          return { ...passResult(item), status: 'failed' };
+        }
+        return passResult(item);
+      };
+      const results = await drainSchedule(scheduled, 1, runner, noop, noop);
+      const byFile = new Map(results.map((result) => [result.file, result]));
+      assert.equal(byFile.get('seed.json')?.status, 'pass');
+      assert.equal(byFile.get('dependent.json')?.status, 'failed');
+      assert.equal(
+        byFile.get('dependent.json')?.actions[0]?.action,
+        '(blocked)',
+      );
+    },
+  );
 
   it('cascades a failure transitively through the chain', async () => {
     // a (fails) -> b needs la -> c needs lb. Both b and c must be blocked.

@@ -46,9 +46,9 @@ storage state, you can keep that script and point it at
 `paths.authState/<label>.json`, then have stories `needs` that label with no
 producer story for it. Tuffgal accepts a label no story `produces` when your
 config declares it in [`seededLabels`](config.md#seededlabels-string) and the
-file is on disk — the declaration is what separates a state you meant to seed
+file is on disk. The declaration is what separates a state you meant to seed
 from a leftover file. Tuffgal has no `globalSetup` hook of its own, so run the
-script yourself before invoking `tuffgal run` — a `pretest`-style npm script or
+script yourself before invoking `tuffgal run`: a `pretest`-style npm script or
 a CI step ahead of the run. `paths.authState` is gitignored, so the seeded file
 has to be regenerated on each machine and in CI, exactly as under Playwright
 Test.

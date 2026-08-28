@@ -559,7 +559,7 @@ describe('runStoryWithBrowser: auth crosses breakpoint passes', () => {
       assert.deepEqual(login.record.storageStatePaths, [authFile]);
 
       // Pass 2, mobile: the producer does not participate, and the consumer
-      // carries its FULL needs — nothing strips them to the in-pass subset.
+      // carries its FULL needs; nothing strips them to the in-pass subset.
       const profile = fakeContext(fakePage({ screenshot: solidPng(1, 2, 3) }));
       const { browser, storageStates } = capturingBrowser(profile.context);
       const results = await runPass(
@@ -605,13 +605,13 @@ describe('runStoryWithBrowser: produced auth outranks pre-seeded auth', () => {
   async function resolvedStorageState(
     config: ResolvedConfig,
     needs: string[],
-    producedLabels: Set<string>,
+    producedAnywhere: Set<string>,
   ): Promise<string | undefined> {
     const only = fakeContext(fakePage({ screenshot: solidPng(1, 2, 3) }));
     const { browser, storageStates } = capturingBrowser(only.context);
     await runStoryWithBrowser(
       browser,
-      makeOptions(config, { needs, producedLabels, breakpoint: ONLY }),
+      makeOptions(config, { needs, producedAnywhere, breakpoint: ONLY }),
       new Date(),
     );
     assert.equal(storageStates.length, 1);
