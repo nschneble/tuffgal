@@ -481,7 +481,7 @@ describe('runAll: shared browser lifecycle', () => {
 });
 
 describe('runAll: each breakpoint pass renders at its own viewport', () => {
-  // nothing else pins this: folding breakpoint into base stays green
+  // only the call site pins this: the per-pass breakpoint outranks base
   it('varies the viewport per pass and tags each story with both breakpoints', async () => {
     const root = await mkdtemp(join(tmpdir(), 'tuffgal-runall-bp-'));
     const actionsDir = join(root, 'actions');
@@ -543,17 +543,12 @@ describe('runAll: each breakpoint pass renders at its own viewport', () => {
       async () => browser,
     );
 
-    assert.deepEqual(viewports.toSorted(), [
-      '1280x800',
-      '1280x800',
-      '390x844',
-      '390x844',
-    ]);
+    assert.deepEqual(viewports, ['390x844', '390x844', '1280x800', '1280x800']);
     assert.equal(result.totals.stories, 2);
     for (const storyResult of result.stories) {
       assert.deepEqual(
-        storyResult.actions.map((each) => each.breakpoint).toSorted(),
-        ['desktop', 'mobile'],
+        storyResult.actions.map((action) => action.breakpoint),
+        ['mobile', 'desktop'],
         `${storyResult.file} must carry an action per breakpoint`,
       );
     }

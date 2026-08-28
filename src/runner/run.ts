@@ -339,12 +339,11 @@ export function createSignalTeardownHandler(
 function runScheduledStory(
   item: ScheduledStory,
   breakpoint: ResolvedBreakpoint,
-  base: Pick<
-    RunStoryOptions,
-    'actions' | 'config' | 'coverage' | 'mode' | 'producedAnywhere'
-  > & { browser: Browser },
+  base: Required<
+    Pick<RunStoryOptions, 'actions' | 'config' | 'mode' | 'producedAnywhere'>
+  > & { coverage: CoverageCollector | undefined; browser: Browser },
 ): Promise<StoryResult> {
-  const { browser, ...runConstant } = base;
+  const { browser, ...runConstants } = base;
   // Drive the story against the run's SHARED browser rather than launching a
   // per-story Chromium. `startedAt` is stamped here, as this story's work
   // begins, so its reported duration excludes time it waited in the queue.
@@ -352,7 +351,7 @@ function runScheduledStory(
   return runStoryWithBrowser(
     browser,
     {
-      ...runConstant,
+      ...runConstants,
       story: item.story,
       file: item.file,
       needs: item.needs,
