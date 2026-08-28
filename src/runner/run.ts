@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser } from 'playwright';
 import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
-import type { Action } from '../schema/action.ts';
 import type {
   EnvironmentReport,
   RunResult,
@@ -21,7 +20,11 @@ import {
   type ManagedDevServers,
 } from './bridges/devServers.ts';
 import { CoverageCollector } from './coverage.ts';
-import { mergeStoryStatus, runStoryWithBrowser } from './runStory.ts';
+import {
+  mergeStoryStatus,
+  runStoryWithBrowser,
+  type RunStoryOptions,
+} from './runStory.ts';
 import { collectProducedLabels, drainSchedule } from './drain.ts';
 import { buildSchedule, type ScheduledStory } from './schedule.ts';
 import {
@@ -145,6 +148,8 @@ export async function runAll(
         '.\n',
     );
 
+    const base = { actions, config, coverage, mode, browser, producedAnywhere };
+
     // Run each breakpoint as its own pass: a full reset/seed, then the whole
     // schedule rendered at that one breakpoint. This is what keeps breakpoints
     // isolated. A destructive story can mutate the seeded database in the
@@ -173,17 +178,7 @@ export async function runAll(
       const passResults = await drainSchedule(
         participating,
         workerCount,
-        (item) =>
-          runScheduledStory(
-            item,
-            actions,
-            config,
-            coverage,
-            breakpoint,
-            mode,
-            browser,
-            producedAnywhere,
-          ),
+        (item) => runScheduledStory(item, breakpoint, base),
         () => {},
         (_item, result) =>
           process.stdout.write(
@@ -339,14 +334,12 @@ export function createSignalTeardownHandler(
 
 function runScheduledStory(
   item: ScheduledStory,
-  actions: Map<string, Action>,
-  config: ResolvedConfig,
-  coverage: CoverageCollector | undefined,
   breakpoint: ResolvedBreakpoint,
-  mode: RunMode,
-  browser: Browser,
-  producedAnywhere: ReadonlySet<string>,
+  base: Required<
+    Pick<RunStoryOptions, 'actions' | 'config' | 'mode' | 'producedAnywhere'>
+  > & { coverage: CoverageCollector | undefined; browser: Browser },
 ): Promise<StoryResult> {
+  const { browser, ...runConstants } = base;
   // Drive the story against the run's SHARED browser rather than launching a
   // per-story Chromium. `startedAt` is stamped here, as this story's work
   // begins, so its reported duration excludes time it waited in the queue.
@@ -354,16 +347,12 @@ function runScheduledStory(
   return runStoryWithBrowser(
     browser,
     {
+      ...runConstants,
       story: item.story,
       file: item.file,
       needs: item.needs,
       produces: item.produces,
-      producedAnywhere,
-      actions,
-      config,
-      coverage,
       breakpoint,
-      mode,
     },
     startedAt,
   );
