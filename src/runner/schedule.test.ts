@@ -13,14 +13,14 @@ import { buildSchedule, SchedulerError } from './schedule.ts';
 // buildSchedule probes <authState>/<label>.json for labels no story produces,
 // so every call needs a real directory. A root holds only the subdirectories
 // `seededAuthState` mints under it, never a <label>.json of its own, so passing
-// a root straight to `schedulerConfig` is the "nothing seeded" case.
+// a root straight to `scheduleConfig` is the "nothing seeded" case.
 
 /**
  * buildSchedule reads `paths.authState` and `seededLabels`, so the fixture
  * carries both. Admission needs the two together: a file on disk whose label
  * this list omits is rejected.
  */
-function schedulerConfig(
+function scheduleConfig(
   authState: string,
   seededLabels: string[] = [],
 ): ResolvedConfig {
@@ -71,7 +71,7 @@ describe('buildSchedule: validation', () => {
       makeStoryFile('b.json', { produces: ['shared'] }),
     ];
     assert.throws(
-      () => buildSchedule(stories, schedulerConfig(authStateRoot)),
+      () => buildSchedule(stories, scheduleConfig(authStateRoot)),
       SchedulerError,
     );
   });
@@ -79,7 +79,7 @@ describe('buildSchedule: validation', () => {
   it('throws when a needed label has no producer', () => {
     const stories = [makeStoryFile('a.json', { needs: ['missing'] })];
     assert.throws(
-      () => buildSchedule(stories, schedulerConfig(authStateRoot)),
+      () => buildSchedule(stories, scheduleConfig(authStateRoot)),
       SchedulerError,
     );
   });
@@ -90,7 +90,7 @@ describe('buildSchedule: validation', () => {
       makeStoryFile('b.json', { needs: ['la'], produces: ['lb'] }),
     ];
     assert.throws(
-      () => buildSchedule(stories, schedulerConfig(authStateRoot)),
+      () => buildSchedule(stories, scheduleConfig(authStateRoot)),
       (error: unknown) => {
         assert.ok(error instanceof SchedulerError);
         assert.match(error.message, /Cycle detected/);
@@ -103,7 +103,7 @@ describe('buildSchedule: validation', () => {
     const authState = seededAuthState(authStateRoot, 'build', 'theme-dark');
     const scheduled = buildSchedule(
       [makeStoryFile('dark.json', { needs: ['theme-dark'] })],
-      schedulerConfig(authState, ['theme-dark']),
+      scheduleConfig(authState, ['theme-dark']),
     );
     assert.deepEqual(scheduled[0]?.needs, ['theme-dark']);
     // A sibling label declared alongside it has no file of its own, so it
@@ -112,7 +112,7 @@ describe('buildSchedule: validation', () => {
       () =>
         buildSchedule(
           [makeStoryFile('light.json', { needs: ['theme-light'] })],
-          schedulerConfig(authState, ['theme-dark', 'theme-light']),
+          scheduleConfig(authState, ['theme-dark', 'theme-light']),
         ),
       SchedulerError,
     );
@@ -128,7 +128,7 @@ describe('buildSchedule: validation', () => {
       () =>
         buildSchedule(
           [makeStoryFile('dark.json', { needs: ['theme-dark'] })],
-          schedulerConfig(authState),
+          scheduleConfig(authState),
         ),
       (error: unknown) => {
         assert.ok(error instanceof SchedulerError);
@@ -148,7 +148,7 @@ describe('buildSchedule: validation', () => {
       () =>
         buildSchedule(
           [makeStoryFile('dark.json', { needs: ['theme-dark'] })],
-          schedulerConfig(authState, ['theme-dark']),
+          scheduleConfig(authState, ['theme-dark']),
         ),
       (error: unknown) => {
         assert.ok(error instanceof SchedulerError);
@@ -171,7 +171,7 @@ describe('buildSchedule: validation', () => {
         makeStoryFile('producer.json', { produces: ['ready'] }),
         makeStoryFile('consumer.json', { needs: ['ready'] }),
       ],
-      schedulerConfig(authState, ['ready']),
+      scheduleConfig(authState, ['ready']),
     );
     const consumer = scheduled.find((item) => item.file === 'consumer.json');
     assert.deepEqual(consumer?.needs, ['ready']);
@@ -185,7 +185,7 @@ describe('buildSchedule: validation', () => {
       makeStoryFile('auth.json', { produces: ['logged-in'] }),
       makeStoryFile('dash.json', { storageState: 'logged-in' }),
     ];
-    const scheduled = buildSchedule(stories, schedulerConfig(authStateRoot));
+    const scheduled = buildSchedule(stories, scheduleConfig(authStateRoot));
     const dash = scheduled.find((item) => item.file === 'dash.json');
     assert.ok(dash);
     assert.deepEqual(dash.needs, ['logged-in']);
