@@ -1,6 +1,6 @@
 import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
 import type { StoryResult } from '../schema/result.ts';
-import type { ScheduledStory } from './scheduler.ts';
+import type { ScheduledStory } from './schedule.ts';
 import { mergeStoryStatus, resolveRunSet } from './runStory.ts';
 
 /**

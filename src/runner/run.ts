@@ -22,12 +22,8 @@ import {
 } from './bridges/devServers.ts';
 import { CoverageCollector } from './coverage.ts';
 import { mergeStoryStatus, runStoryWithBrowser } from './runStory.ts';
-import {
-  buildSchedule,
-  collectProducedLabels,
-  drainSchedule,
-  type ScheduledStory,
-} from './scheduler.ts';
+import { collectProducedLabels, drainSchedule } from './drain.ts';
+import { buildSchedule, type ScheduledStory } from './schedule.ts';
 import {
   mergeStoryResults,
   resolveBreakpointPasses,
