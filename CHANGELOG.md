@@ -8,6 +8,20 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 _Nothing just yet_
 
+## [0.2.2-alpha.1] – 2026-09-01
+
+### Added
+
+`browserArgs` config option; extra command-line flags are now passed
+directly through to `chromium.launch()`.
+
+The motivating case is `--force-color-profile=srgb` because without it
+Chromium renders through whatever ICC profile the host OS reports, and a
+laptop and CI container can shift baseline pixels for a reason that has
+nothing to do with what's being tested.
+
+If you omit the field, nothing changes from before.
+
 ## [0.2.1-alpha.1] – 2026-08-27
 
 ### Fixed
@@ -349,7 +363,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.1-alpha.1...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.2.2-alpha.1...HEAD
+[0.2.2-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.2-alpha.1
 [0.2.1-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.1-alpha.1
 [0.2.0-alpha.8]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.8
 [0.2.0-alpha.7]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.0-alpha.7

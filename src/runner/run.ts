@@ -91,7 +91,7 @@ export async function runAll(
   config: ResolvedConfig,
   options: RunCliOptions,
   launchBrowser: () => Promise<Browser> = () =>
-    chromium.launch({ headless: !options.headed }),
+    chromium.launch(resolveLaunchOptions(config, options)),
 ): Promise<RunResult> {
   const startedAt = new Date();
   const mode: RunMode = options.mode ?? 'local';
@@ -363,6 +363,19 @@ function matchesFilter(item: ScheduledStory, filter: string): boolean {
     { file: item.file, storyName: item.story.story },
     filter,
   );
+}
+
+/**
+ * Chromium launch options for the run's one shared browser. Pulled out as a
+ * pure function, rather than inlined into `runAll`'s default `launchBrowser`,
+ * so a test can assert `config.browserArgs` reaches the launch call without
+ * mocking Playwright's own `chromium.launch`.
+ */
+export function resolveLaunchOptions(
+  config: Pick<ResolvedConfig, 'browserArgs'>,
+  options: Pick<RunCliOptions, 'headed'>,
+): { headless: boolean; args: string[] } {
+  return { headless: !options.headed, args: config.browserArgs };
 }
 
 function resolveWorkerCount(
