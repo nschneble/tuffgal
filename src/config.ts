@@ -206,6 +206,16 @@ export interface TuffgalConfig {
    */
   colorScheme?: ColorScheme;
   /**
+   * Extra command-line flags for `chromium.launch()`, passed through
+   * unchanged. Use for a flag a project needs deterministic rendering on —
+   * `--force-color-profile=srgb` is the motivating case: without it, Chromium
+   * renders through whatever ICC profile the host OS reports, and a laptop's
+   * profile and a CI container's default diverge, shifting baseline pixels
+   * for a reason that has nothing to do with the page under test. Defaults
+   * to none.
+   */
+  browserArgs?: string[];
+  /**
    * Safety cap on a `fullPage` capture's total area, in pixels (width ×
    * height). A `fullPage` shot composites the whole scrollable document, so an
    * infinite-scroll or runaway-tall page decodes to an enormous RGBA array
@@ -274,6 +284,8 @@ export interface ResolvedConfig {
   captureMode: CaptureMode;
   /** Pinned colour scheme, or `undefined` for Playwright's `light` default. */
   colorScheme: ColorScheme | undefined;
+  /** Extra `chromium.launch()` flags; defaults to empty. */
+  browserArgs: string[];
   /** Resolved full-page area cap in pixels; defaults to 30_000_000. */
   maxFullPagePixels: number;
   defaultTimeoutMs: number;
@@ -406,6 +418,18 @@ export function assertValidConfig(input: unknown, source: string): void {
     }
   }
 
+  if (config.browserArgs !== undefined) {
+    const args = config.browserArgs;
+    if (
+      !Array.isArray(args) ||
+      args.some((arg) => typeof arg !== 'string' || arg.length === 0)
+    ) {
+      fail(
+        '`browserArgs` must be an array of non-empty strings when provided.',
+      );
+    }
+  }
+
   if (
     config.interactiveMode !== undefined &&
     typeof config.interactiveMode !== 'boolean'
@@ -492,6 +516,7 @@ function resolveConfig(input: TuffgalConfig, rootDir: string): ResolvedConfig {
     breakpoints,
     captureMode: input.captureMode ?? DEFAULTS.captureMode,
     colorScheme: input.colorScheme,
+    browserArgs: input.browserArgs ?? [],
     maxFullPagePixels: input.maxFullPagePixels ?? DEFAULTS.maxFullPagePixels,
     defaultTimeoutMs: input.defaultTimeoutMs ?? DEFAULTS.defaultTimeoutMs,
     navigationTimeoutMs:

@@ -88,6 +88,29 @@ describe('assertValidConfig', () => {
     }
   });
 
+  it('accepts a browserArgs array of non-empty strings', () => {
+    const config = {
+      ...validConfig(),
+      browserArgs: ['--force-color-profile=srgb'],
+    };
+    assert.doesNotThrow(() => assertValidConfig(config, SOURCE));
+  });
+
+  it('rejects a non-array browserArgs', () => {
+    const config = {
+      ...validConfig(),
+      browserArgs: '--force-color-profile=srgb',
+    };
+    assert.throws(() => assertValidConfig(config, SOURCE), /browserArgs/);
+  });
+
+  it('rejects a browserArgs entry that is empty or not a string', () => {
+    for (const entry of ['', 42, null]) {
+      const config = { ...validConfig(), browserArgs: ['--ok', entry] };
+      assert.throws(() => assertValidConfig(config, SOURCE), /browserArgs/);
+    }
+  });
+
   it('requires a string baseUrl', () => {
     const config = validConfig();
     config.baseUrl = 123;
@@ -271,6 +294,18 @@ describe('loadConfig breakpoint resolution', () => {
   it('resolves an explicit seededLabels', async () => {
     const resolved = await load("seededLabels: ['logged-in', 'theme-dark'],");
     assert.deepEqual(resolved.seededLabels, ['logged-in', 'theme-dark']);
+  });
+
+  it('defaults browserArgs to empty when nothing is set', async () => {
+    // resolveLaunchOptions passes this straight to chromium.launch({ args }),
+    // so an omitted field has to resolve to a real empty array, not undefined.
+    const resolved = await load('');
+    assert.deepEqual(resolved.browserArgs, []);
+  });
+
+  it('resolves an explicit browserArgs', async () => {
+    const resolved = await load("browserArgs: ['--force-color-profile=srgb'],");
+    assert.deepEqual(resolved.browserArgs, ['--force-color-profile=srgb']);
   });
 
   it('defaults paths.localCache to the cache dir the scaffolded .gitignore covers', async () => {

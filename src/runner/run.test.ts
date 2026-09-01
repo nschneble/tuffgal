@@ -19,6 +19,7 @@ import {
   formatResultLine,
   formatSummaryBullet,
   resolveEnvironmentReport,
+  resolveLaunchOptions,
   runAll,
   summarise,
 } from './run.ts';
@@ -316,6 +317,26 @@ describe('resolveEnvironmentReport: browser probe gating', () => {
 
     assert.equal(probed, 1, 'probe must run once in CI mode');
     assert.equal(report.actual.browserVersion, '131.0.0.0');
+  });
+});
+
+describe('resolveLaunchOptions', () => {
+  it('maps headed:false to headless:true, with no args by default', () => {
+    const opts = resolveLaunchOptions({ browserArgs: [] }, { headed: false });
+    assert.deepEqual(opts, { headless: true, args: [] });
+  });
+
+  it('maps headed:true to headless:false', () => {
+    const opts = resolveLaunchOptions({ browserArgs: [] }, { headed: true });
+    assert.equal(opts.headless, false);
+  });
+
+  it("passes config.browserArgs straight through to chromium.launch's args", () => {
+    const opts = resolveLaunchOptions(
+      { browserArgs: ['--force-color-profile=srgb'] },
+      { headed: false },
+    );
+    assert.deepEqual(opts.args, ['--force-color-profile=srgb']);
   });
 });
 

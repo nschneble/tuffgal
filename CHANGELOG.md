@@ -6,7 +6,14 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Added
+
+`browserArgs` config option: extra command-line flags passed through to
+`chromium.launch()` unchanged. Motivating case is `--force-color-profile=srgb`
+— without it, Chromium renders through whatever ICC profile the host OS
+reports, so a laptop and a CI container can shift baseline pixels for a
+reason that has nothing to do with the page under test. Omit the field and
+nothing changes, same as `colorScheme` before it.
 
 ## [0.2.1-alpha.1] – 2026-08-27
 
