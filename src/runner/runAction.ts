@@ -442,6 +442,7 @@ async function captureAndCompare(
   try {
     const pixelThreshold = action.diff?.pixelThreshold ?? 0.1;
     const ssimThreshold = action.diff?.ssimThreshold ?? 0.99;
+    const ssimVariant = action.diff?.ssimVariant ?? 'bezkrovny';
     const maxDiffPixels = action.diff?.maxDiffPixels ?? 0;
     // Score first (SSIM plus the differing-pixel count) without encoding
     // the overlay. The red-highlight diff image is expensive to encode and is
@@ -453,6 +454,7 @@ async function captureAndCompare(
       baselinePng,
       actualPng,
       pixelThreshold,
+      ssimVariant,
     );
     // Both are necessary: SSIM's tolerance band absorbs real drift that is
     // small and localised, and a pixel count alone misses a structurally

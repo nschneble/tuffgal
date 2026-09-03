@@ -228,6 +228,14 @@ export const actionSchema = z.object({
        */
       ssimThreshold: z.number().min(0).max(1).default(0.99),
       /**
+       * Which of ssim.js's SSIM implementations scores the comparison.
+       * Defaults to `'bezkrovny'`, so an action that doesn't set this
+       * scores exactly as it did before this field existed.
+       */
+      ssimVariant: z
+        .enum(['fast', 'original', 'bezkrovny', 'weber'])
+        .default('bezkrovny'),
+      /**
        * How many differing pixels an action may report and still pass.
        * Defaults to 0, so a deterministic suite demands exact pixel
        * identity: SSIM's tolerance band absorbs small localised drift
