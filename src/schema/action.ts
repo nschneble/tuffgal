@@ -228,13 +228,9 @@ export const actionSchema = z.object({
        */
       ssimThreshold: z.number().min(0).max(1).default(0.99),
       /**
-       * Which of ssim.js's SSIM implementations scores the comparison:
-       * `'fast'`, `'original'`, `'bezkrovny'`, or `'weber'`. They trade
-       * perceptual accuracy and speed differently; see ssim.js's own docs
-       * for the algorithmic differences, which tuffgal doesn't re-derive
-       * here. Defaults to `'bezkrovny'`, so an action that doesn't set this
-       * scores exactly as it did before this field existed. Validated
-       * against ssim.js's own supported variant list, not a superset.
+       * Which of ssim.js's SSIM implementations scores the comparison.
+       * Defaults to `'bezkrovny'`, so an action that doesn't set this
+       * scores exactly as it did before this field existed.
        */
       ssimVariant: z
         .enum(['fast', 'original', 'bezkrovny', 'weber'])

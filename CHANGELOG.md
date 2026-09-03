@@ -6,7 +6,11 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Added
+
+`diff.ssimVariant`, which of ssim.js's four SSIM implementations
+(`fast`/`original`/`bezkrovny`/`weber`) scores a comparison. Defaults to
+`bezkrovny`, so existing suites score unchanged.
 
 ## [0.3.0-alpha.1] – 2026-09-03
 

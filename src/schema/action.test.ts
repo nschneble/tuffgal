@@ -184,6 +184,30 @@ describe('diff maxDiffPixels: a count, not a 0-to-1 ratio', () => {
   });
 });
 
+describe('diff ssimVariant: enum membership', () => {
+  for (const variant of ['fast', 'original', 'bezkrovny', 'weber']) {
+    it(`accepts '${variant}'`, () => {
+      assert.equal(
+        parseAction({ diff: { ssimVariant: variant } }).success,
+        true,
+      );
+    });
+  }
+
+  it('rejects a variant ssim.js does not support', () => {
+    assert.equal(
+      parseAction({ diff: { ssimVariant: 'msssim' } }).success,
+      false,
+    );
+  });
+
+  it('defaults to bezkrovny when diff is present without it', () => {
+    const parsed = parseAction({ diff: { ssimThreshold: 0.99 } });
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.data?.diff?.ssimVariant, 'bezkrovny');
+  });
+});
+
 describe('hint role: enum membership', () => {
   it('accepts a member of the role enum', () => {
     assert.equal(hintSchema.safeParse({ role: 'button' }).success, true);

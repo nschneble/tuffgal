@@ -49,7 +49,7 @@ comments and no trailing commas. Field notes follow each block.
   "expect": { "anyOf": [{ "role": "status", "text": "Saved" }] },
   "mask": [{ "selector": ".timestamp" }],
   "retry": { "attempts": 2, "backoffMs": 200 },
-  "diff": { "ssimThreshold": 0.99, "maxDiffPixels": 0, "pixelThreshold": 0.1 }
+  "diff": { "ssimThreshold": 0.99, "ssimVariant": "bezkrovny", "maxDiffPixels": 0, "pixelThreshold": 0.1 }
 }
 ```
 
