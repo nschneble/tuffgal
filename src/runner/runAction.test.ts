@@ -28,19 +28,18 @@ function solidPng(r: number, g: number, b: number): Buffer {
 }
 
 /**
- * A 64x64 image with enough per-pixel variation for SSIM to score it as a
- * structured page rather than a flat field, with `invertedPixels` of its pixels
- * flipped to their complement. That pair is the shape issue #50 reports: a
- * handful of genuinely different pixels sitting inside SSIM's tolerance band
- * (~0.996 at two pixels), which a solid 2x2 fixture cannot express because a
- * uniform image has no structure for SSIM to preserve.
+ * A 64x64 image whose per-pixel RGB comes from a fixed formula, giving SSIM
+ * real local structure to score instead of a flat field. `perturb` runs on
+ * each formula-derived channel value before it's written, so callers can
+ * introduce a controlled, localised difference into an otherwise-identical
+ * pair of these images.
  */
-function texturedPng(invertedPixels = 0): Buffer {
+function structuredPng(
+  perturb: (pixel: number, value: number) => number,
+): Buffer {
   const png = new PNG({ width: 64, height: 64 });
-  const channel = (pixel: number, multiplier: number): number => {
-    const value = ((pixel % 256) * multiplier) % 256;
-    return pixel < invertedPixels ? 255 - value : value;
-  };
+  const channel = (pixel: number, multiplier: number): number =>
+    perturb(pixel, ((pixel % 256) * multiplier) % 256);
   for (let i = 0; i < png.data.length; i += 4) {
     const pixel = i / 4;
     png.data[i] = channel(pixel, 1);
@@ -52,34 +51,35 @@ function texturedPng(invertedPixels = 0): Buffer {
 }
 
 /**
- * A 64x64 image with the same per-pixel structure as {@link texturedPng}, but
- * `shiftedPixels` receive a SMALL uniform +30-per-channel shift instead of a
- * full 255-complement inversion. pixelmatch's `threshold` gates a YIQ-weighted
- * squared color distance (`35215 * threshold^2`, per pixelmatch's source), not
- * a raw channel delta: a +30/channel shift measures ~455 on that scale, above
- * the default threshold's (0.1) cutoff of ~352 but below a loosened one's
- * (0.2) cutoff of ~1409. That is what lets `pixelThreshold` alone flip whether
- * these two pixels count as differing, on the exact same image pair, without
- * the SSIM collapse a flat `solidPng` cannot avoid or the all-or-nothing
- * inversion `texturedPng`'s `invertedPixels` cannot un-flag at any threshold
- * in pixelmatch's valid 0-1 range. The two default offsets sit on interior
- * pixels whose generated channel values are all <= 200, so the +30 shift
- * never clips against 255: the delta pixelmatch scores is exactly the delta
- * applied.
+ * A {@link structuredPng} with `invertedPixels` of its pixels flipped to their
+ * complement. That pair is the shape issue #50 reports: a handful of
+ * genuinely different pixels sitting inside SSIM's tolerance band (~0.996 at
+ * two pixels), which a solid 2x2 fixture cannot express because a uniform
+ * image has no structure for SSIM to preserve.
+ */
+function texturedPng(invertedPixels = 0): Buffer {
+  return structuredPng((pixel, value) =>
+    pixel < invertedPixels ? 255 - value : value,
+  );
+}
+
+/**
+ * A {@link structuredPng} where `shiftedPixels` receive a SMALL uniform
+ * +30-per-channel shift instead of a full 255-complement inversion.
+ * pixelmatch's `threshold` gates a YIQ-weighted squared color distance
+ * (`35215 * threshold^2`, per pixelmatch's source), not a raw channel delta:
+ * a +30/channel shift measures ~455 on that scale, above the default
+ * threshold's (0.1) cutoff of ~352 but below a loosened one's (0.2) cutoff of
+ * ~1409 — that's what lets `pixelThreshold` alone flip whether these pixels
+ * count as differing, on the same pair, without the SSIM collapse a flat
+ * `solidPng` can't avoid or the all-or-nothing inversion `texturedPng` can't
+ * un-flag at any threshold in pixelmatch's valid 0-1 range. Callers pick
+ * offsets whose base channel values are <= 200 so the shift never clips 255.
  */
 function smallDeltaPng(shiftedPixels: number[] = []): Buffer {
-  const png = new PNG({ width: 64, height: 64 });
-  const channel = (pixel: number, multiplier: number): number =>
-    ((pixel % 256) * multiplier) % 256;
-  for (let i = 0; i < png.data.length; i += 4) {
-    const pixel = i / 4;
-    const shift = shiftedPixels.includes(pixel) ? 30 : 0;
-    png.data[i] = channel(pixel, 1) + shift;
-    png.data[i + 1] = channel(pixel, 3) + shift;
-    png.data[i + 2] = channel(pixel, 7) + shift;
-    png.data[i + 3] = 255;
-  }
-  return PNG.sync.write(png);
+  return structuredPng(
+    (pixel, value) => value + (shiftedPixels.includes(pixel) ? 30 : 0),
+  );
 }
 
 /**
