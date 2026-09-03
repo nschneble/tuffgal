@@ -365,15 +365,35 @@ describe('approveFrom: history.json promotion', () => {
     assert.equal(promoted['open::desktop']?.length, 1);
   });
 
-  it('approves cleanly with no history.json in the candidate tree (pre-history artifact)', async () => {
+  it('approves cleanly with no history.json in the candidate tree (pre-history artifact)', async (t) => {
     await writeCandidatePng('open', 'desktop');
     await writeCandidateResults();
+    const stderr = t.mock.method(process.stderr, 'write');
 
     await approveFrom(config(), { from: candidateDir });
     assert.equal(
       await pathExists(join(baselinesDir, 'history.json')),
       false,
       'no history.json is written when the candidate tree has none',
+    );
+    assert.equal(
+      stderr.mock.callCount(),
+      0,
+      'an absent history.json is silent, never warned about',
+    );
+  });
+
+  it('approves cleanly when history.json is a directory, promoting no history', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+    await mkdir(join(candidateDir, 'history.json'), { recursive: true });
+
+    const summary = await approveFrom(config(), { from: candidateDir });
+    assert.equal(summary.written, 1, 'the baseline PNG still promotes');
+    assert.equal(
+      await pathExists(join(baselinesDir, 'history.json')),
+      false,
+      'an unreadable history is dropped, not promoted',
     );
   });
 

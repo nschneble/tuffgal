@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -252,6 +252,12 @@ describe('readHistory / writeHistory: round-trip through disk', () => {
   it('returns an empty store when no file exists', async () => {
     const store = await readHistory(join(dir, 'no-such-dir', 'history.json'));
     assert.deepEqual(store, {});
+  });
+
+  it('returns an empty store when the path exists but is a directory', async () => {
+    const path = join(dir, 'is-a-dir.json');
+    await mkdir(path, { recursive: true });
+    assert.deepEqual(await readHistory(path), {});
   });
 
   it('returns an empty store for unparseable JSON', async () => {
