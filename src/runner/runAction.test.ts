@@ -28,6 +28,30 @@ function solidPng(r: number, g: number, b: number): Buffer {
 }
 
 /**
+ * A 64x64 image with enough per-pixel variation for SSIM to score it as a
+ * structured page rather than a flat field, with `invertedPixels` of its pixels
+ * flipped to their complement. That pair is the shape issue #50 reports: a
+ * handful of genuinely different pixels sitting inside SSIM's tolerance band
+ * (~0.996 at two pixels), which a solid 2x2 fixture cannot express because a
+ * uniform image has no structure for SSIM to preserve.
+ */
+function texturedPng(invertedPixels = 0): Buffer {
+  const png = new PNG({ width: 64, height: 64 });
+  const channel = (pixel: number, multiplier: number): number => {
+    const value = ((pixel % 256) * multiplier) % 256;
+    return pixel < invertedPixels ? 255 - value : value;
+  };
+  for (let i = 0; i < png.data.length; i += 4) {
+    const pixel = i / 4;
+    png.data[i] = channel(pixel, 1);
+    png.data[i + 1] = channel(pixel, 3);
+    png.data[i + 2] = channel(pixel, 7);
+    png.data[i + 3] = 255;
+  }
+  return PNG.sync.write(png);
+}
+
+/**
  * Stand-in for the slice of `Page` that an action with a single `wait` step
  * plus a screenshot touches: a no-op timer, a deterministic screenshot, and an
  * aria snapshot. The screenshot bytes are injected so tests can make the
@@ -1439,7 +1463,7 @@ describe('runAction: mask resolution', () => {
   });
 });
 
-describe('runAction: custom diff thresholds move the SSIM gate', () => {
+describe('runAction: custom diff thresholds move the pass/changed gate', () => {
   async function seedCache(config: ResolvedConfig, png: Buffer): Promise<void> {
     const cacheDir = join(config.paths.localCache, 'open');
     await mkdir(cacheDir, { recursive: true });
@@ -1450,6 +1474,7 @@ describe('runAction: custom diff thresholds move the SSIM gate', () => {
   function diffAction(diff: {
     ssimThreshold?: number;
     pixelThreshold?: number;
+    maxDiffPixels?: number;
   }): Action {
     return {
       action: 'open',
@@ -1488,6 +1513,9 @@ describe('runAction: custom diff thresholds move the SSIM gate', () => {
       breakpoint: 'desktop',
       mode: 'local',
     });
+    // Zero differing pixels, so the pixel half of the gate is satisfied and
+    // SSIM is the only condition the flip above could have moved.
+    assert.equal(result.diffPixels, 0);
     assert.equal(result.status, 'pass');
   });
 
@@ -1520,14 +1548,19 @@ describe('runAction: custom diff thresholds move the SSIM gate', () => {
       breakpoint: 'desktop',
       mode: 'local',
     });
+    // Zero differing pixels, so the pixel budget is met and SSIM is the sole
+    // reason this is `changed` — the necessary condition the pixel gate did
+    // not replace.
+    assert.equal(result.diffPixels, 0);
     assert.equal(result.status, 'changed');
   });
 
-  it('pixelThreshold tunes the reported pixel-diff metric WITHOUT moving the pass/changed gate', async () => {
-    // pixelThreshold governs the diff-PNG pixel count only; SSIM alone gates
-    // pass vs changed (see the schema doc). This pair scores SSIM ~0.984, so it
-    // is `changed` under both thresholds; but its per-pixel colour delta
-    // straddles the two pixel thresholds, so only the reported diffPixels move.
+  it('pixelThreshold tunes the reported diffPixels count', async () => {
+    // pixelThreshold sets what counts as a differing pixel, so it reaches the
+    // gate only through `diffPixels`, never on its own. This pair scores SSIM
+    // ~0.984, below the default, so it is `changed` under both thresholds; but
+    // its per-pixel colour delta straddles the two pixel thresholds, so the
+    // reported diffPixels move while the outcome does not.
     const config = await makeConfig();
     await seedCache(config, solidPng(100, 100, 100));
     const tight = await runAction({
@@ -1548,12 +1581,61 @@ describe('runAction: custom diff thresholds move the SSIM gate', () => {
       breakpoint: 'desktop',
       mode: 'local',
     });
-    // Both changed; the gate did not move…
+    // Both changed; the outcome did not move…
     assert.equal(tight.status, 'changed');
     assert.equal(loose.status, 'changed');
     // …but the tighter pixel threshold flags all four pixels while the default
     // flags none, proving the override reaches the pixel-diff metric.
     assert.equal(tight.diffPixels, 4);
     assert.equal(loose.diffPixels, 0);
+  });
+
+  it('the default zero-pixel budget catches drift SSIM alone lets through', async () => {
+    const config = await makeConfig();
+    await seedCache(config, texturedPng());
+    const result = await runAction({
+      page: fakePage(texturedPng(2)),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // The SSIM half of the gate passes, so the sole-SSIM gate this replaced
+    // would have called it a `pass` — the two differing pixels are what flip it.
+    assert.ok((result.ssimScore ?? 0) >= 0.99);
+    assert.equal(result.diffPixels, 2);
+    assert.equal(result.status, 'changed');
+  });
+
+  it('a maxDiffPixels budget that covers the count restores the pass', async () => {
+    const config = await makeConfig();
+    await seedCache(config, texturedPng());
+    const result = await runAction({
+      page: fakePage(texturedPng(2)),
+      action: diffAction({ maxDiffPixels: 2 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.equal(result.status, 'pass');
+  });
+
+  it('a maxDiffPixels budget one short of the count still reports changed', async () => {
+    const config = await makeConfig();
+    await seedCache(config, texturedPng());
+    const result = await runAction({
+      page: fakePage(texturedPng(2)),
+      action: diffAction({ maxDiffPixels: 1 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    assert.equal(result.status, 'changed');
   });
 });

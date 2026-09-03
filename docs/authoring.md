@@ -49,7 +49,7 @@ comments and no trailing commas. Field notes follow each block.
   "expect": { "anyOf": [{ "role": "status", "text": "Saved" }] },
   "mask": [{ "selector": ".timestamp" }],
   "retry": { "attempts": 2, "backoffMs": 200 },
-  "diff": { "ssimThreshold": 0.99, "pixelThreshold": 0.1 }
+  "diff": { "ssimThreshold": 0.99, "maxDiffPixels": 0, "pixelThreshold": 0.1 }
 }
 ```
 
@@ -351,24 +351,37 @@ actions to assert the error UI.
 ### `diff` thresholds (per-action tolerance)
 
 Use when a screen has unavoidable minor drift (e.g. anti-aliased icons,
-random gradient noise, sub-pixel layout shifts). Loosen `ssimThreshold` to
-accept more perceptual drift before flagging `changed`.
+random gradient noise, sub-pixel layout shifts). Raise `maxDiffPixels` to
+allow a pixel budget, or loosen `ssimThreshold` to accept more perceptual
+drift, before flagging `changed`.
 
 ```json
-"diff": { "ssimThreshold": 0.985, "pixelThreshold": 0.1 }
+"diff": { "ssimThreshold": 0.985, "maxDiffPixels": 200, "pixelThreshold": 0.1 }
 ```
+
+An action passes only when it clears **both** gates: mean SSIM at or above
+`ssimThreshold`, **and** no more than `maxDiffPixels` differing pixels.
+Either one alone lets a real regression through — SSIM's tolerance band
+absorbs small localised drift, and a pixel count alone misses a page that is
+structurally different without changing many pixels.
 
 Fields and defaults:
 
-- `ssimThreshold` defaults to `0.99`. This is the perceptual gate and the
-  primary control. Action passes when the mean SSIM is at least this high
+- `ssimThreshold` defaults to `0.99`. The perceptual gate: how much
+  structural change the whole image may accumulate
   - `1.0` is identical
   - `0.99` ≈ "no perceptible change"
   - `0.95` is noticeable
   - Under `0.9` is obvious
-- `pixelThreshold` defaults to `0.1`. This is the pixelmatch per-pixel
-  similarity used to render the diff image. It does not gate pass/changed
-  on its own. Tightens or loosens anti-aliasing tolerance in the overlay
+- `maxDiffPixels` defaults to `0`. The exactness gate: how many differing
+  pixels the image may contain. Zero demands pixel identity, which a
+  container-pinned suite can hold. Raise it for a suite that genuinely
+  cannot (unpinned local browser, host font hinting), sized to the drift you
+  have measured, not rounded up for comfort
+- `pixelThreshold` defaults to `0.1`. The pixelmatch per-pixel similarity
+  that decides what counts as a differing pixel, in both the overlay image
+  and the `maxDiffPixels` count. It gates nothing on its own, but loosening
+  it loosens `maxDiffPixels` with it
 
 Tighten or loosen deliberately and don't sprinkle it into every action.
 
@@ -535,7 +548,7 @@ For every new action:
 
 - [ ] Does the final step kick off async work? Add `expect.anyOf`
 - [ ] Does the screen render anything random or time-based? Add `mask`
-- [ ] Does the screen genuinely drift between runs? Tune `diff.ssimThreshold`
+- [ ] Does the screen genuinely drift between runs? Tune `diff.maxDiffPixels` and `diff.ssimThreshold`
 - [ ] Are hint values stable against refactors? Prefer role-based
 - [ ] Are parameters explicit in `parameters: [...]`?
 - [ ] Does the screen stagger its children's enter animation? Add a `wait` after the success step
@@ -552,7 +565,7 @@ For every new story:
 
 1. Open `paths.report/index.html`. Set the status filter to "failed" to isolate the failed stories, then read the inline error message rendered on each failed action row.
 2. Find the failed story's `tracePath` in `paths.report/results.json` and open its trace: `npx playwright show-trace <tracePath>`. Walk the timeline, inspect DOM snapshots, and watch network calls.
-3. Compare baseline / actual / diff images in the report's screenshot panel. The diff engine flagged something, so check whether it's a real regression or new drift to absorb with `mask` or `ssimThreshold`.
+3. Compare baseline / actual / diff images in the report's screenshot panel. The diff engine flagged something, so check whether it's a real regression or new drift to absorb with `mask`, `maxDiffPixels`, or `ssimThreshold`.
 4. If the locator missed, re-read the hint precedence list above and tighten it.
 
 ## Things Tuffgal will not do

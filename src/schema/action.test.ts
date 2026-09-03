@@ -165,6 +165,25 @@ describe('diff thresholds: pixelThreshold / ssimThreshold in 0 to 1', () => {
   }
 });
 
+describe('diff maxDiffPixels: a count, not a 0-to-1 ratio', () => {
+  const cases: Array<[string, number, boolean]> = [
+    ['accepts 0 (exact pixel identity)', 0, true],
+    ['accepts a count above 1', 500, true],
+    ['rejects a negative budget', -1, false],
+  ];
+  for (const [label, maxDiffPixels, ok] of cases) {
+    it(label, () => {
+      assert.equal(parseAction({ diff: { maxDiffPixels } }).success, ok);
+    });
+  }
+
+  it('defaults to 0 when diff is present without it', () => {
+    const parsed = parseAction({ diff: { ssimThreshold: 0.99 } });
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.data?.diff?.maxDiffPixels, 0);
+  });
+});
+
 describe('hint role: enum membership', () => {
   it('accepts a member of the role enum', () => {
     assert.equal(hintSchema.safeParse({ role: 'button' }).success, true);

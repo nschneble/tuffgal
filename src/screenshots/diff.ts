@@ -41,9 +41,9 @@ export interface ScoredDiff {
 /**
  * Diffing is split into two phases so the common case stays cheap:
  *
- *   1. {@link scoreDiff}: the gate. Computes SSIM (the pass/changed
- *      decision) plus the pixel metrics reported on every outcome
- *      (`diffPixels`, `diffRatio`). It runs pixelmatch in count-only mode
+ *   1. {@link scoreDiff}: the gate. Computes the two metrics the pass/changed
+ *      decision reads, `ssimScore` and `diffPixels`, plus the `diffRatio`
+ *      reported alongside them. It runs pixelmatch in count-only mode
  *      (no output buffer) and never encodes a diff image. It also returns the
  *      {@link DecodedPair} it read, so the changed branch can render its
  *      overlay without a second decode.
@@ -69,7 +69,7 @@ export function scoreDiff(
   const { baselinePng, actualPng } = decoded;
   // Count-only: passing `undefined` as the output buffer makes pixelmatch
   // tally differing pixels without allocating or filling an overlay. The
-  // metric feeds `diffPixels`/`diffRatio` reporting, not a written image.
+  // tally feeds `diffPixels`/`diffRatio`, not a written image.
   const diffPixels = pixelmatch(
     baselinePng.data,
     actualPng.data,

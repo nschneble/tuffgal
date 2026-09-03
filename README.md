@@ -102,8 +102,9 @@ Precedence is `1` > `3` > `2` > `0`. Local mode only ever exits `1` or `0`.
 - DAG scheduler with `needs`/`produces` labels and parallel workers
 - CI-owned baselines: CI is the sole writer, local runs are advisory self-diff,
   approval flows through a CI candidate tree + environment manifest
-- SSIM-gated visual diff + pixelmatch overlay + a11y-tree snapshots (in CI an
-  a11y-tree drift also flips a pixel-passing action to `changed`)
+- Visual diff gated on SSIM **and** a differing-pixel budget, plus a pixelmatch
+  overlay and a11y-tree snapshots (in CI an a11y-tree drift also flips a
+  pixel-passing action to `changed`)
 - Trace zip on failure (Playwright trace viewer)
 - Clock freeze (`page.clock.install`)
 - Storage-state persistence across stories
