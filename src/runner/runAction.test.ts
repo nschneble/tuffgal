@@ -28,19 +28,18 @@ function solidPng(r: number, g: number, b: number): Buffer {
 }
 
 /**
- * A 64x64 image with enough per-pixel variation for SSIM to score it as a
- * structured page rather than a flat field, with `invertedPixels` of its pixels
- * flipped to their complement. That pair is the shape issue #50 reports: a
- * handful of genuinely different pixels sitting inside SSIM's tolerance band
- * (~0.996 at two pixels), which a solid 2x2 fixture cannot express because a
- * uniform image has no structure for SSIM to preserve.
+ * A 64x64 image whose per-pixel RGB comes from a fixed formula, giving SSIM
+ * real local structure to score instead of a flat field. `perturb` runs on
+ * each formula-derived channel value before it's written, so callers can
+ * introduce a controlled, localised difference into an otherwise-identical
+ * pair of these images.
  */
-function texturedPng(invertedPixels = 0): Buffer {
+function structuredPng(
+  perturb: (pixel: number, value: number) => number,
+): Buffer {
   const png = new PNG({ width: 64, height: 64 });
-  const channel = (pixel: number, multiplier: number): number => {
-    const value = ((pixel % 256) * multiplier) % 256;
-    return pixel < invertedPixels ? 255 - value : value;
-  };
+  const channel = (pixel: number, multiplier: number): number =>
+    perturb(pixel, ((pixel % 256) * multiplier) % 256);
   for (let i = 0; i < png.data.length; i += 4) {
     const pixel = i / 4;
     png.data[i] = channel(pixel, 1);
@@ -49,6 +48,38 @@ function texturedPng(invertedPixels = 0): Buffer {
     png.data[i + 3] = 255;
   }
   return PNG.sync.write(png);
+}
+
+/**
+ * A {@link structuredPng} with `invertedPixels` of its pixels flipped to their
+ * complement. That pair is the shape issue #50 reports: a handful of
+ * genuinely different pixels sitting inside SSIM's tolerance band (~0.996 at
+ * two pixels), which a solid 2x2 fixture cannot express because a uniform
+ * image has no structure for SSIM to preserve.
+ */
+function texturedPng(invertedPixels = 0): Buffer {
+  return structuredPng((pixel, value) =>
+    pixel < invertedPixels ? 255 - value : value,
+  );
+}
+
+/**
+ * A {@link structuredPng} where `shiftedPixels` receive a SMALL uniform
+ * +30-per-channel shift instead of a full 255-complement inversion.
+ * pixelmatch's `threshold` gates a YIQ-weighted squared color distance
+ * (`35215 * threshold^2`, per pixelmatch's source), not a raw channel delta:
+ * a +30/channel shift measures ~455 on that scale, above the default
+ * threshold's (0.1) cutoff of ~352 but below a loosened one's (0.2) cutoff of
+ * ~1409 — that's what lets `pixelThreshold` alone flip whether these pixels
+ * count as differing, on the same pair, without the SSIM collapse a flat
+ * `solidPng` can't avoid or the all-or-nothing inversion `texturedPng` can't
+ * un-flag at any threshold in pixelmatch's valid 0-1 range. Callers pick
+ * offsets whose base channel values are <= 200 so the shift never clips 255.
+ */
+function smallDeltaPng(shiftedPixels: number[] = []): Buffer {
+  return structuredPng(
+    (pixel, value) => value + (shiftedPixels.includes(pixel) ? 30 : 0),
+  );
 }
 
 /**
@@ -1637,5 +1668,45 @@ describe('runAction: custom diff thresholds move the pass/changed gate', () => {
       mode: 'local',
     });
     assert.equal(result.status, 'changed');
+  });
+
+  it('a tight pixelThreshold counts the shifted pixels as differing, above the default maxDiffPixels budget', async () => {
+    const config = await makeConfig();
+    // Two pixels shifted by a small uniform delta: over the default
+    // pixelThreshold's match tolerance, so both count as differing.
+    await seedCache(config, smallDeltaPng());
+    const result = await runAction({
+      page: fakePage(smallDeltaPng([1207, 2820])),
+      action: action('open'),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // SSIM stays well clear of the default threshold throughout; diffPixels
+    // alone is what this test moves.
+    assert.ok((result.ssimScore ?? 0) >= 0.99);
+    assert.equal(result.diffPixels, 2);
+    assert.equal(result.status, 'changed');
+  });
+
+  it('loosening pixelThreshold on the SAME pair drives diffPixels to 0 and flips changed into pass', async () => {
+    const config = await makeConfig();
+    await seedCache(config, smallDeltaPng());
+    const result = await runAction({
+      page: fakePage(smallDeltaPng([1207, 2820])),
+      action: diffAction({ pixelThreshold: 0.2 }),
+      parameters: {},
+      storyFile: 'home.json',
+      config,
+      breakpoint: 'desktop',
+      mode: 'local',
+    });
+    // Same shift, same SSIM band as the tight run above, but now under the
+    // loosened threshold's match tolerance: pixelmatch stops counting it.
+    assert.ok((result.ssimScore ?? 0) >= 0.99);
+    assert.equal(result.diffPixels, 0);
+    assert.equal(result.status, 'pass');
   });
 });

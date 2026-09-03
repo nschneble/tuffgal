@@ -19,6 +19,10 @@ History persists in the per-machine `paths.localCache` in local mode
 `approve --from`, same cadence as the environment manifest). Retention is
 capped at 20 runs per action+breakpoint.
 
+`diff.ssimVariant`, which of ssim.js's four SSIM implementations
+(`fast`/`original`/`bezkrovny`/`weber`) scores a comparison. Defaults to
+`bezkrovny`, so existing suites score unchanged.
+
 ## [0.3.0-alpha.1] – 2026-09-03
 
 ### Added

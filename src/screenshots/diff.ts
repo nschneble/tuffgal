@@ -1,6 +1,9 @@
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
-import { ssim as computeSsim } from 'ssim.js';
+import { ssim as computeSsim, type Options as SsimOptions } from 'ssim.js';
+
+/** The SSIM implementations ssim.js supports; see its `Options['ssim']`. */
+export type SsimVariant = SsimOptions['ssim'];
 
 export interface DiffScore {
   diffPixels: number;
@@ -64,6 +67,7 @@ export function scoreDiff(
   baseline: Buffer,
   actual: Buffer,
   pixelThreshold: number,
+  ssimVariant: SsimVariant = 'bezkrovny',
 ): ScoredDiff {
   const decoded = decodePair(baseline, actual);
   const { baselinePng, actualPng } = decoded;
@@ -98,7 +102,7 @@ export function scoreDiff(
       width: actualPng.width,
       height: actualPng.height,
     },
-    { ssim: 'bezkrovny' },
+    { ssim: ssimVariant },
   );
   return {
     score: {
