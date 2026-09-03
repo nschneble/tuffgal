@@ -6,22 +6,16 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
+_Nothing just yet_
+
+## [0.3.1-alpha.1] – 2026-09-03
+
 ### Added
 
-Per-action `diffPixels`/`diffRatio` history, retained across runs and
-surfaced as a compact trend line in the HTML report. Lets a capture parked
-near the tolerance line for many consecutive runs show up as a standing
-condition instead of a single, easy-to-miss snapshot.
-
-History persists in the per-machine `paths.localCache` in local mode
-(read/written every run, no gate) and in the committed
-`paths.baselines/history.json` in CI mode (promoted only via
-`approve --from`, same cadence as the environment manifest). Retention is
-capped at 20 runs per action+breakpoint.
-
-`diff.ssimVariant`, which of ssim.js's four SSIM implementations
-(`fast`/`original`/`bezkrovny`/`weber`) scores a comparison. Defaults to
-`bezkrovny`, so existing suites score unchanged.
+- Per-action `diffPixels`/`diffRatio` history, retained across runs and
+  surfaced as a compact trend line in the HTML report
+- History persists in the per-machine `paths.localCache` in local mode
+  and in the committed `paths.baselines/history.json` in CI mode
 
 ## [0.3.0-alpha.1] – 2026-09-03
 
@@ -391,7 +385,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.3.0-alpha.1...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.3.1-alpha.1...HEAD
+[0.3.1-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.3.1-alpha.1
 [0.3.0-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.3.0-alpha.1
 [0.2.2-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.2-alpha.1
 [0.2.1-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.1-alpha.1
