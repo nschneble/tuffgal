@@ -319,6 +319,52 @@ describe('approveFrom: history.json promotion', () => {
     assert.deepEqual(promoted, history);
   });
 
+  it('merges into the committed history instead of overwriting it -- an out-of-order approve must not drop an untouched action`s series', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+
+    // Simulate an already-promoted entry for an action this candidate never
+    // touched (e.g. another PR's approve landed first).
+    await mkdir(baselinesDir, { recursive: true });
+    await writeFile(
+      join(baselinesDir, 'history.json'),
+      JSON.stringify({
+        'checkout::desktop': [
+          {
+            finishedAt: '2026-06-10T12:00:00.000Z',
+            diffPixels: 0,
+            diffRatio: 0,
+          },
+        ],
+      }),
+      'utf8',
+    );
+    await writeFile(
+      join(candidateDir, 'history.json'),
+      JSON.stringify({
+        'open::desktop': [
+          {
+            finishedAt: '2026-06-11T12:00:00.000Z',
+            diffPixels: 2,
+            diffRatio: 0.0002,
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    await approveFrom(config(), { from: candidateDir });
+    const promoted = JSON.parse(
+      await readFile(join(baselinesDir, 'history.json'), 'utf8'),
+    ) as Record<string, unknown[]>;
+    assert.equal(
+      promoted['checkout::desktop']?.length,
+      1,
+      'the untouched action`s already-promoted series must survive',
+    );
+    assert.equal(promoted['open::desktop']?.length, 1);
+  });
+
   it('approves cleanly with no history.json in the candidate tree (pre-history artifact)', async () => {
     await writeCandidatePng('open', 'desktop');
     await writeCandidateResults();

@@ -24,6 +24,7 @@ import {
 import {
   HISTORY_FILENAME,
   isHistoryStoreShape,
+  readHistory,
   writeHistory,
   type HistoryStore,
 } from './history.ts';
@@ -147,7 +148,14 @@ export async function approveFrom(
   }
   await writeManifest(config.paths.baselines, environment);
   if (history) {
-    await writeHistory(join(config.paths.baselines, HISTORY_FILENAME), history);
+    // Merge, don't overwrite: an out-of-order approval whose candidate never
+    // touched some action must not drop that action's already-promoted
+    // series. The candidate's own entries win per key (they're already the
+    // up-to-date, capped series for what THIS run touched); every other
+    // key's committed history passes through untouched.
+    const target = join(config.paths.baselines, HISTORY_FILENAME);
+    const committed = await readHistory(target);
+    await writeHistory(target, { ...committed, ...history });
   }
 
   let pruned = 0;
@@ -283,16 +291,7 @@ function extractEnvironment(result: RunResult): EnvironmentManifest {
   return actual;
 }
 
-/**
- * Reads + validates `<candidateDir>/history.json`, the diff-history store a
- * `run --ci` writes into the candidate tree (see `runner/history.ts`).
- * Unlike `extractEnvironment`, this NEVER aborts the approve:
- *   - Absent: an older candidate tree from a pre-history tuffgal. Nothing to
- *     promote; the baselines/manifest promotion proceeds unaffected.
- *   - Present but malformed: history is advisory, it never gates pixel
- *     correctness (unlike the environment block), so a bad file is dropped
- *     with a warning rather than failing a legitimate baseline promotion.
- */
+/** Unlike `extractEnvironment`, this never aborts the approve: history is advisory, so absent or malformed just drops promotion for it. */
 async function extractHistory(
   candidateDir: string,
 ): Promise<HistoryStore | undefined> {
