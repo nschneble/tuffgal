@@ -196,10 +196,14 @@ async function main(): Promise<void> {
     BP.desktop.breakpointHeight,
     { shift: 10 },
   );
+  const pixelThreshold = 0.1;
   const settingsDiff = scoreDiff(settingsBase, settingsActual, {
-    pixelThreshold: 0.1,
+    pixelThreshold,
   });
-  const settingsOverlay = renderDiffOverlay(settingsDiff.decoded, 0.1);
+  const settingsOverlay = renderDiffOverlay(
+    settingsDiff.decoded,
+    pixelThreshold,
+  );
 
   const actual = manifest();
   const expected = clean

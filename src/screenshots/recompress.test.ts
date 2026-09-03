@@ -47,6 +47,8 @@ function pixelsOf(png: Buffer): Buffer {
   return PNG.sync.read(png).data;
 }
 
+const DEFAULT_OPTIONS = { pixelThreshold: 0.1 };
+
 describe('recompressPng: losslessness', () => {
   it('decodes pixel-identical to the input (round-trip)', () => {
     const input = noisyPng(64, 48);
@@ -134,7 +136,7 @@ describe('writeDurablePng: recompress integration', () => {
       );
       assert.deepEqual(pixelsOf(readBack), pixelsOf(source));
 
-      const { score } = scoreDiff(readBack, source, { pixelThreshold: 0.1 });
+      const { score } = scoreDiff(readBack, source, DEFAULT_OPTIONS);
       assert.equal(score.diffPixels, 0);
       assert.ok(score.ssimScore >= 0.9999);
     } finally {
