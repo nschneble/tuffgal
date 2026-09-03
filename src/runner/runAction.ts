@@ -1,7 +1,12 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Locator, Page } from 'playwright';
 import { parse as parseYaml } from 'yaml';
-import type { Action, Hint, Step } from '../schema/action.ts';
+import {
+  type Action,
+  DIFF_DEFAULTS,
+  type Hint,
+  type Step,
+} from '../schema/action.ts';
 import type { ActionResult, ActionStatus } from '../schema/result.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { capturePage } from '../screenshots/capture.ts';
@@ -440,10 +445,13 @@ async function captureAndCompare(
       : undefined;
 
   try {
-    const pixelThreshold = action.diff?.pixelThreshold ?? 0.1;
-    const ssimThreshold = action.diff?.ssimThreshold ?? 0.99;
-    const ssimVariant = action.diff?.ssimVariant ?? 'bezkrovny';
-    const maxDiffPixels = action.diff?.maxDiffPixels ?? 0;
+    // per-field, mirroring how the schema fills a partial diff block
+    const {
+      pixelThreshold = DIFF_DEFAULTS.pixelThreshold,
+      ssimThreshold = DIFF_DEFAULTS.ssimThreshold,
+      ssimVariant = DIFF_DEFAULTS.ssimVariant,
+      maxDiffPixels = DIFF_DEFAULTS.maxDiffPixels,
+    } = action.diff ?? {};
     // Score first (SSIM plus the differing-pixel count) without encoding
     // the overlay. The red-highlight diff image is expensive to encode and is
     // discarded on a pass, so it is rendered only on the changed branch below.

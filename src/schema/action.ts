@@ -249,3 +249,5 @@ export const actionSchema = z.object({
 });
 
 export type Action = z.infer<typeof actionSchema>;
+
+export const DIFF_DEFAULTS = actionSchema.shape.diff.unwrap().parse({});
