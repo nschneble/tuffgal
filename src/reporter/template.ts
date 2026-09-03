@@ -851,21 +851,7 @@ function renderDiffStats(action: ActionResult, diffStatsId: string): string {
   return `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">${label}</span></p>`;
 }
 
-/**
- * Compact plain-text trend of this action+breakpoint's recent
- * diffPixels/diffRatio history (`action.history`, oldest to newest,
- * populated by `runner/history.ts`). Rendered only when there are 2+
- * entries; a single entry duplicates {@link renderDiffStats}'s own line with
- * no trend to show.
- *
- * The percentages are ordinary visible text, never conveyed by color alone
- * (WCAG 1.4.1 is satisfied trivially: there is no hue coding at all). No
- * `role="img"`/`aria-label` wiring is needed either, since this is not a
- * graphic; the visible text IS the accessible content. The one sr-only span
- * adds only the run count/ordering the bare `·`-joined list can't otherwise
- * convey to assistive tech, not a second, divergent restatement of the same
- * numbers.
- */
+/** Rendered only at 2+ entries; a single entry duplicates {@link renderDiffStats}'s own line with no trend to show. */
 function renderDiffHistory(action: ActionResult): string {
   const history = action.history;
   if (!history || history.length < 2) {
