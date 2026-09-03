@@ -1621,11 +1621,11 @@ describe('runAction: custom diff thresholds move the pass/changed gate', () => {
     assert.equal(loose.diffPixels, 0);
   });
 
-  it('the default zero-pixel budget catches drift SSIM alone lets through', async () => {
+  it('a single differing pixel is changed, pinning the default budget at 0', async () => {
     const config = await makeConfig();
     await seedCache(config, texturedPng());
     const result = await runAction({
-      page: fakePage(texturedPng(2)),
+      page: fakePage(texturedPng(1)),
       action: action('open'),
       parameters: {},
       storyFile: 'home.json',
@@ -1634,9 +1634,9 @@ describe('runAction: custom diff thresholds move the pass/changed gate', () => {
       mode: 'local',
     });
     // The SSIM half of the gate passes, so the sole-SSIM gate this replaced
-    // would have called it a `pass` — the two differing pixels are what flip it.
+    // would have called it a `pass`; the differing pixel is what flips it.
     assert.ok((result.ssimScore ?? 0) >= 0.99);
-    assert.equal(result.diffPixels, 2);
+    assert.equal(result.diffPixels, 1);
     assert.equal(result.status, 'changed');
   });
 

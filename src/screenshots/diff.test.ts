@@ -130,7 +130,7 @@ describe('scoreDiff: ssim variant selection', () => {
     assert.notEqual(
       weberScore.ssimScore,
       defaultScore.ssimScore,
-      `expected weber and bezkrovny to disagree on a structured fixture, both scored ${defaultScore.ssimScore}`,
+      `expected weber and ${DEFAULT_SSIM_VARIANT} to disagree on a structured fixture, both scored ${defaultScore.ssimScore}`,
     );
   });
 });

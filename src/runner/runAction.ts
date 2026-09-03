@@ -445,7 +445,7 @@ async function captureAndCompare(
       : undefined;
 
   try {
-    // per-field, mirroring how the schema fills a partial diff block
+    // per-field: only diffAction's unvalidated test fixture is partial
     const {
       pixelThreshold = DIFF_DEFAULTS.pixelThreshold,
       ssimThreshold = DIFF_DEFAULTS.ssimThreshold,
