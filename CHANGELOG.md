@@ -8,6 +8,17 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Added
 
+Per-action `diffPixels`/`diffRatio` history, retained across runs and
+surfaced as a compact trend line in the HTML report. Lets a capture parked
+near the tolerance line for many consecutive runs show up as a standing
+condition instead of a single, easy-to-miss snapshot.
+
+History persists in the per-machine `paths.localCache` in local mode
+(read/written every run, no gate) and in the committed
+`paths.baselines/history.json` in CI mode (promoted only via
+`approve --from`, same cadence as the environment manifest). Retention is
+capped at 20 runs per action+breakpoint.
+
 `diff.ssimVariant`, which of ssim.js's four SSIM implementations
 (`fast`/`original`/`bezkrovny`/`weber`) scores a comparison. Defaults to
 `bezkrovny`, so existing suites score unchanged.

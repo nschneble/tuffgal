@@ -47,6 +47,13 @@ import {
   type CapturedBrowser,
   type EnvironmentManifest,
 } from './manifest.ts';
+import {
+  HISTORY_FILENAME,
+  applyRunHistory,
+  historyPathFor,
+  readHistory,
+  writeHistory,
+} from './history.ts';
 import type { DeletedBaseline } from '../schema/result.ts';
 
 export interface RunCliOptions {
@@ -248,30 +255,38 @@ export async function runAll(
         version: browser.version(),
       }),
     );
+    const finishedAtIso = finishedAt.toISOString();
+    const historyReadPath = historyPathFor(config, mode);
+    const baseHistory = await readHistory(historyReadPath);
+    const { store: updatedHistory, results: resultsWithHistory } =
+      applyRunHistory(baseHistory, results, finishedAtIso);
     const runResult: RunResult = {
       startedAt: startedAt.toISOString(),
-      finishedAt: finishedAt.toISOString(),
+      finishedAt: finishedAtIso,
       durationMs: finishedAt.getTime() - startedAt.getTime(),
       mode,
       totals,
       environment,
       customCoverage: { screens, flows },
       deleted,
-      stories: results,
+      stories: resultsWithHistory,
     };
     const reportPath = await writeReport(
       config.paths.report,
       runResult,
       config.interactiveMode,
     );
-    // In CI mode the `<report>/candidates/` tree is the self-contained approval
-    // artifact. Copy the run's `results.json` beside the candidate renders so a
-    // downstream `approve --from <candidates>` has the outcome data (which
-    // actions are new/changed, and later the environment/deleted blocks) without
-    // needing the rest of the report dir. Only meaningful in CI mode, where the
-    // candidate tree exists.
-    if (mode === 'ci') {
+    if (mode === 'local') {
+      // Self-managed every run, no approval gate, like the baseline cache.
+      await writeHistory(historyReadPath, updatedHistory);
+    } else {
+      // `run --ci` never writes `paths.baselines` (docs/ci.md "CI owns the
+      // baselines"); both land in the candidate tree for `approve --from`.
       await copyResultsIntoCandidates(config.paths.report);
+      await writeHistory(
+        join(candidatesDir(config.paths.report), HISTORY_FILENAME),
+        updatedHistory,
+      );
     }
     writeRunSummary(passSummaries, reportPath);
     if (coverage) {

@@ -293,6 +293,122 @@ describe('approveFrom: happy path', () => {
   });
 });
 
+describe('approveFrom: history.json promotion', () => {
+  it('promotes a well-formed candidate history.json into baselines', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+    const history = {
+      'open::desktop': [
+        {
+          finishedAt: '2026-06-11T12:00:00.000Z',
+          diffPixels: 2,
+          diffRatio: 0.0002,
+        },
+      ],
+    };
+    await writeFile(
+      join(candidateDir, 'history.json'),
+      JSON.stringify(history),
+      'utf8',
+    );
+
+    await approveFrom(config(), { from: candidateDir });
+    const promoted = JSON.parse(
+      await readFile(join(baselinesDir, 'history.json'), 'utf8'),
+    );
+    assert.deepEqual(promoted, history);
+  });
+
+  it('merges into the committed history instead of overwriting it -- an out-of-order approve must not drop an untouched action`s series', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+
+    // Simulate an already-promoted entry for an action this candidate never
+    // touched (e.g. another PR's approve landed first).
+    await mkdir(baselinesDir, { recursive: true });
+    await writeFile(
+      join(baselinesDir, 'history.json'),
+      JSON.stringify({
+        'checkout::desktop': [
+          {
+            finishedAt: '2026-06-10T12:00:00.000Z',
+            diffPixels: 0,
+            diffRatio: 0,
+          },
+        ],
+      }),
+      'utf8',
+    );
+    await writeFile(
+      join(candidateDir, 'history.json'),
+      JSON.stringify({
+        'open::desktop': [
+          {
+            finishedAt: '2026-06-11T12:00:00.000Z',
+            diffPixels: 2,
+            diffRatio: 0.0002,
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    await approveFrom(config(), { from: candidateDir });
+    const promoted = JSON.parse(
+      await readFile(join(baselinesDir, 'history.json'), 'utf8'),
+    ) as Record<string, unknown[]>;
+    assert.equal(
+      promoted['checkout::desktop']?.length,
+      1,
+      'the untouched action`s already-promoted series must survive',
+    );
+    assert.equal(promoted['open::desktop']?.length, 1);
+  });
+
+  it('approves cleanly with no history.json in the candidate tree (pre-history artifact)', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+
+    await approveFrom(config(), { from: candidateDir });
+    assert.equal(
+      await pathExists(join(baselinesDir, 'history.json')),
+      false,
+      'no history.json is written when the candidate tree has none',
+    );
+  });
+
+  it('does not fail the whole approve on a malformed candidate history.json', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+    await writeFile(join(candidateDir, 'history.json'), '{ not json', 'utf8');
+
+    const summary = await approveFrom(config(), { from: candidateDir });
+    assert.equal(summary.written, 1, 'the baseline PNG still promotes');
+    assert.equal(
+      await pathExists(join(baselinesDir, 'history.json')),
+      false,
+      'the malformed history is dropped, not promoted',
+    );
+  });
+
+  it('does not fail the whole approve on a well-formed-JSON but wrong-shaped history.json', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+    await writeFile(
+      join(candidateDir, 'history.json'),
+      JSON.stringify({ 'open::desktop': 'not-an-array' }),
+      'utf8',
+    );
+
+    await approveFrom(config(), { from: candidateDir });
+    assert.equal(
+      await pathExists(join(baselinesDir, 'history.json')),
+      false,
+      'a wrong-shaped store is dropped, not promoted',
+    );
+  });
+});
+
 describe('approveFrom: prune', () => {
   it('deletes orphaned baselines listed in results.deleted', async () => {
     // Seed an orphan (PNG + companion) plus a live baseline that must survive.

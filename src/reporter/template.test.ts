@@ -2261,3 +2261,115 @@ describe('renderStory: status marker + sr-only word per tier', () => {
     );
   });
 });
+
+describe('renderDiffHistory: per-action diff-history trend', () => {
+  function historyResult(history?: ActionResult['history']) {
+    return makeRunResult({
+      totals: {
+        stories: 1,
+        passed: 1,
+        changed: 0,
+        failed: 0,
+        new: 0,
+        deleted: 0,
+      },
+      stories: [
+        makeStory({
+          status: 'pass',
+          actions: [
+            makeAction({
+              action: 'visit-home',
+              status: 'pass',
+              diffPixels: 3,
+              diffRatio: 0.0004,
+              actualPath: '/fake/report/dir/shots/home.actual.png',
+              baselinePath: '/fake/report/dir/shots/home.baseline.png',
+              history,
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
+  it('renders nothing when the action carries no history', () => {
+    const html = renderReport(historyResult(undefined), REPORT_DIR);
+    assert.ok(
+      !html.includes('diff-history'),
+      'no history field means no diff-history markup at all',
+    );
+  });
+
+  it('renders nothing for a single-entry history (nothing to trend)', () => {
+    const html = renderReport(
+      historyResult([
+        {
+          finishedAt: '2026-06-11T12:00:00.000Z',
+          diffPixels: 3,
+          diffRatio: 0.0004,
+        },
+      ]),
+      REPORT_DIR,
+    );
+    assert.ok(
+      !html.includes('diff-history'),
+      'a lone entry duplicates the diff-stats line above with no trend',
+    );
+  });
+
+  it('renders the joined percentages plus an sr-only run-count clarifier for 2+ entries', () => {
+    const html = renderReport(
+      historyResult([
+        {
+          finishedAt: '2026-06-09T12:00:00.000Z',
+          diffPixels: 2,
+          diffRatio: 0.0002,
+        },
+        {
+          finishedAt: '2026-06-10T12:00:00.000Z',
+          diffPixels: 5,
+          diffRatio: 0.0005,
+        },
+        {
+          finishedAt: '2026-06-11T12:00:00.000Z',
+          diffPixels: 3,
+          diffRatio: 0.0004,
+        },
+      ]),
+      REPORT_DIR,
+    );
+    assert.ok(
+      html.includes(
+        '<p class="diff-history"><span class="label">history</span> 0.02% · 0.05% · 0.04%<span class="sr-only"> (3 runs, oldest to newest)</span></p>',
+      ),
+      'the trend line lists every entry, oldest to newest, plus the sr-only clarifier',
+    );
+  });
+
+  it('renders the visible percentages as ordinary text, not inside an aria-hidden wrapper', () => {
+    const html = renderReport(
+      historyResult([
+        {
+          finishedAt: '2026-06-10T12:00:00.000Z',
+          diffPixels: 2,
+          diffRatio: 0.0002,
+        },
+        {
+          finishedAt: '2026-06-11T12:00:00.000Z',
+          diffPixels: 3,
+          diffRatio: 0.0004,
+        },
+      ]),
+      REPORT_DIR,
+    );
+    const historyLine = html
+      .split('\n')
+      .find((line) => line.includes('class="diff-history"'));
+    assert.ok(historyLine, 'the diff-history line renders');
+    assert.ok(
+      !historyLine!.includes('aria-hidden="true">0.02%') &&
+        !historyLine!.includes('aria-hidden="true">0.04%'),
+      'the visible percentages are not wrapped in an aria-hidden span',
+    );
+  });
+});

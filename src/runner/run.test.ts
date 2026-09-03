@@ -576,6 +576,176 @@ describe('runAll: each breakpoint pass renders at its own viewport', () => {
   });
 });
 
+describe('runAll: diff history accumulates across real runs', () => {
+  it('carries no history on the first (new) run, then a growing series once a baseline exists', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tuffgal-runall-history-'));
+    const actionsDir = join(root, 'actions');
+    const storiesDir = join(root, 'stories');
+    await mkdir(actionsDir, { recursive: true });
+    await mkdir(storiesDir, { recursive: true });
+    await writeFile(
+      join(actionsDir, 'open.json'),
+      JSON.stringify({ action: 'open', steps: [{ kind: 'wait', ms: 0 }] }),
+    );
+    await writeFile(
+      join(storiesDir, 'home.json'),
+      JSON.stringify({ story: 'home', actions: [{ action: 'open' }] }),
+    );
+
+    const config = {
+      baseUrl: 'http://localhost:3000',
+      defaultTimeoutMs: 1000,
+      frozenTime: '2026-01-15T12:00:00.000Z',
+      captureMode: 'viewport',
+      interactiveMode: false,
+      breakpoints: [{ name: 'desktop', width: 1280, height: 800 }],
+      paths: {
+        actions: actionsDir,
+        stories: storiesDir,
+        baselines: join(root, 'baselines'),
+        localCache: join(root, 'cache'),
+        report: join(root, 'report'),
+        authState: join(root, 'auth'),
+      },
+    } as unknown as ResolvedConfig;
+
+    // Every run captures the SAME screenshot, so once a baseline exists every
+    // later run is a clean `pass` (diffPixels 0), qualifying for history.
+    const browser = {
+      async newContext(): Promise<BrowserContext> {
+        return fakeContext(fakePage(solidPng(5, 5, 5)));
+      },
+      version(): string {
+        return '131.0.0.0';
+      },
+      async close(): Promise<void> {},
+    } as unknown as Browser;
+    const launchBrowser = async (): Promise<Browser> => browser;
+
+    const run1 = await runAll(
+      config,
+      { headed: false, mode: 'local' },
+      launchBrowser,
+    );
+    assert.equal(run1.stories[0]!.actions[0]!.status, 'new');
+    assert.equal(
+      run1.stories[0]!.actions[0]!.history,
+      undefined,
+      'a new baseline has nothing to trend yet',
+    );
+
+    const run2 = await runAll(
+      config,
+      { headed: false, mode: 'local' },
+      launchBrowser,
+    );
+    assert.equal(run2.stories[0]!.actions[0]!.status, 'pass');
+    assert.equal(run2.stories[0]!.actions[0]!.history?.length, 1);
+
+    const run3 = await runAll(
+      config,
+      { headed: false, mode: 'local' },
+      launchBrowser,
+    );
+    assert.equal(run3.stories[0]!.actions[0]!.status, 'pass');
+    assert.equal(run3.stories[0]!.actions[0]!.history?.length, 2);
+
+    // Persisted to the local cache, not just held in memory for one run.
+    const cached = JSON.parse(
+      await readFile(join(root, 'cache', 'history.json'), 'utf8'),
+    ) as Record<string, unknown[]>;
+    assert.equal(cached['open::desktop']?.length, 2);
+  });
+});
+
+describe('runAll: CI mode never writes history into paths.baselines', () => {
+  it('reads the committed baseline history, writes the appended series only into the candidate tree', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tuffgal-runall-ci-history-'));
+    const actionsDir = join(root, 'actions');
+    const storiesDir = join(root, 'stories');
+    await mkdir(actionsDir, { recursive: true });
+    await mkdir(storiesDir, { recursive: true });
+    await writeFile(
+      join(actionsDir, 'open.json'),
+      JSON.stringify({ action: 'open', steps: [{ kind: 'wait', ms: 0 }] }),
+    );
+    await writeFile(
+      join(storiesDir, 'home.json'),
+      JSON.stringify({ story: 'home', actions: [{ action: 'open' }] }),
+    );
+
+    const config = {
+      baseUrl: 'http://localhost:3000',
+      defaultTimeoutMs: 1000,
+      frozenTime: '2026-01-15T12:00:00.000Z',
+      captureMode: 'viewport',
+      interactiveMode: false,
+      breakpoints: [{ name: 'desktop', width: 1280, height: 800 }],
+      paths: {
+        actions: actionsDir,
+        stories: storiesDir,
+        baselines: join(root, 'baselines'),
+        localCache: join(root, 'cache'),
+        report: join(root, 'report'),
+        authState: join(root, 'auth'),
+      },
+    } as unknown as ResolvedConfig;
+
+    // Seed a committed baseline (+ a11y) so the run reports a clean `pass`,
+    // and one pre-existing history entry to prove CI mode READS paths.baselines.
+    const baselineDir = join(config.paths.baselines, 'open');
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(join(baselineDir, 'desktop.png'), solidPng(5, 5, 5));
+    await writeFile(join(baselineDir, 'desktop.a11y.yaml'), '- document');
+    await writeFile(
+      join(config.paths.baselines, 'history.json'),
+      JSON.stringify({
+        'open::desktop': [
+          {
+            finishedAt: '2026-01-01T00:00:00.000Z',
+            diffPixels: 0,
+            diffRatio: 0,
+          },
+        ],
+      }),
+    );
+
+    const browser = {
+      async newContext(): Promise<BrowserContext> {
+        return fakeContext(fakePage(solidPng(5, 5, 5)));
+      },
+      version(): string {
+        return '131.0.0.0';
+      },
+      async close(): Promise<void> {},
+    } as unknown as Browser;
+    const launchBrowser = async (): Promise<Browser> => browser;
+
+    const run = await runAll(
+      config,
+      { headed: false, mode: 'ci' },
+      launchBrowser,
+    );
+    assert.equal(run.stories[0]!.actions[0]!.status, 'pass');
+
+    // Candidate tree gets the committed entry plus this run's new one.
+    const candidateHistory = JSON.parse(
+      await readFile(
+        join(config.paths.report, 'candidates', 'history.json'),
+        'utf8',
+      ),
+    ) as Record<string, unknown[]>;
+    assert.equal(candidateHistory['open::desktop']?.length, 2);
+
+    // paths.baselines/history.json is untouched -- run --ci must never
+    // advance it, only `approve --from` does.
+    const baselinesHistory = JSON.parse(
+      await readFile(join(config.paths.baselines, 'history.json'), 'utf8'),
+    ) as Record<string, unknown[]>;
+    assert.equal(baselinesHistory['open::desktop']?.length, 1);
+  });
+});
+
 describe('runAll: a consumer prefers its producer auth over a pre-seeded file', () => {
   // The only place the produced-before-pre-seeded ranking is exercised end to
   // end. runStory.test.ts proves the resolver ranks correctly when it is handed

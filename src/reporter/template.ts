@@ -768,6 +768,7 @@ function renderScreenshots(
         );
   const diffStatsId = `${actionId}-diff-stats`;
   const diffStats = renderDiffStats(action, diffStatsId);
+  const diffHistory = renderDiffHistory(action);
   // renderDiffStats emits the `diff-stats--unavailable` note (with this id) when
   // the diff is uncomputable. The diff radio is disabled in that case, so wire
   // its aria-describedby to the note. A keyboard/AT user reaching the disabled
@@ -794,7 +795,7 @@ function renderScreenshots(
       SHOT_ALT[only](action),
       true,
     );
-    return `${diffStats}${lone}`;
+    return `${diffStats}${diffHistory}${lone}`;
   }
   return `
 <fieldset class="shot-radio" data-default-tab="${defaultTab}">
@@ -803,6 +804,7 @@ function renderScreenshots(
   ${shotRadio(actionId, 'actual', actual === undefined, initialTab === 'actual')}
   ${shotRadio(actionId, 'diff', diff === undefined, initialTab === 'diff', diffNoteUnavailable ? { describedById: diffStatsId } : undefined)}
   ${diffStats}
+  ${diffHistory}
 </fieldset>
 ${shotPanel(actionId, 'baseline', baseline, SHOT_ALT.baseline(action), initialTab === 'baseline')}
 ${shotPanel(actionId, 'actual', actual, SHOT_ALT.actual(action), initialTab === 'actual')}
@@ -847,6 +849,18 @@ function renderDiffStats(action: ActionResult, diffStatsId: string): string {
     ? `No pixel diff. Screenshot resized from ${dimensionPair(action.sizeMismatch.baseline)} to ${dimensionPair(action.sizeMismatch.actual)}.`
     : `No pixel diff. ${escapeHtml(action.failureMessage)}`;
   return `<p class="diff-stats diff-stats--unavailable" id="${diffStatsId}"><span class="label">${label}</span></p>`;
+}
+
+/** Rendered only at 2+ entries; a single entry duplicates {@link renderDiffStats}'s own line with no trend to show. */
+function renderDiffHistory(action: ActionResult): string {
+  const history = action.history;
+  if (!history || history.length < 2) {
+    return '';
+  }
+  const points = history
+    .map((entry) => `${parseFloat((entry.diffRatio * 100).toFixed(2))}%`)
+    .join(' · ');
+  return `<p class="diff-history"><span class="label">history</span> ${escapeHtml(points)}<span class="sr-only"> (${history.length} runs, oldest to newest)</span></p>`;
 }
 
 /**
@@ -937,6 +951,7 @@ function renderInteractiveScreenshots(
 
   const diffStatsId = `${actionId}-diff-stats`;
   const diffStats = renderDiffStats(action, diffStatsId);
+  const diffHistory = renderDiffHistory(action);
 
   const radios = [
     baseline !== undefined
@@ -972,6 +987,7 @@ function renderInteractiveScreenshots(
   ${radios}
   <p class="shot-caption" aria-hidden="true">Showing: <span class="shot-caption-variant">${captionLabel}</span></p>
   ${diffStats}
+  ${diffHistory}
 </fieldset>
 <div class="shot-stage">
   <img

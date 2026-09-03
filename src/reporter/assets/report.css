@@ -968,6 +968,21 @@ summary.action-row:focus-visible {
   font-style: italic;
 }
 
+/* Diff-history trend line: a compact, always-visible sequence of past
+   diffRatio percentages. Muted like `.diff-stats .label`/`.coverage-detail`,
+   since it is secondary context beside the primary diff-stats line above
+   it, never the row's main signal. */
+.diff-history {
+  margin: 0.25rem 0 0 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.diff-history .label {
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+
 /* Interactive screenshot viewer (interactiveMode). The radio group + caption
    sit in this fieldset, which lives OUTSIDE the clipped `.shot-stage`, so the
    chip focus ring is never clipped by the stage overflow nor painted over

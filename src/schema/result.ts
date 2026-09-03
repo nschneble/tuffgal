@@ -1,5 +1,6 @@
 import type { RunMode } from '../runner/mode.ts';
 import type { EnvironmentManifest } from '../runner/manifest.ts';
+import type { HistoryEntry } from '../runner/history.ts';
 
 /**
  * Outcome model. The runner emits a `RunResult` per invocation; the reporter
@@ -104,6 +105,8 @@ export interface ActionResult {
    * consumer falls back to naming the drift without detail.
    */
   a11yDiff?: A11yDiff;
+  /** Oldest to newest, this run's value last; absent when this action produced no diff this run. */
+  history?: HistoryEntry[];
 }
 
 /**
