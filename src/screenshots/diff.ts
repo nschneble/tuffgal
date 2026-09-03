@@ -41,6 +41,12 @@ export interface ScoredDiff {
   decoded: DecodedPair;
 }
 
+export interface ScoreDiffOptions {
+  pixelThreshold: number;
+  /** Defaults to `'bezkrovny'` when omitted. */
+  ssimVariant?: SsimVariant;
+}
+
 /**
  * Diffing is split into two phases so the common case stays cheap:
  *
@@ -66,9 +72,9 @@ export interface ScoredDiff {
 export function scoreDiff(
   baseline: Buffer,
   actual: Buffer,
-  pixelThreshold: number,
-  ssimVariant: SsimVariant = 'bezkrovny',
+  options: ScoreDiffOptions,
 ): ScoredDiff {
+  const { pixelThreshold, ssimVariant = 'bezkrovny' } = options;
   const decoded = decodePair(baseline, actual);
   const { baselinePng, actualPng } = decoded;
   // Count-only: passing `undefined` as the output buffer makes pixelmatch

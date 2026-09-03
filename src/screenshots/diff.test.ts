@@ -31,6 +31,7 @@ function solidPng(
 
 const WHITE: [number, number, number, number] = [255, 255, 255, 255];
 const BLACK: [number, number, number, number] = [0, 0, 0, 255];
+const DEFAULT_OPTIONS = { pixelThreshold: 0.1 };
 
 /**
  * A structured (not solid-colour) PNG pair: a checkerboard baseline, and an
@@ -69,7 +70,7 @@ function checkerboardPair(size: number): { baseline: Buffer; actual: Buffer } {
 describe('scoreDiff: zero-diff boundary', () => {
   it('reports no differing pixels and a perfect SSIM for identical images', () => {
     const png = solidPng(16, 16, WHITE);
-    const { score } = scoreDiff(png, png, 0.1);
+    const { score } = scoreDiff(png, png, DEFAULT_OPTIONS);
 
     assert.equal(score.diffPixels, 0);
     assert.equal(score.diffRatio, 0);
@@ -85,7 +86,7 @@ describe('scoreDiff: full-diff boundary', () => {
   it('reports every pixel differing and a low SSIM for opposite images', () => {
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 16, BLACK);
-    const { score } = scoreDiff(baseline, actual, 0.1);
+    const { score } = scoreDiff(baseline, actual, DEFAULT_OPTIONS);
 
     assert.equal(score.diffPixels, 256);
     assert.equal(score.diffRatio, 1);
@@ -100,8 +101,11 @@ describe('scoreDiff: ssim variant selection', () => {
   it('defaults to bezkrovny, matching an explicit bezkrovny call', () => {
     const { baseline, actual } = checkerboardPair(32);
 
-    const defaulted = scoreDiff(baseline, actual, 0.1);
-    const explicit = scoreDiff(baseline, actual, 0.1, 'bezkrovny');
+    const defaulted = scoreDiff(baseline, actual, { pixelThreshold: 0.1 });
+    const explicit = scoreDiff(baseline, actual, {
+      pixelThreshold: 0.1,
+      ssimVariant: 'bezkrovny',
+    });
 
     assert.equal(defaulted.score.ssimScore, explicit.score.ssimScore);
   });
@@ -109,8 +113,13 @@ describe('scoreDiff: ssim variant selection', () => {
   it('a non-default variant produces a different ssimScore than the default', () => {
     const { baseline, actual } = checkerboardPair(32);
 
-    const { score: defaultScore } = scoreDiff(baseline, actual, 0.1);
-    const { score: weberScore } = scoreDiff(baseline, actual, 0.1, 'weber');
+    const { score: defaultScore } = scoreDiff(baseline, actual, {
+      pixelThreshold: 0.1,
+    });
+    const { score: weberScore } = scoreDiff(baseline, actual, {
+      pixelThreshold: 0.1,
+      ssimVariant: 'weber',
+    });
 
     assert.notEqual(
       weberScore.ssimScore,
@@ -130,7 +139,7 @@ describe('scoreDiff: never encodes an overlay', () => {
     // should be none. Scoring is the common (passing) case; encoding the
     // discarded overlay on every comparison was the waste this split removes.
     const before = write.mock.callCount();
-    scoreDiff(baseline, actual, 0.1);
+    scoreDiff(baseline, actual, DEFAULT_OPTIONS);
 
     assert.equal(write.mock.callCount() - before, 0);
   });
@@ -142,7 +151,7 @@ describe('scoreDiff: dimension mismatch', () => {
     const actual = solidPng(16, 20, WHITE);
 
     assert.throws(
-      () => scoreDiff(baseline, actual, 0.1),
+      () => scoreDiff(baseline, actual, DEFAULT_OPTIONS),
       (error: unknown) => {
         assert.ok(error instanceof ScreenshotSizeMismatchError);
         assert.deepEqual(error.baseline, { width: 16, height: 16 });
@@ -160,7 +169,7 @@ describe('scoreDiff: corrupt input', () => {
     const valid = solidPng(16, 16, WHITE);
     const garbage = Buffer.from('not a png at all');
 
-    assert.throws(() => scoreDiff(garbage, valid, 0.1));
+    assert.throws(() => scoreDiff(garbage, valid, DEFAULT_OPTIONS));
   });
 });
 
@@ -169,7 +178,7 @@ describe('renderDiffOverlay: changed branch', () => {
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 16, BLACK);
     // The changed branch renders from scoreDiff's decoded pair, not raw buffers.
-    const { decoded } = scoreDiff(baseline, actual, 0.1);
+    const { decoded } = scoreDiff(baseline, actual, DEFAULT_OPTIONS);
     const overlay = renderDiffOverlay(decoded, 0.1);
 
     // The overlay is a real, decodable PNG of the same dimensions.
@@ -187,7 +196,7 @@ describe('renderDiffOverlay: changed branch', () => {
   it('deflate-encodes exactly once per overlay', () => {
     const baseline = solidPng(16, 16, WHITE);
     const actual = solidPng(16, 16, BLACK);
-    const { decoded } = scoreDiff(baseline, actual, 0.1);
+    const { decoded } = scoreDiff(baseline, actual, DEFAULT_OPTIONS);
     const write = mock.method(PNG.sync, 'write');
     try {
       const before = write.mock.callCount();
@@ -210,7 +219,7 @@ describe('scoreDiff + renderDiffOverlay: shared decode', () => {
     const read = mock.method(PNG.sync, 'read');
     try {
       const before = read.mock.callCount();
-      const { decoded } = scoreDiff(baseline, actual, 0.1);
+      const { decoded } = scoreDiff(baseline, actual, DEFAULT_OPTIONS);
       renderDiffOverlay(decoded, 0.1);
 
       // Exactly one pair (baseline + actual) is decoded: scoreDiff reads both,
