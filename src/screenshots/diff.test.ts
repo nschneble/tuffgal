@@ -32,6 +32,40 @@ function solidPng(
 const WHITE: [number, number, number, number] = [255, 255, 255, 255];
 const BLACK: [number, number, number, number] = [0, 0, 0, 255];
 
+/**
+ * A structured (not solid-colour) PNG pair: a checkerboard baseline, and an
+ * actual with a sine-wave noise band across its middle rows. Solid-colour
+ * fixtures score ~0 or ~1 under every SSIM variant and can't tell them apart;
+ * this fixture's internal structure is what makes the variants disagree.
+ */
+function checkerboardPair(size: number): { baseline: Buffer; actual: Buffer } {
+  const cell = (x: number, y: number): number => ((x + y) % 2 === 0 ? 255 : 0);
+  const baselinePng = new PNG({ width: size, height: size });
+  const actualPng = new PNG({ width: size, height: size });
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const offset = (y * size + x) * 4;
+      const base = cell(x, y);
+      baselinePng.data[offset] = base;
+      baselinePng.data[offset + 1] = base;
+      baselinePng.data[offset + 2] = base;
+      baselinePng.data[offset + 3] = 255;
+
+      const inBand = y > size / 4 && y < size / 2;
+      const noise = inBand ? Math.sin(x * 1.3 + y * 0.7) * 40 : 0;
+      const actualValue = Math.max(0, Math.min(255, base + noise));
+      actualPng.data[offset] = actualValue;
+      actualPng.data[offset + 1] = actualValue;
+      actualPng.data[offset + 2] = actualValue;
+      actualPng.data[offset + 3] = 255;
+    }
+  }
+  return {
+    baseline: PNG.sync.write(baselinePng),
+    actual: PNG.sync.write(actualPng),
+  };
+}
+
 describe('scoreDiff: zero-diff boundary', () => {
   it('reports no differing pixels and a perfect SSIM for identical images', () => {
     const png = solidPng(16, 16, WHITE);
@@ -58,6 +92,30 @@ describe('scoreDiff: full-diff boundary', () => {
     assert.ok(
       score.ssimScore < 0.5,
       `expected low ssim for opposite images, got ${score.ssimScore}`,
+    );
+  });
+});
+
+describe('scoreDiff: ssim variant selection', () => {
+  it('defaults to bezkrovny, matching an explicit bezkrovny call', () => {
+    const { baseline, actual } = checkerboardPair(32);
+
+    const defaulted = scoreDiff(baseline, actual, 0.1);
+    const explicit = scoreDiff(baseline, actual, 0.1, 'bezkrovny');
+
+    assert.equal(defaulted.score.ssimScore, explicit.score.ssimScore);
+  });
+
+  it('a non-default variant produces a different ssimScore than the default', () => {
+    const { baseline, actual } = checkerboardPair(32);
+
+    const { score: defaultScore } = scoreDiff(baseline, actual, 0.1);
+    const { score: weberScore } = scoreDiff(baseline, actual, 0.1, 'weber');
+
+    assert.notEqual(
+      weberScore.ssimScore,
+      defaultScore.ssimScore,
+      `expected weber and bezkrovny to disagree on a structured fixture, both scored ${defaultScore.ssimScore}`,
     );
   });
 });

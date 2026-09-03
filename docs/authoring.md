@@ -356,7 +356,7 @@ allow a pixel budget, or loosen `ssimThreshold` to accept more perceptual
 drift, before flagging `changed`.
 
 ```json
-"diff": { "ssimThreshold": 0.985, "maxDiffPixels": 200, "pixelThreshold": 0.1 }
+"diff": { "ssimThreshold": 0.985, "ssimVariant": "bezkrovny", "maxDiffPixels": 200, "pixelThreshold": 0.1 }
 ```
 
 An action passes only when it clears **both** gates: mean SSIM at or above
@@ -373,6 +373,12 @@ Fields and defaults:
   - `0.99` ≈ "no perceptible change"
   - `0.95` is noticeable
   - Under `0.9` is obvious
+- `ssimVariant` defaults to `'bezkrovny'`. Which of ssim.js's SSIM
+  implementations computes `ssimScore`: `'fast'`, `'original'`,
+  `'bezkrovny'`, or `'weber'`. They trade perceptual accuracy and speed
+  differently; see [ssim.js's docs](https://github.com/obartra/ssim) for the
+  algorithmic differences. The default preserves the score every existing
+  suite already tuned against
 - `maxDiffPixels` defaults to `0`. The exactness gate: how many differing
   pixels the image may contain. Zero demands pixel identity, which a
   container-pinned suite can hold. Raise it for a suite that genuinely
