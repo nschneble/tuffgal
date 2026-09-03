@@ -55,14 +55,9 @@ export function historyPathFor(config: ResolvedConfig, mode: RunMode): string {
   return join(root, HISTORY_FILENAME);
 }
 
-/** Tolerant past `readJsonBaseline`, which throws on an unreadable path: missing, unreadable, unparseable, or wrong-shaped all read as an empty store. Advisory, never gates pass/fail. */
+/** Unlike `readJsonBaseline`, an unreadable path is tolerated too, via the `.catch` below: history is advisory, never gates pass/fail. */
 export async function readHistory(path: string): Promise<HistoryStore> {
-  let raw: string | undefined;
-  try {
-    raw = await readJsonBaseline(path);
-  } catch {
-    return {};
-  }
+  const raw = await readJsonBaseline(path).catch(() => undefined);
   if (raw === undefined) return {};
   let parsed: unknown;
   try {

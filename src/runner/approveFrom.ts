@@ -296,12 +296,9 @@ function extractEnvironment(result: RunResult): EnvironmentManifest {
 async function extractHistory(
   candidateDir: string,
 ): Promise<HistoryStore | undefined> {
-  let raw: string | undefined;
-  try {
-    raw = await readJsonBaseline(join(candidateDir, HISTORY_FILENAME));
-  } catch {
-    return undefined;
-  }
+  const raw = await readJsonBaseline(
+    join(candidateDir, HISTORY_FILENAME),
+  ).catch(() => undefined);
   if (raw === undefined) return undefined;
   let parsed: unknown;
   try {

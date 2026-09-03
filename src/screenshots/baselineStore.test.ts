@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 
-import { pathsFor, withBaselineLock } from './baselineStore.ts';
+import {
+  pathsFor,
+  readJsonBaseline,
+  withBaselineLock,
+} from './baselineStore.ts';
 
 const base = '/baselines';
 const report = '/report';
@@ -210,6 +216,32 @@ describe('pathsFor: candidate paths', () => {
       desktop.candidate,
       join(report, 'candidates', 'submit', 'desktop.png'),
     );
+  });
+});
+
+describe('readJsonBaseline: the shared tolerant read', () => {
+  let dir: string;
+  before(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'tuffgal-baselinestore-'));
+  });
+  after(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('returns undefined when the path does not exist', async () => {
+    assert.equal(await readJsonBaseline(join(dir, 'absent.json')), undefined);
+  });
+
+  it('returns the raw text, unparsed, when the path exists', async () => {
+    const path = join(dir, 'present.json');
+    await writeFile(path, '{ "a": 1 }\n', 'utf8');
+    assert.equal(await readJsonBaseline(path), '{ "a": 1 }\n');
+  });
+
+  it('throws when the path exists but cannot be read', async () => {
+    const path = join(dir, 'is-a-dir.json');
+    await mkdir(path, { recursive: true });
+    await assert.rejects(readJsonBaseline(path));
   });
 });
 
