@@ -163,6 +163,18 @@ describe('diff thresholds: pixelThreshold / ssimThreshold in 0 to 1', () => {
       });
     }
   }
+
+  it('pixelThreshold defaults to 0.1 when diff is present without it', () => {
+    const parsed = parseAction({ diff: { maxDiffPixels: 5 } });
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.data?.diff?.pixelThreshold, 0.1);
+  });
+
+  it('ssimThreshold defaults to 0.99 when diff is present without it', () => {
+    const parsed = parseAction({ diff: { maxDiffPixels: 5 } });
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.data?.diff?.ssimThreshold, 0.99);
+  });
 });
 
 describe('diff maxDiffPixels: a count, not a 0-to-1 ratio', () => {
@@ -252,10 +264,10 @@ describe('navigate waitUntil: enum opt-in unchanged by the default flip', () => 
 });
 
 describe('scroll amount: schema default is load-bearing', () => {
-  // Wave 12 moved the 600px default from the handler into the schema and retyped
-  // `runScroll`'s param to a required `number`, so this `.default(600)` is the
-  // only thing standing between an omitted `amount` and a `page.mouse.wheel(0,
-  // NaN)`. Pin both directions: omitted resolves to 600, explicit survives.
+  // The 600px default lives in the schema, not the handler, and
+  // `runScroll`'s param is a required `number`, so `.default(600)` is all
+  // that stands between an omitted `amount` and `page.mouse.wheel(0, NaN)`.
+  // Pin both directions: omitted resolves to 600, explicit survives.
   it('applies the 600px default when amount is omitted', () => {
     const result = parseScroll();
     assert.ok(result.success);

@@ -248,4 +248,7 @@ export const actionSchema = z.object({
     .optional(),
 });
 
+// diff is optional not defaulted, so unwrap and parse {} for its defaults
+export const DIFF_DEFAULTS = actionSchema.shape.diff.unwrap().parse({});
+
 export type Action = z.infer<typeof actionSchema>;

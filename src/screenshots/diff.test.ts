@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 
 import { PNG } from 'pngjs';
+import { DIFF_DEFAULTS } from '../schema/action.ts';
 import {
+  DEFAULT_SSIM_VARIANT,
   renderDiffOverlay,
   ScreenshotSizeMismatchError,
   scoreDiff,
@@ -98,16 +100,20 @@ describe('scoreDiff: full-diff boundary', () => {
 });
 
 describe('scoreDiff: ssim variant selection', () => {
-  it('defaults to bezkrovny, matching an explicit bezkrovny call', () => {
+  it('scores an omitted variant with DEFAULT_SSIM_VARIANT', () => {
     const { baseline, actual } = checkerboardPair(32);
 
     const defaulted = scoreDiff(baseline, actual, { pixelThreshold: 0.1 });
     const explicit = scoreDiff(baseline, actual, {
       pixelThreshold: 0.1,
-      ssimVariant: 'bezkrovny',
+      ssimVariant: DEFAULT_SSIM_VARIANT,
     });
 
     assert.equal(defaulted.score.ssimScore, explicit.score.ssimScore);
+  });
+
+  it('DEFAULT_SSIM_VARIANT agrees with the action schema default', () => {
+    assert.equal(DEFAULT_SSIM_VARIANT, DIFF_DEFAULTS.ssimVariant);
   });
 
   it('a non-default variant produces a different ssimScore than the default', () => {
@@ -124,7 +130,7 @@ describe('scoreDiff: ssim variant selection', () => {
     assert.notEqual(
       weberScore.ssimScore,
       defaultScore.ssimScore,
-      `expected weber and bezkrovny to disagree on a structured fixture, both scored ${defaultScore.ssimScore}`,
+      `expected weber and ${DEFAULT_SSIM_VARIANT} to disagree on a structured fixture, both scored ${defaultScore.ssimScore}`,
     );
   });
 });
