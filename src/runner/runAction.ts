@@ -454,7 +454,7 @@ async function captureAndCompare(
       actualPng,
       pixelThreshold,
     );
-    // both are necessary: SSIM's tolerance band absorbs real drift that is
+    // Both are necessary: SSIM's tolerance band absorbs real drift that is
     // small and localised, and a pixel count alone misses a structurally
     // different page whose differing pixels happen to be few
     const passesSsim = score.ssimScore >= ssimThreshold;
