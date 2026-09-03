@@ -209,6 +209,7 @@ export async function readBaseline(path: string): Promise<Buffer | undefined> {
   return readFile(path);
 }
 
+/** Returns the file's raw text, NOT parsed JSON despite the name; `undefined` when the path does not exist, and throws when it exists but cannot be read (EACCES, EISDIR). */
 export async function readJsonBaseline(
   path: string,
 ): Promise<string | undefined> {
