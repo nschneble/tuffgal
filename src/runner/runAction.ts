@@ -450,12 +450,10 @@ async function captureAndCompare(
     // One decode of the pair serves both the score and (on the changed branch
     // below) the overlay render. `decoded` is threaded into renderDiffOverlay
     // so the failing path reads the image pair once, not twice.
-    const { score, decoded } = scoreDiff(
-      baselinePng,
-      actualPng,
+    const { score, decoded } = scoreDiff(baselinePng, actualPng, {
       pixelThreshold,
       ssimVariant,
-    );
+    });
     // Both are necessary: SSIM's tolerance band absorbs real drift that is
     // small and localised, and a pixel count alone misses a structurally
     // different page whose differing pixels happen to be few

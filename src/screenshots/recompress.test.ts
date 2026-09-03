@@ -134,7 +134,7 @@ describe('writeDurablePng: recompress integration', () => {
       );
       assert.deepEqual(pixelsOf(readBack), pixelsOf(source));
 
-      const { score } = scoreDiff(readBack, source, 0.1);
+      const { score } = scoreDiff(readBack, source, { pixelThreshold: 0.1 });
       assert.equal(score.diffPixels, 0);
       assert.ok(score.ssimScore >= 0.9999);
     } finally {
