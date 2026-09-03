@@ -175,8 +175,10 @@ images into the committed set:
    (`mode !== 'ci'` or `totals.failed > 0`), so a local or broken run can never
    be promoted. It also writes `baselines/manifest.json` from the candidate
    run's captured environment, so the next `run --ci` can detect environment
-   drift. Add `--prune` to also retire the baselines the run flagged as
-   `deleted`.
+   drift, and (when the candidate tree carries one) promotes
+   `baselines/history.json`, the per-action diffPixels/diffRatio trend the
+   report surfaces (see [reporting.md](reporting.md)). Add `--prune` to also
+   retire the baselines the run flagged as `deleted`.
 
 3. Commit the resulting `tuffgal/baselines/` changes and push.
 
