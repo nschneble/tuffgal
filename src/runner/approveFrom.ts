@@ -5,6 +5,7 @@ import type { ResolvedConfig } from '../config.ts';
 import {
   ACTION_NAME_PATTERN,
   BREAKPOINT_SEGMENT_PATTERN,
+  readJsonBaseline,
   writeDurablePng,
   writeText,
 } from '../screenshots/baselineStore.ts';
@@ -295,12 +296,13 @@ function extractEnvironment(result: RunResult): EnvironmentManifest {
 async function extractHistory(
   candidateDir: string,
 ): Promise<HistoryStore | undefined> {
-  let raw: string;
+  let raw: string | undefined;
   try {
-    raw = await readFile(join(candidateDir, HISTORY_FILENAME), 'utf8');
+    raw = await readJsonBaseline(join(candidateDir, HISTORY_FILENAME));
   } catch {
     return undefined;
   }
+  if (raw === undefined) return undefined;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);

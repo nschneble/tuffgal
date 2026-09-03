@@ -1,6 +1,7 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { ResolvedConfig } from '../config.ts';
+import { readJsonBaseline } from '../screenshots/baselineStore.ts';
 import type { ActionResult, StoryResult } from '../schema/result.ts';
 import type { RunMode } from './mode.ts';
 
@@ -54,14 +55,15 @@ export function historyPathFor(config: ResolvedConfig, mode: RunMode): string {
   return join(root, HISTORY_FILENAME);
 }
 
-/** Tolerant like `readJsonBaseline`: missing, unparseable, or wrong-shaped all read as an empty store. History is advisory, never gates pass/fail. */
+/** Tolerant past `readJsonBaseline`, which throws on an unreadable path: missing, unreadable, unparseable, or wrong-shaped all read as an empty store. Advisory, never gates pass/fail. */
 export async function readHistory(path: string): Promise<HistoryStore> {
-  let raw: string;
+  let raw: string | undefined;
   try {
-    raw = await readFile(path, 'utf8');
+    raw = await readJsonBaseline(path);
   } catch {
     return {};
   }
+  if (raw === undefined) return {};
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
