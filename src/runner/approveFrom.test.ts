@@ -293,6 +293,76 @@ describe('approveFrom: happy path', () => {
   });
 });
 
+describe('approveFrom: history.json promotion', () => {
+  it('promotes a well-formed candidate history.json into baselines', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+    const history = {
+      'open::desktop': [
+        {
+          finishedAt: '2026-06-11T12:00:00.000Z',
+          diffPixels: 2,
+          diffRatio: 0.0002,
+        },
+      ],
+    };
+    await writeFile(
+      join(candidateDir, 'history.json'),
+      JSON.stringify(history),
+      'utf8',
+    );
+
+    await approveFrom(config(), { from: candidateDir });
+    const promoted = JSON.parse(
+      await readFile(join(baselinesDir, 'history.json'), 'utf8'),
+    );
+    assert.deepEqual(promoted, history);
+  });
+
+  it('approves cleanly with no history.json in the candidate tree (pre-history artifact)', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+
+    await approveFrom(config(), { from: candidateDir });
+    assert.equal(
+      await pathExists(join(baselinesDir, 'history.json')),
+      false,
+      'no history.json is written when the candidate tree has none',
+    );
+  });
+
+  it('does not fail the whole approve on a malformed candidate history.json', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+    await writeFile(join(candidateDir, 'history.json'), '{ not json', 'utf8');
+
+    const summary = await approveFrom(config(), { from: candidateDir });
+    assert.equal(summary.written, 1, 'the baseline PNG still promotes');
+    assert.equal(
+      await pathExists(join(baselinesDir, 'history.json')),
+      false,
+      'the malformed history is dropped, not promoted',
+    );
+  });
+
+  it('does not fail the whole approve on a well-formed-JSON but wrong-shaped history.json', async () => {
+    await writeCandidatePng('open', 'desktop');
+    await writeCandidateResults();
+    await writeFile(
+      join(candidateDir, 'history.json'),
+      JSON.stringify({ 'open::desktop': 'not-an-array' }),
+      'utf8',
+    );
+
+    await approveFrom(config(), { from: candidateDir });
+    assert.equal(
+      await pathExists(join(baselinesDir, 'history.json')),
+      false,
+      'a wrong-shaped store is dropped, not promoted',
+    );
+  });
+});
+
 describe('approveFrom: prune', () => {
   it('deletes orphaned baselines listed in results.deleted', async () => {
     // Seed an orphan (PNG + companion) plus a live baseline that must survive.

@@ -21,6 +21,12 @@ import {
   LEGACY_BREAKPOINT,
   LEGACY_PNG,
 } from './orphanScan.ts';
+import {
+  HISTORY_FILENAME,
+  isHistoryStoreShape,
+  writeHistory,
+  type HistoryStore,
+} from './history.ts';
 import { parseRunResult } from '../schema/result.ts';
 import type { RunResult } from '../schema/result.ts';
 
@@ -122,6 +128,7 @@ export async function approveFrom(
   const result = await readCandidateResults(candidateDir);
   assertPromotableRun(result);
   const environment = extractEnvironment(result);
+  const history = await extractHistory(candidateDir);
   const plan = await planWrites(candidateDir, config.paths.baselines);
   await assertAllPngsDecode(plan);
   const pruneTargets = options.prune
@@ -139,6 +146,9 @@ export async function approveFrom(
     }
   }
   await writeManifest(config.paths.baselines, environment);
+  if (history) {
+    await writeHistory(join(config.paths.baselines, HISTORY_FILENAME), history);
+  }
 
   let pruned = 0;
   for (const group of pruneTargets) {
@@ -274,12 +284,50 @@ function extractEnvironment(result: RunResult): EnvironmentManifest {
 }
 
 /**
+ * Reads + validates `<candidateDir>/history.json`, the diff-history store a
+ * `run --ci` writes into the candidate tree (see `runner/history.ts`).
+ * Unlike `extractEnvironment`, this NEVER aborts the approve:
+ *   - Absent: an older candidate tree from a pre-history tuffgal. Nothing to
+ *     promote; the baselines/manifest promotion proceeds unaffected.
+ *   - Present but malformed: history is advisory, it never gates pixel
+ *     correctness (unlike the environment block), so a bad file is dropped
+ *     with a warning rather than failing a legitimate baseline promotion.
+ */
+async function extractHistory(
+  candidateDir: string,
+): Promise<HistoryStore | undefined> {
+  let raw: string;
+  try {
+    raw = await readFile(join(candidateDir, HISTORY_FILENAME), 'utf8');
+  } catch {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    process.stderr.write(
+      `Candidate ${HISTORY_FILENAME} is not valid JSON; skipping history promotion.\n`,
+    );
+    return undefined;
+  }
+  if (!isHistoryStoreShape(parsed)) {
+    process.stderr.write(
+      `Candidate ${HISTORY_FILENAME} is malformed; skipping history promotion.\n`,
+    );
+    return undefined;
+  }
+  return parsed;
+}
+
+/**
  * Walks the candidate tree and returns the validated set of files to write.
- * Enforces the whole allow-list: top level holds only `results.json` and action
- * directories; each action directory holds only `<breakpoint>.png` /
- * `<breakpoint>.a11y.yaml` (or legacy `0.png` / `a11y.yaml`). Every other shape
- * (stray extensions, nested dirs, dotfiles, symlinks, traversal names) aborts.
- * Every PNG is decoded here so a corrupt payload fails validation, not a write.
+ * Enforces the whole allow-list: top level holds only `results.json`,
+ * `history.json`, and action directories; each action directory holds only
+ * `<breakpoint>.png` / `<breakpoint>.a11y.yaml` (or legacy `0.png` /
+ * `a11y.yaml`). Every other shape (stray extensions, nested dirs, dotfiles,
+ * symlinks, traversal names) aborts. Every PNG is decoded here so a corrupt
+ * payload fails validation, not a write.
  */
 async function planWrites(
   candidateDir: string,
@@ -291,8 +339,8 @@ async function planWrites(
     assertSafeName(entry.name, candidateDir);
     const entryPath = join(candidateDir, entry.name);
     await assertNotSymlink(entryPath);
-    if (entry.name === 'results.json') {
-      continue; // consumed separately; never written into baselines
+    if (entry.name === 'results.json' || entry.name === HISTORY_FILENAME) {
+      continue; // consumed separately; never written into baselines here
     }
     if (!entry.isDirectory()) {
       throw new ApproveFromError(

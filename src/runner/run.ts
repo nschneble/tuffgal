@@ -47,6 +47,13 @@ import {
   type CapturedBrowser,
   type EnvironmentManifest,
 } from './manifest.ts';
+import {
+  HISTORY_FILENAME,
+  applyRunHistory,
+  historyPathFor,
+  readHistory,
+  writeHistory,
+} from './history.ts';
 import type { DeletedBaseline } from '../schema/result.ts';
 
 export interface RunCliOptions {
@@ -248,30 +255,56 @@ export async function runAll(
         version: browser.version(),
       }),
     );
+    const finishedAtIso = finishedAt.toISOString();
+    // History store: the committed `paths.baselines/history.json` in CI mode
+    // (read-only here, see `historyPathFor`), the per-machine
+    // `paths.localCache/history.json` in local mode. `applyRunHistory` folds
+    // this run's pass/changed actions into it and returns a new `stories`
+    // array carrying each qualifying action's updated series as
+    // `action.history`, so the rendered report always reflects this run's
+    // own point even before it is persisted forward (CI mode persists it
+    // only on the next `approve --from`, see `history.ts`).
+    const historyReadPath = historyPathFor(config, mode);
+    const baseHistory = await readHistory(historyReadPath);
+    const { store: updatedHistory, results: resultsWithHistory } =
+      applyRunHistory(baseHistory, results, finishedAtIso);
     const runResult: RunResult = {
       startedAt: startedAt.toISOString(),
-      finishedAt: finishedAt.toISOString(),
+      finishedAt: finishedAtIso,
       durationMs: finishedAt.getTime() - startedAt.getTime(),
       mode,
       totals,
       environment,
       customCoverage: { screens, flows },
       deleted,
-      stories: results,
+      stories: resultsWithHistory,
     };
     const reportPath = await writeReport(
       config.paths.report,
       runResult,
       config.interactiveMode,
     );
-    // In CI mode the `<report>/candidates/` tree is the self-contained approval
-    // artifact. Copy the run's `results.json` beside the candidate renders so a
-    // downstream `approve --from <candidates>` has the outcome data (which
-    // actions are new/changed, and later the environment/deleted blocks) without
-    // needing the rest of the report dir. Only meaningful in CI mode, where the
-    // candidate tree exists.
-    if (mode === 'ci') {
+    if (mode === 'local') {
+      // Local mode self-manages its history store every run, no approval
+      // gate, mirroring how it already auto-manages its baseline cache.
+      await writeHistory(historyReadPath, updatedHistory);
+    } else {
+      // In CI mode the `<report>/candidates/` tree is the self-contained
+      // approval artifact. Copy the run's `results.json` beside the
+      // candidate renders so a downstream `approve --from <candidates>` has
+      // the outcome data (which actions are new/changed, and later the
+      // environment/deleted blocks) without needing the rest of the report
+      // dir. Also write the appended history store there: `run --ci` never
+      // writes `paths.baselines` (see `docs/ci.md` "CI owns the
+      // baselines"), so the updated series is promoted to
+      // `<baselines>/history.json` only when a human runs `approve --from`,
+      // exactly like the environment manifest today. Both run
+      // unconditionally, even on an all-pass run with nothing to approve.
       await copyResultsIntoCandidates(config.paths.report);
+      await writeHistory(
+        join(candidatesDir(config.paths.report), HISTORY_FILENAME),
+        updatedHistory,
+      );
     }
     writeRunSummary(passSummaries, reportPath);
     if (coverage) {
