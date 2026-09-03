@@ -216,17 +216,26 @@ export const actionSchema = z.object({
     .object({
       /**
        * Pixelmatch per-pixel similarity. Tighter values flag more pixels
-       * as changed; loosens anti-aliasing tolerance as it grows. Only
-       * controls how the diff PNG is computed. It does not gate the
-       * action's pass/changed status.
+       * as changed; loosens anti-aliasing tolerance as it grows. It sets
+       * what counts as a differing pixel, so it feeds both the diff PNG
+       * and the `maxDiffPixels` count below, but gates nothing on its own.
        */
       pixelThreshold: z.number().min(0).max(1).default(0.1),
       /**
-       * Mean SSIM score threshold. Action passes when the score is at
-       * least this high. 1.0 = identical; 0.99 = the default and roughly
-       * corresponds to "no perceptible change."
+       * Mean SSIM score threshold. 1.0 = identical; 0.99 = the default and
+       * roughly corresponds to "no perceptible change." One of the two
+       * conditions an action must meet to pass; `maxDiffPixels` is the other.
        */
       ssimThreshold: z.number().min(0).max(1).default(0.99),
+      /**
+       * How many differing pixels an action may report and still pass.
+       * Defaults to 0, so a deterministic suite demands exact pixel
+       * identity: SSIM's tolerance band absorbs small localised drift
+       * that is real, and this is the condition that catches it. Raise it
+       * per action for a suite that genuinely cannot reach zero (unpinned
+       * browser, hinted fonts).
+       */
+      maxDiffPixels: z.number().min(0).default(0),
     })
     .optional(),
 });

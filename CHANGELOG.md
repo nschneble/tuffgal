@@ -6,7 +6,21 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Added
+
+`diff.maxDiffPixels`, a per-action budget for how many pixels may differ and
+still pass. An action now passes only when it clears both gates: mean SSIM at
+or above `ssimThreshold` **and** differing pixels at or under `maxDiffPixels`.
+
+### Changed
+
+**Breaking default.** `maxDiffPixels` defaults to `0`, so a run that used to
+pass on SSIM tolerance alone can now report `changed`. That is the point: in a
+container-pinned suite, captures scoring 0.9931–0.9973 with 477–1704 genuinely
+different pixels were reporting `pass`, and two of them went un-refreshed
+across four rounds of real visual change. A suite that cannot hold pixel
+identity (unpinned local browser, host font hinting) sets `diff.maxDiffPixels`
+per action, sized to the drift it has measured.
 
 ## [0.2.2-alpha.1] – 2026-09-01
 

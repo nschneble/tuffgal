@@ -442,7 +442,8 @@ async function captureAndCompare(
   try {
     const pixelThreshold = action.diff?.pixelThreshold ?? 0.1;
     const ssimThreshold = action.diff?.ssimThreshold ?? 0.99;
-    // Score first (SSIM plus the reported pixel metrics) without encoding
+    const maxDiffPixels = action.diff?.maxDiffPixels ?? 0;
+    // Score first (SSIM plus the differing-pixel count) without encoding
     // the overlay. The red-highlight diff image is expensive to encode and is
     // discarded on a pass, so it is rendered only on the changed branch below.
     // One decode of the pair serves both the score and (on the changed branch
@@ -453,8 +454,12 @@ async function captureAndCompare(
       actualPng,
       pixelThreshold,
     );
+    // both are necessary: SSIM's tolerance band absorbs real drift that is
+    // small and localised, and a pixel count alone misses a structurally
+    // different page whose differing pixels happen to be few
     const passesSsim = score.ssimScore >= ssimThreshold;
-    if (passesSsim) {
+    const passesPixels = score.diffPixels <= maxDiffPixels;
+    if (passesSsim && passesPixels) {
       await deleteIfExists(paths.diff);
       // A11y-only drift: pixels match but the committed aria snapshot has moved.
       // In CI mode this must surface as `changed` with a candidate pair, not a
