@@ -55,7 +55,7 @@
   "types": "./dist/index.d.ts",
   "dependencies": {
     "monocart-coverage-reports": "^2.12.0",
-    "pixelmatch": "^7.1.0",
+    "pixelmatch": "^8.0.0",
     "playwright": "^1.49.0",
     "pngjs": "^7.0.0",
     "ssim.js": "^3.5.0",
