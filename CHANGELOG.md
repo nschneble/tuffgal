@@ -6,7 +6,11 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Fixed
+
+- Chromium launches with its default `prefers-color-scheme` pinned to the
+  configured `colorScheme`, so a page that reads the media query while a
+  navigation drops Playwright's emulation no longer sees the host's scheme
 
 ## [0.3.1-alpha.1] – 2026-09-03
 

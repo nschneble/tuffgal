@@ -321,9 +321,12 @@ describe('resolveEnvironmentReport: browser probe gating', () => {
 });
 
 describe('resolveLaunchOptions', () => {
-  it('maps headed:false to headless:true, with no args by default', () => {
+  const PIN_LIGHT = '--blink-settings=preferredColorScheme=1';
+  const PIN_DARK = '--blink-settings=preferredColorScheme=0';
+
+  it('maps headed:false to headless:true, pinning only the color scheme by default', () => {
     const opts = resolveLaunchOptions({ browserArgs: [] }, { headed: false });
-    assert.deepEqual(opts, { headless: true, args: [] });
+    assert.deepEqual(opts, { headless: true, args: [PIN_LIGHT] });
   });
 
   it('maps headed:true to headless:false', () => {
@@ -331,12 +334,52 @@ describe('resolveLaunchOptions', () => {
     assert.equal(opts.headless, false);
   });
 
-  it("passes config.browserArgs straight through to chromium.launch's args", () => {
+  it("passes config.browserArgs through to chromium.launch's args", () => {
     const opts = resolveLaunchOptions(
       { browserArgs: ['--force-color-profile=srgb'] },
       { headed: false },
     );
-    assert.deepEqual(opts.args, ['--force-color-profile=srgb']);
+    assert.deepEqual(opts.args, ['--force-color-profile=srgb', PIN_LIGHT]);
+  });
+
+  it('pins the browser default to dark when the config emulates dark', () => {
+    const opts = resolveLaunchOptions(
+      { browserArgs: [], colorScheme: 'dark' },
+      { headed: false },
+    );
+    assert.deepEqual(opts.args, [PIN_DARK]);
+  });
+
+  it('pins light for light and for no-preference, which renders light', () => {
+    for (const colorScheme of ['light', 'no-preference'] as const) {
+      const opts = resolveLaunchOptions(
+        { browserArgs: [], colorScheme },
+        { headed: false },
+      );
+      assert.deepEqual(opts.args, [PIN_LIGHT]);
+    }
+  });
+
+  it('folds the pin into a --blink-settings flag the project already passes', () => {
+    const opts = resolveLaunchOptions(
+      {
+        browserArgs: ['--blink-settings=imagesEnabled=false'],
+        colorScheme: 'dark',
+      },
+      { headed: false },
+    );
+    assert.deepEqual(opts.args, [
+      '--blink-settings=imagesEnabled=false,preferredColorScheme=0',
+    ]);
+  });
+
+  it('leaves a preferredColorScheme the project set itself alone', () => {
+    const args = ['--blink-settings=preferredColorScheme=1'];
+    const opts = resolveLaunchOptions(
+      { browserArgs: args, colorScheme: 'dark' },
+      { headed: false },
+    );
+    assert.deepEqual(opts.args, args);
   });
 });
 

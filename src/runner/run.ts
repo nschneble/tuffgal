@@ -3,7 +3,11 @@ import { cpus } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser } from 'playwright';
-import type { ResolvedBreakpoint, ResolvedConfig } from '../config.ts';
+import {
+  resolveContextColorScheme,
+  type ResolvedBreakpoint,
+  type ResolvedConfig,
+} from '../config.ts';
 import type {
   EnvironmentReport,
   RunResult,
@@ -387,10 +391,42 @@ function matchesFilter(item: ScheduledStory, filter: string): boolean {
  * mocking Playwright's own `chromium.launch`.
  */
 export function resolveLaunchOptions(
-  config: Pick<ResolvedConfig, 'browserArgs'>,
+  config: Pick<ResolvedConfig, 'browserArgs'> &
+    Partial<Pick<ResolvedConfig, 'colorScheme'>>,
   options: Pick<RunCliOptions, 'headed'>,
 ): { headless: boolean; args: string[] } {
-  return { headless: !options.headed, args: config.browserArgs };
+  const colorScheme = resolveContextColorScheme(config.colorScheme) ?? 'light';
+  return {
+    headless: !options.headed,
+    args: pinPreferredColorScheme(config.browserArgs, colorScheme),
+  };
+}
+
+const BLINK_SETTINGS_FLAG = '--blink-settings=';
+const PREFERRED_COLOR_SCHEME_SETTING = 'preferredColorScheme';
+const PREFERRED_COLOR_SCHEME_VALUES = { dark: 0, light: 1 } as const;
+
+// a navigating page briefly drops emulation and falls back to this default
+function pinPreferredColorScheme(
+  browserArgs: string[],
+  colorScheme: keyof typeof PREFERRED_COLOR_SCHEME_VALUES,
+): string[] {
+  const setting = `${PREFERRED_COLOR_SCHEME_SETTING}=${PREFERRED_COLOR_SCHEME_VALUES[colorScheme]}`;
+  const blinkSettingsIndex = browserArgs.findIndex((arg) =>
+    arg.startsWith(BLINK_SETTINGS_FLAG),
+  );
+  if (blinkSettingsIndex === -1) {
+    return [...browserArgs, `${BLINK_SETTINGS_FLAG}${setting}`];
+  }
+
+  const blinkSettings = browserArgs[blinkSettingsIndex] ?? '';
+  if (blinkSettings.includes(`${PREFERRED_COLOR_SCHEME_SETTING}=`)) {
+    return browserArgs;
+  }
+
+  const pinned = [...browserArgs];
+  pinned[blinkSettingsIndex] = `${blinkSettings},${setting}`;
+  return pinned;
 }
 
 function resolveWorkerCount(
