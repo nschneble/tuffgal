@@ -6,7 +6,11 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
-_Nothing just yet_
+### Fixed
+
+- Captures park the pointer just off the viewport before the shutter, so a
+  click no longer leaves a nondeterministic `:hover` on whatever renders
+  under it next
 
 ## [0.3.1-alpha.1] – 2026-09-03
 

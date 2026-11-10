@@ -91,6 +91,7 @@ function smallDeltaPng(shiftedPixels: number[] = []): Buffer {
 function fakePage(screenshot: Buffer, aria = '- document'): Page {
   return {
     async waitForTimeout(): Promise<void> {},
+    mouse: { async move(): Promise<void> {} },
     async evaluate(): Promise<void> {},
     async screenshot(): Promise<Buffer> {
       return screenshot;
@@ -1407,6 +1408,7 @@ describe('runAction: mask resolution', () => {
     let recorded: unknown[] = [];
     const page = {
       async waitForTimeout(): Promise<void> {},
+      mouse: { async move(): Promise<void> {} },
       async evaluate(): Promise<void> {},
       async screenshot(opts: { mask?: unknown[] }): Promise<Buffer> {
         recorded = opts.mask ?? [];

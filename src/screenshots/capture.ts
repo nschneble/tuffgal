@@ -67,6 +67,9 @@ export async function capturePage(
   mode: CaptureMode = 'viewport',
   fullPageGuard?: FullPageGuard,
 ): Promise<Buffer> {
+  // off the viewport, so a click never leaves a stray hover in the shot
+  await page.mouse.move(-1, -1);
+
   // `fullPage` composites the whole scrollable document into one image. When
   // the document is captured at a non-zero offset, `position: sticky` / `fixed`
   // chrome (sidebars, headers) resolves against that scroll position and lands

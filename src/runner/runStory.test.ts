@@ -204,6 +204,7 @@ function fakePage(options: FakePageOptions): Page {
         throw new Error('wait step blew up');
       }
     },
+    mouse: { async move(): Promise<void> {} },
     async evaluate(): Promise<void> {},
     async screenshot(): Promise<Buffer> {
       return options.screenshot;
