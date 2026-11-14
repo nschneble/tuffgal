@@ -202,7 +202,10 @@ export interface TuffgalConfig {
   /**
    * Pins the `prefers-color-scheme` every breakpoint context renders
    * under, so baselines record a deliberate mode. Omit the field to keep
-   * Playwright's own default, which is `light`. See {@link ColorScheme}.
+   * Playwright's own default, which is `light`. Chromium also launches with
+   * this scheme as its own default, so a page that reads the media query
+   * mid-navigation, after Playwright's override drops, still sees it. See
+   * {@link ColorScheme}.
    */
   colorScheme?: ColorScheme;
   /**
