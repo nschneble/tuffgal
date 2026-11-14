@@ -6,6 +6,10 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ## [Unreleased]
 
+_Nothing yet_
+
+## [0.3.2-alpha.1] – 2026-11-14
+
 ### Fixed
 
 - Captures park the pointer just off the viewport before the shutter, so a
@@ -392,7 +396,8 @@ styling or interactivity.
 Initial public alpha. Tuffgal extracted from [Linklater](https://github.com/nschneble/linklater)'s
 in-tree visual testing workspace.
 
-[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.3.1-alpha.1...HEAD
+[Unreleased]: https://github.com/nschneble/tuffgal/compare/v0.3.2-alpha.1...HEAD
+[0.3.2-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.3.2-alpha.1
 [0.3.1-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.3.1-alpha.1
 [0.3.0-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.3.0-alpha.1
 [0.2.2-alpha.1]: https://github.com/nschneble/tuffgal/releases/tag/v0.2.2-alpha.1
