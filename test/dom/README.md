@@ -7,6 +7,9 @@ either one.
 - `breakpoint-filter` covers the report's client-side filter intersection,
   empty-state, and live-region wording, which `report.js` owns and a
   string render never builds a live DOM for.
+- `capture-pointer` covers parking the pointer before the shutter. A
+  `:hover` state only exists in a real browser, so the mocked page can
+  prove the park call happens but not that it clears the hover.
 - `color-scheme-pin` covers the launch flag that keeps
   `prefers-color-scheme` on the configured scheme when Chromium drops
   Playwright's emulation override, which a mocked launch cannot observe.

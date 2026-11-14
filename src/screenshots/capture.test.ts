@@ -17,6 +17,11 @@ function fakePage(): {
   const calls: string[] = [];
   const options: Array<Record<string, unknown>> = [];
   const page = {
+    mouse: {
+      async move(x: number, y: number): Promise<void> {
+        calls.push(`mouse.move:${x},${y}`);
+      },
+    },
     async evaluate(expression: unknown): Promise<void> {
       calls.push(`evaluate:${String(expression)}`);
     },
@@ -40,7 +45,7 @@ describe('capturePage', () => {
     // must land before the capture or the element renders shifted by scrollY.
     assert.deepEqual(
       calls.map((call) => (call.startsWith('evaluate') ? 'evaluate' : call)),
-      ['evaluate', 'screenshot'],
+      ['mouse.move:-1,-1', 'evaluate', 'screenshot'],
     );
   });
 
@@ -64,8 +69,17 @@ describe('capturePage', () => {
 
     // A viewport shot captures exactly the box the flow scrolled to, so
     // resetting the offset would discard the region the story navigated to.
-    // Only the shutter fires; no scroll.
-    assert.deepEqual(calls, ['screenshot']);
+    // Only the pointer park and the shutter fire; no scroll.
+    assert.deepEqual(calls, ['mouse.move:-1,-1', 'screenshot']);
+  });
+
+  it('parks the pointer off the viewport before the shutter', async () => {
+    const { page, calls } = fakePage();
+
+    await capturePage(page);
+
+    assert.equal(calls.indexOf('mouse.move:-1,-1'), 0);
+    assert.equal(calls.at(-1), 'screenshot');
   });
 
   it('defaults to a viewport-only capture (fullPage: false)', async () => {
@@ -96,6 +110,7 @@ function fakePageWithDimensions(dimensions: {
 }): { page: Page; calls: string[] } {
   const calls: string[] = [];
   const page = {
+    mouse: { async move(): Promise<void> {} },
     async evaluate(): Promise<unknown> {
       calls.push('evaluate');
       return dimensions;

@@ -403,6 +403,7 @@ function fakePage(screenshot: Buffer): Page {
   return {
     clock: { async install(): Promise<void> {} },
     async waitForTimeout(): Promise<void> {},
+    mouse: { async move(): Promise<void> {} },
     async evaluate(): Promise<void> {},
     async screenshot(): Promise<Buffer> {
       return screenshot;

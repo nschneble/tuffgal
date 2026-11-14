@@ -8,6 +8,9 @@ this project uses [Pride Versioning](https://pridever.org) → `PROUD.DEFAULT.SH
 
 ### Fixed
 
+- Captures park the pointer just off the viewport before the shutter, so a
+  click no longer leaves a nondeterministic `:hover` on whatever renders
+  under it next
 - Chromium launches with its default `prefers-color-scheme` pinned to the
   configured `colorScheme`, so a page that reads the media query while a
   navigation drops Playwright's emulation no longer sees the host's scheme
